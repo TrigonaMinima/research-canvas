@@ -71,6 +71,7 @@ function saveCamera() {
 }
 const anchorsIn = (id) =>
   (state.canvas ? state.canvas.anchors : []).filter((a) => a.box === id);
+const clampWidth = (w) => Math.min(MAX_BOX_WIDTH, Math.max(MIN_BOX_WIDTH, w));
 const running = () =>
   (state.canvas ? state.canvas.boxes : []).filter((b) => UNFINISHED.has(b.status));
 
@@ -481,7 +482,8 @@ el.viewport.addEventListener('mousedown', (event) => {
 
   if (resize && box) {
     const model = boxById(box.dataset.box);
-    gesture = { kind: 'resize', box: model, el: box, x: event.clientX, w: model.w };
+    gesture = { kind: 'resize', side: resize.dataset.resize === 'left' ? 'left' : 'right',
+                box: model, el: box, x: event.clientX, w: model.w, bx: model.x };
   } else if (drag && box) {
     const model = boxById(box.dataset.box);
     gesture = { kind: 'move', box: model, el: box,
@@ -510,9 +512,16 @@ window.addEventListener('mousemove', (event) => {
     gesture.el.style.left = `${gesture.box.x}px`;
     gesture.el.style.top = `${gesture.box.y}px`;
   } else {
-    const width = gesture.w + (event.clientX - gesture.x) / camera.scale;
-    gesture.box.w = Math.min(MAX_BOX_WIDTH, Math.max(MIN_BOX_WIDTH, width));
-    gesture.el.style.width = `${gesture.box.w}px`;
+    // Clamp the width first, then derive x from it. The other way round, a left-edge
+    // drag keeps sliding the box sideways after the width has hit its minimum.
+    const dx = (event.clientX - gesture.x) / camera.scale;
+    const width = clampWidth(gesture.side === 'left' ? gesture.w - dx : gesture.w + dx);
+    gesture.box.w = width;
+    if (gesture.side === 'left') {
+      gesture.box.x = gesture.bx + (gesture.w - width);
+      gesture.el.style.left = `${gesture.box.x}px`;
+    }
+    gesture.el.style.width = `${width}px`;
   }
   measure();
 });
@@ -530,7 +539,7 @@ window.addEventListener('mouseup', () => {
   if (!done.moved) return; // a click on a button in the header is not a drag
   const patch = done.kind === 'move'
     ? { x: done.box.x, y: done.box.y }
-    : { w: done.box.w };
+    : { x: done.box.x, w: done.box.w }; // a left-edge drag moves the box as it widens
   api.patchCanvas(state.canvas.id, { boxes: { [done.box.id]: patch } }).catch(() => {});
   measure();
 });

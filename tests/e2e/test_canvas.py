@@ -250,11 +250,7 @@ def test_a_box_can_be_dragged_by_its_header(canvas):
 def test_a_box_can_be_resized_from_its_right_edge(canvas):
     box = canvas.locator('[data-box="b1"]')
     before = box.bounding_box()
-    handle = canvas.locator('[data-box="b1"] [data-resize]').bounding_box()
-    canvas.mouse.move(handle["x"] + 6, handle["y"] + 200)
-    canvas.mouse.down()
-    canvas.mouse.move(handle["x"] + 126, handle["y"] + 200, steps=8)
-    canvas.mouse.up()
+    resize(canvas, "b1", "right", 120)
     assert round(box.bounding_box()["width"] - before["width"]) == 120
 
 
@@ -453,3 +449,60 @@ def test_a_running_box_cannot_be_edited(canvas):
     ask(canvas, "b1", QUOTE, "Explain this [[fake:slow]]")
     canvas.wait_for_selector('[data-box="b2"][data-status="running"]')
     expect(canvas.locator(EDIT_BUTTON.format(box="b2"))).to_be_hidden()
+
+
+# --- folding, framing, and finding your way back --------------------------
+
+def resize(page, box: str, edge: str, dx: float) -> None:
+    """Drag one of a box's two handles sideways by dx screen pixels."""
+    handle = page.locator(f'[data-box="{box}"] [data-resize="{edge}"]').bounding_box()
+    x = handle["x"] + handle["width"] / 2
+    # The handle runs the full height of a box that can be taller than the window.
+    y = handle["y"] + min(200, handle["height"] / 2)
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx, y, steps=8)
+    page.mouse.up()
+
+
+def answer_from_root(page, question: str = "What is a residual connection?") -> None:
+    """Ask about the stock passage and wait for the answer to land."""
+    ask(page, "b1", QUOTE, question)
+    page.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+
+
+# --- resizing from either edge --------------------------------------------
+
+
+def test_should_widen_the_box_when_its_left_handle_is_dragged_outwards(canvas):
+    box = canvas.locator('[data-box="b1"]')
+    before = box.bounding_box()
+    resize(canvas, "b1", "left", -120)
+    after = box.bounding_box()
+    assert round(after["width"] - before["width"]) == 120
+    # The left edge moves on its own. The right one must stay where the reader left it.
+    assert round(after["x"] + after["width"]) == round(before["x"] + before["width"])
+
+
+def test_should_stop_the_left_handle_at_the_minimum_width(canvas):
+    box = canvas.locator('[data-box="b1"]')
+    before = box.bounding_box()
+    resize(canvas, "b1", "left", 900)
+    after = box.bounding_box()
+    assert round(after["width"]) == MIN_BOX_WIDTH
+    # Clamped means stopped: the box must not keep sliding after the pointer.
+    assert round(after["x"]) == round(before["x"] + before["width"]) - MIN_BOX_WIDTH
+
+
+def test_should_keep_a_left_edge_resize_after_a_reload(canvas):
+    box = canvas.locator('[data-box="b1"]')
+    before = box.bounding_box()
+    resize(canvas, "b1", "left", -120)
+    canvas.wait_for_timeout(400)  # the patch is fire-and-forget
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b1"]')
+    after = box.bounding_box()
+    assert round(after["width"] - before["width"]) == 120
+    assert round(after["x"] - before["x"]) == -120
+
+

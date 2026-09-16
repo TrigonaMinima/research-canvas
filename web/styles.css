@@ -56,6 +56,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box--answer{padding:24px 28px 26px}
 
 .box__resize{position:absolute;top:0;right:-6px;width:12px;height:100%;cursor:ew-resize;z-index:3}
+/* `right:auto` spelled out, so the rule above cannot pull this handle across the box. */
+.box__resize--left{left:-6px;right:auto}
 
 .box__head{
   display:flex;gap:10px;align-items:center;cursor:grab;

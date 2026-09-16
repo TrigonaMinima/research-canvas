@@ -29,7 +29,8 @@ function create(box) {
   el.dataset.box = box.id;
   el.dataset.kind = box.kind;
   el.innerHTML = `
-    <div class="box__resize" data-resize title="Drag to resize"></div>
+    <div class="box__resize box__resize--left" data-resize="left" title="Drag to resize"></div>
+    <div class="box__resize" data-resize="right" title="Drag to resize"></div>
     <header class="box__head" data-drag>
       <span class="grip" aria-hidden="true">···</span>
       <span data-label></span>
