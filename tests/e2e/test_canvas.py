@@ -453,6 +453,14 @@ def test_a_running_box_cannot_be_edited(canvas):
 
 # --- folding, framing, and finding your way back --------------------------
 
+QUOTE_BEFORE_QUESTION = """(id) => {
+  const scope = document.querySelector('[data-box="' + id + '"]');
+  const quote = scope.querySelector('[data-quote]');
+  const question = scope.querySelector('[data-question]');
+  return !!(quote.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING);
+}"""
+
+
 def resize(page, box: str, edge: str, dx: float) -> None:
     """Drag one of a box's two handles sideways by dx screen pixels."""
     handle = page.locator(f'[data-box="{box}"] [data-resize="{edge}"]').bounding_box()
@@ -603,5 +611,24 @@ def test_should_drop_the_find_count_when_a_box_is_folded_mid_search(canvas):
     expect(canvas.locator("[data-find-count]")).not_to_have_text("0/0")
     canvas.click('[data-box="b1"] [data-collapse]')
     expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
+
+
+# --- the quote and the question on an answer ------------------------------
+
+
+def test_should_quote_the_highlighted_passage_on_the_answer_box(canvas):
+    answer_from_root(canvas)
+    expect(canvas.locator('[data-box="b2"] blockquote[data-quote]')).to_have_text(QUOTE)
+
+
+def test_should_put_the_quote_above_the_question(canvas):
+    """You read what was asked about, then what was asked."""
+    answer_from_root(canvas)
+    assert canvas.evaluate(QUOTE_BEFORE_QUESTION, "b2")
+
+
+def test_should_not_quote_anything_on_the_root_box(canvas):
+    answer_from_root(canvas)
+    expect(canvas.locator('[data-box="b1"] [data-quote]')).to_have_count(0)
 
 

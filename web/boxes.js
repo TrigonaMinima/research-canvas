@@ -44,6 +44,8 @@ function create(box) {
       <button type="button" class="box__fold" data-collapse aria-expanded="true"
               aria-label="Minimise" title="Minimise">&#8722;</button>
     </header>
+    ${child ?
+      '<blockquote class="box__quote" data-quote title="Back to this passage" hidden></blockquote>' : ''}
     <p class="box__q" data-question hidden></p>
     <div class="box__wait" data-wait hidden>
       <span class="dot-pulse" aria-hidden="true"></span><span data-wait-label></span>
@@ -65,7 +67,9 @@ export function ensure(layer, box) {
   return el;
 }
 
-export function update(el, box, { html, anchors, liveText, queuedAhead, editing }) {
+export function update(el, box, {
+  html, anchors, inbound, parent, liveText, queuedAhead, editing,
+}) {
   el.dataset.status = box.status;
   el.style.left = `${box.x}px`;
   el.style.top = `${box.y}px`;
@@ -87,6 +91,15 @@ export function update(el, box, { html, anchors, liveText, queuedAhead, editing 
   fold.setAttribute('aria-label', label);
   fold.title = label;
   fold.textContent = collapsed ? '+' : '−';
+
+  // The passage the question was asked about, on every box except the document,
+  // which was asked about nothing. textContent, because document text is not ours
+  // to trust with innerHTML.
+  const quote = el.querySelector('[data-quote]');
+  if (quote) {
+    quote.textContent = inbound ? inbound.quote : '';
+    quote.hidden = !inbound;
+  }
 
   const question = el.querySelector('[data-question]');
   question.textContent = box.question;

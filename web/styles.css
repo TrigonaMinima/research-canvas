@@ -194,9 +194,11 @@ mark[data-anchor]{
 .ask__head{display:flex;align-items:center;gap:8px;margin-bottom:10px;font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
 .ask__head em{font-style:normal;color:var(--accent)}
 .ask__head .spacer{margin-left:auto}
-.ask__close{border:0;background:0 0;color:var(--ink2);cursor:pointer;font:400 18px/1 var(--sans);padding:0 2px;margin:-2px -4px 0 0;transition:color .12s}
-.ask__close:hover{color:var(--ink)}
-.ask__quote{margin:0 0 12px;padding-left:10px;border-left:2px solid var(--mark);font:400 13.5px/1.5 var(--serif);color:var(--ink2);max-height:42px;overflow:hidden}
+.ask__close{font:400 18px/1 var(--sans);margin:-2px -4px 0 0}
+/* The passage, given one treatment wherever it is read: in the popover where the
+   question is asked, and on the answer that came back. */
+.ask__quote,.box__quote{margin:0 0 12px;padding-left:10px;border-left:2px solid var(--mark);font:400 13.5px/1.5 var(--serif);color:var(--ink2);max-height:42px;overflow:hidden}
+.box__quote{cursor:pointer}
 .ask textarea,.empty textarea,.empty input[type="text"],.box__editor .cm-editor{
   width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:3px;
   background:var(--paper2);color:var(--ink)}

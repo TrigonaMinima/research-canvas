@@ -87,11 +87,21 @@ function render() {
 
   const busy = running();
   const queuedAhead = busy.filter((b) => b.status === 'running').length;
+  // The anchor that opened each box, indexed once. A hundred boxes each scanning a
+  // hundred anchors would be ten thousand comparisons every frame of a stream.
+  const inbound = new Map();
+  for (const anchor of state.canvas.anchors) inbound.set(anchor.target, anchor);
+  // Its own pass: a parent does not have to sit before its child in the array.
+  const byId = new Map();
+  for (const box of state.canvas.boxes) byId.set(box.id, box);
+
   for (const box of state.canvas.boxes) {
     const node = boxes.ensure(el.canvas, box);
     boxes.update(node, box, {
       html: state.bodies[box.id],
       anchors: anchorsIn(box.id),
+      inbound: inbound.get(box.id) || null,
+      parent: box.parent ? byId.get(box.parent) : null,
       liveText: state.live.get(box.id),
       queuedAhead,
       editing: !!edit && box.id === edit.id,
