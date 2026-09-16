@@ -23,6 +23,16 @@ export function waitLabel(box, queuedAhead) {
   return box.webSearch ? 'Searching the web…' : 'Thinking…';
 }
 
+// Depth 0 is the document, so a box reads one deeper than it is stored. One
+// off-by-one, in one place: every label in the app counts from here.
+export const depthOf = (box) => box.depth + 1;
+
+// Where the way back goes, said in the reader's terms rather than in ids. The arrow
+// is drawn by the stylesheet, so the label reads as one phrase to a screen reader.
+function parentLabel(parent) {
+  return parent.kind === 'root' ? 'Back to the document' : `Back to depth ${depthOf(parent)}`;
+}
+
 function create(box) {
   const el = document.createElement('article');
   el.className = `box box--${box.kind}`;
@@ -54,7 +64,11 @@ function create(box) {
     <div class="box__stopped" data-stopped hidden>
       <p class="box__reason" data-reason></p>
       <button type="button" class="chrome-btn" data-retry>Retry this answer</button>
-    </div>`;
+    </div>
+    ${child ? `
+    <div class="box__foot" data-foot>
+      <button type="button" class="chrome-btn" data-goparent></button>
+    </div>` : ''}`;
   return el;
 }
 
@@ -76,7 +90,7 @@ export function update(el, box, {
   el.style.width = `${box.w}px`;
 
   el.querySelector('[data-label]').textContent =
-    box.kind === 'root' ? 'Document' : `Depth ${box.depth + 1}`;
+    box.kind === 'root' ? 'Document' : `Depth ${depthOf(box)}`;
   el.querySelector('[data-status-label]').textContent = STATUS[box.status] || box.status;
 
   // Folded state is one attribute and no more: the stylesheet does the hiding, and
@@ -120,6 +134,14 @@ export function update(el, box, {
   // The editing pane itself is built by whoever opened it, and sits after this.
   const body = el.querySelector('[data-body]');
   body.hidden = editing;
+
+  // The document box has no footer: there is nowhere above it to go back to. The
+  // editor opens straight under the body, so the way back waits until it closes.
+  const foot = el.querySelector('[data-foot]');
+  if (foot) {
+    foot.hidden = editing || !parent;
+    if (parent) el.querySelector('[data-goparent]').textContent = parentLabel(parent);
+  }
 
   const streaming = box.status === 'running' || box.status === 'pending';
   const signature = streaming

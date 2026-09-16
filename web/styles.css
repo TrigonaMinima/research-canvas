@@ -90,6 +90,11 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box__reason{margin:0 0 12px;font:400 15px/1.55 var(--sans);color:var(--warn)}
 .caret{color:var(--accent)}
 
+/* The way back to the passage. The arrow is drawn here so the button's own text
+   stays one plain phrase for anyone listening to it. */
+.box__foot{display:flex;align-items:center;border-top:1px solid var(--line);margin-top:18px;padding-top:14px}
+.box__foot [data-goparent]::before{content:"\2191";margin-right:6px;color:var(--accent)}
+
 /* Folded: the header and the question stay, and everything under them goes. Said
    here rather than in JS, so one attribute on the box carries the whole state. */
 .box[data-collapsed="1"]{padding-bottom:16px}

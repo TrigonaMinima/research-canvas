@@ -279,7 +279,7 @@ function openAsk(boxEl, offsets, clientRect) {
 
   const box = boxById(boxEl.dataset.box);
   node.querySelector('[data-ask-depth]').textContent =
-    box.kind === 'root' ? 'the document' : `depth ${box.depth + 1}`;
+    box.kind === 'root' ? 'the document' : `depth ${boxes.depthOf(box)}`;
   node.querySelector('[data-ask-quote]').textContent = offsets.quote;
   node.querySelector('[data-ask-web]').setAttribute(
     'aria-pressed', String(state.canvas.webSearch));
@@ -350,7 +350,7 @@ async function submitAsk() {
   if (result.anchor) state.canvas.anchors.push(result.anchor);
   state.bodies[result.box.id] = '';
   render();
-  flash(`Answer box added at depth ${result.box.depth + 1} — the view stays where you are`);
+  flash(`Answer box added at depth ${boxes.depthOf(result.box)} — the view stays where you are`);
   listen(result.box.id);
 }
 
@@ -378,6 +378,22 @@ function revealBox(id) {
   if (!target) return;
   camera.reveal(camera.rectOf(target));
   pulse(target);
+}
+
+// The exact inverse of clicking a highlight: back to the passage this box came from,
+// and to the parent box itself when that passage has since been edited away.
+function jumpToParent(boxId) {
+  const box = boxById(boxId);
+  if (!box || !box.parent) return;
+  const anchor = state.canvas.anchors.find((a) => a.target === boxId);
+  const mark = anchor && el.canvas.querySelector(
+    `[data-box="${box.parent}"] mark[data-anchor="${anchor.id}"]`);
+  if (mark && mark.getClientRects().length) {
+    camera.centerOnAnchor(camera.rectOf(mark));
+    pulse(mark);
+    return;
+  }
+  revealBox(box.parent);
 }
 
 // --- editing a box ------------------------------------------------------------
@@ -628,6 +644,9 @@ document.addEventListener('click', (event) => {
   // The edge is the same journey drawn out, so it lands in the same place.
   const edge = hit('[data-edge]');
   if (edge) { revealBox(edge.dataset.edge); return; }
+
+  const back = hit('[data-goparent]') || hit('[data-quote]');
+  if (back) { jumpToParent(boxOf(back).id); return; }
 
   const collapse = hit('[data-collapse]');
   if (collapse) {

@@ -696,3 +696,48 @@ def test_should_leave_the_camera_alone_when_a_click_lands_on_the_bare_desk(canva
     assert transform_of(canvas) == before
 
 
+# --- getting back to the parent -------------------------------------------
+
+
+def test_should_offer_a_way_back_to_the_document_from_a_first_answer(canvas):
+    answer_from_root(canvas)
+    expect(canvas.locator('[data-box="b2"] [data-goparent]')).to_have_text("Back to the document")
+
+
+def test_should_name_the_parent_depth_on_a_deeper_answer(canvas):
+    answer_from_root(canvas)
+    ask(canvas, "b2", "carries the input", "Why add it back?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    expect(canvas.locator('[data-box="b3"] [data-goparent]')).to_have_text("Back to depth 2")
+
+
+def test_should_not_offer_a_way_back_from_the_root_box(canvas):
+    expect(canvas.locator('[data-box="b1"] [data-goparent]')).to_have_count(0)
+
+
+def test_should_go_back_to_the_passage_the_answer_came_from(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")  # walk away from the document first
+    canvas.click('[data-box="b2"] [data-goparent]')
+    canvas.wait_for_timeout(700)
+    mark = canvas.locator('[data-box="b1"] mark[data-anchor]').first.bounding_box()
+    _, cy = view_centre(canvas)
+    assert abs(mark["y"] + mark["height"] / 2 - cy) <= 250
+
+
+def test_should_flash_the_passage_it_goes_back_to(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")
+    canvas.click('[data-box="b2"] [data-goparent]')
+    expect(canvas.locator('[data-box="b1"] mark[data-anchor]').first).to_have_attribute(
+        "data-flash", "1"
+    )
+
+
+def test_should_hide_the_way_back_while_the_box_is_being_edited(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")
+    open_editor(canvas, "b2")
+    expect(canvas.locator('[data-box="b2"] [data-goparent]')).to_be_hidden()
+
+
