@@ -17,7 +17,16 @@ from tests.fixtures.editor import (
     source_of,
 )
 from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, highlight
-from tests.fixtures.viewport import transform_of
+from tests.fixtures.viewport import (
+    box_rect,
+    edge_start,
+    rect_of,
+    to_client,
+    transform_of,
+    view_centre,
+)
+
+from research_canvas.config import CHROME_HEIGHT, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
 
 pytestmark = pytest.mark.e2e
 
@@ -171,28 +180,14 @@ def test_an_edge_joins_the_highlight_to_the_answer(canvas):
     expect(canvas.locator('[data-edges] [data-edge="b2"]')).to_have_count(1)
 
 
-LEAD_GEOMETRY = """() => {
-  const mark = document.querySelector('mark[data-anchor-edge]');
-  const surface = document.querySelector('[data-canvas]');
-  const scale = new DOMMatrixReadOnly(getComputedStyle(surface).transform).a;
-  const origin = surface.getBoundingClientRect();
-  const r = mark.getBoundingClientRect();
-  const d = document.querySelector('[data-edge] path').getAttribute('d');
-  return {
-    y: parseFloat(d.split(' ')[2]),
-    top: (r.top - origin.top) / scale,
-    bottom: (r.bottom - origin.top) / scale,
-  };
-}"""
-
-
 def test_the_lead_line_leaves_from_the_underline_not_through_the_words(canvas):
     """It must read as the underline continuing, and never strike through the text."""
     ask(canvas, "b1", QUOTE, "What is a residual connection?")
     canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
-    seen = canvas.evaluate(LEAD_GEOMETRY)
-    assert abs(seen["y"] - seen["bottom"]) <= 2
-    assert seen["y"] > (seen["top"] + seen["bottom"]) / 2
+    mark = rect_of(canvas, "mark[data-anchor-edge]")
+    start = edge_start(canvas, "b2")
+    assert abs(start["y"] - (mark["y"] + mark["h"])) <= 2
+    assert start["y"] > mark["y"] + mark["h"] / 2
 
 
 def test_you_can_ask_again_inside_an_answer(canvas):

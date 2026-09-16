@@ -29,17 +29,22 @@ SELECT = """
 }
 """
 
-PLAIN_TEXT = """([box, needle]) => {
+PLAIN_TEXT = """(box) => {
     const body = document.querySelector('[data-box="' + box + '"] [data-body]');
     let s = '';
     const w = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
     let n; while ((n = w.nextNode())) s += n.nodeValue;
-    return s.indexOf(needle);
+    return s;
 }"""
 
 
+def plain_text(page, box: str) -> str:
+    """A box body as the anchor sees it, so offsets and slices share one basis."""
+    return page.evaluate(PLAIN_TEXT, box)
+
+
 def find_offsets(page, box: str, needle: str) -> tuple[int, int]:
-    start = page.evaluate(PLAIN_TEXT, [box, needle])
+    start = plain_text(page, box).find(needle)
     assert start >= 0, f"{needle!r} is not in box {box}"
     return start, start + len(needle)
 
@@ -49,8 +54,13 @@ def highlight(page, box: str, needle: str) -> None:
     page.evaluate(SELECT, [box, start, end])
 
 
-def ask(page, box: str, needle: str, question: str) -> None:
-    highlight(page, box, needle)
+def send_question(page, question: str) -> None:
+    """Ask about whatever is selected right now, through the popover."""
     page.wait_for_selector("[data-ask]")
     page.fill("[data-ask-input]", question)
     page.click("[data-ask-send]")
+
+
+def ask(page, box: str, needle: str, question: str) -> None:
+    highlight(page, box, needle)
+    send_question(page, question)

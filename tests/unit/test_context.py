@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from research_canvas import context, storage
@@ -53,3 +55,14 @@ def test_should_not_ask_for_a_box_with_no_question(tree):
     canvas, _left, _right, _deep = tree
     with pytest.raises(ValueError):
         context.build_prompt(canvas, canvas.box(canvas.root_id))
+
+
+def test_should_ask_the_run_for_inline_math_in_single_dollars(tree):
+    canvas, _left, _right, deep = tree
+    # A lone $, not one half of a $$ pair: the two delimiters mean different things.
+    assert re.search(r"(?<!\$)\$(?!\$)", context.build_prompt(canvas, deep))
+
+
+def test_should_ask_the_run_for_display_math_in_double_dollars(tree):
+    canvas, _left, _right, deep = tree
+    assert "$$" in context.build_prompt(canvas, deep)

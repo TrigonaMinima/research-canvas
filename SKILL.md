@@ -45,6 +45,12 @@ are the only tools, and only when the canvas has web search on.
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
 
+## Mathematics
+
+`$E = mc^2$` inline, `$$…$$` on its own, and `\begin{align}` blocks are rendered to MathML by
+the server, in the same pass that renders the markdown. The browser is handed finished HTML,
+so there is no math library, no web font, and nothing to fetch at run time.
+
 ## The editor
 
 Edit mode is CodeMirror 6, vendored at `web/vendor/codemirror.js` so nothing is fetched at

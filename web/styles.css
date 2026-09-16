@@ -108,6 +108,17 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .prose th,.prose td{padding:11px 14px;border-bottom:1px solid var(--line)}
 .prose img{max-width:100%;height:auto}
 
+/* Maths is native MathML, rendered on the server and set in whichever maths face the
+   machine already has. Nothing is fetched: the `math` generic is the browser's own. */
+.prose math{font-family:'STIX Two Math','Latin Modern Math',math,serif}
+/* The wrapper is what occupies the column, so a wide equation scrolls in place
+   rather than stretching the box. `auto hidden`, or a tall fraction earns a second
+   scrollbar it has no use for. */
+.prose .math.block,.prose .math.amsmath{margin:18px 0;overflow:auto hidden}
+/* `$$…$$` mid-sentence: block maths inside an inline wrapper. Only that case is
+   given a box of its own, so ordinary inline maths keeps sitting on the baseline. */
+.prose .math.inline:has(math[display="block"]){display:inline-block;max-width:100%;overflow:auto hidden}
+
 .prose--root{font:400 17px/1.64 var(--serif)}
 .prose--root p{margin:0 0 15px}
 .prose--root h1{margin:0 0 20px;font:600 33px/1.16 var(--serif);letter-spacing:-.015em}

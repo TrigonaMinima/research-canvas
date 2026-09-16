@@ -301,3 +301,23 @@ def test_should_explain_why_a_running_box_refused_an_edit(client, canvas):
             f"/api/canvases/{canvas['id']}/boxes/b2/body", json={"markdown": "Sneaked in."}
         )
     assert "still running" in response.json()["detail"]
+
+
+# --- mathematics --------------------------------------------------------------
+
+MATH_MARKDOWN = "# Kept\n\nMass and energy: $E = mc^2$.\n"
+
+
+def test_should_render_math_in_the_body_it_just_saved(client, canvas):
+    response = client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body", json={"markdown": MATH_MARKDOWN}
+    )
+    assert "<math" in response.json()["html"]
+
+
+def test_should_render_math_in_the_canvas_view(client, canvas):
+    client.put(f"/api/canvases/{canvas['id']}/boxes/b1/body", json={"markdown": MATH_MARKDOWN})
+    view = client.get(f"/api/canvases/{canvas['id']}").json()
+    assert "<math" in view["bodies"]["b1"]
+
+

@@ -136,7 +136,12 @@ def app(page, server: str, fresh_home: Path):
 @pytest.fixture
 def canvas(app, server: str):
     """A canvas imported through the empty state, ready to highlight."""
-    app.fill("[data-paste]", SAMPLE_DOC)
-    app.click("[data-create]")
-    app.wait_for_selector('[data-box="b1"]')
-    return app
+    return canvas_from(app, SAMPLE_DOC)
+
+
+def canvas_from(page, markdown: str):
+    """Import one document the way a reader does, whatever the document is."""
+    page.fill("[data-paste]", markdown)
+    page.click("[data-create]")
+    page.wait_for_selector('[data-box="b1"]')
+    return page

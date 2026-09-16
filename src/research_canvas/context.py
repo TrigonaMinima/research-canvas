@@ -13,7 +13,8 @@ from .storage import Box, Canvas
 SYSTEM_PREAMBLE = (
     "You are answering a reader's question about a passage they highlighted while "
     "reading. Answer the question directly and concretely. Use plain markdown. Do not "
-    "restate the question, do not greet, and do not offer to help further."
+    "restate the question, do not greet, and do not offer to help further. Write "
+    "mathematics as LaTeX: $...$ inline and $$...$$ on its own line for display."
 )
 
 
