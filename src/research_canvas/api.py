@@ -71,6 +71,7 @@ class BoxPatch(BaseModel):
     x: float | None = None
     y: float | None = None
     w: float | None = Field(default=None, ge=MIN_BOX_WIDTH, le=MAX_BOX_WIDTH)
+    collapsed: bool | None = None
 
 
 class BodyBody(BaseModel):
@@ -151,6 +152,10 @@ def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
             value = getattr(patch, field_name)
             if value is not None:
                 setattr(box, field_name, value)
+        # Tested against None, not truthiness: false has to travel, or a collapsed box
+        # could never be opened again.
+        if patch.collapsed is not None:
+            box.collapsed = patch.collapsed
 
 
 # --- asking -------------------------------------------------------------------

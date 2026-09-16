@@ -62,6 +62,7 @@ function flash(message) {
 }
 
 const boxById = (id) => state.canvas && state.canvas.boxes.find((b) => b.id === id);
+const boxOf = (node) => boxById(node.closest('[data-box]').dataset.box);
 
 function saveCamera() {
   if (!state.canvas) return;
@@ -370,6 +371,7 @@ function openPane(boxEl) {
 async function openEditor(boxEl) {
   const id = boxEl.dataset.box;
   if (edit) closeEditor();
+  setCollapsed(boxById(id), false); // there is nothing to edit inside a folded box
   // Claimed before the fetch, so an Escape while the source is in flight still
   // cancels. Nothing is built yet, so the box keeps showing its rendered body.
   edit = { id, view: null, pane: null };
@@ -468,6 +470,18 @@ function stepFind(delta) {
   el.findCount.textContent = find.label(state.find.index, total);
   const rect = state.find.ranges[state.find.index].getBoundingClientRect();
   camera.centerOnAnchor(clientToCanvas(rect));
+}
+
+// --- folding a box ------------------------------------------------------------
+
+function setCollapsed(box, collapsed) {
+  if (!box || box.collapsed === collapsed) return;
+  box.collapsed = collapsed;
+  if (collapsed && edit && edit.id === box.id) closeEditor();
+  render();
+  measure(); // the edges leave a folded box from its header, not from its body
+  runFind(); // folding changes what is findable, and a stale range has no rect to fly to
+  api.patchCanvas(state.canvas.id, { boxes: { [box.id]: { collapsed } } }).catch(() => {});
 }
 
 // --- pointer behaviour --------------------------------------------------------
@@ -576,6 +590,15 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  const collapse = hit('[data-collapse]');
+  if (collapse) {
+    // The model, not the attribute it was projected onto: the button must toggle
+    // correctly even on a path that changed the fold without rendering yet.
+    const box = boxOf(collapse);
+    setCollapsed(box, !box.collapsed);
+    return;
+  }
+
   const del = hit('[data-delete]');
   if (del) {
     const box = del.closest('[data-box]');
@@ -588,8 +611,7 @@ document.addEventListener('click', (event) => {
 
   const retry = hit('[data-retry]');
   if (retry) {
-    const boxEl = retry.closest('[data-box]');
-    const box = boxById(boxEl.dataset.box);
+    const box = boxOf(retry);
     api.retry(state.canvas.id, box.id).then((fresh) => {
       Object.assign(box, fresh);
       state.live.set(box.id, '');

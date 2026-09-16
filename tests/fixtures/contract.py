@@ -24,6 +24,7 @@ BOX_KEYS = {
     "reason",
     "webSearch",
     "createdAt",
+    "collapsed",
 }
 
 ANCHOR_KEYS = {"id", "box", "target", "start", "end", "quote"}
@@ -81,6 +82,7 @@ def make_box(**over) -> dict:
         "reason": "",
         "webSearch": True,
         "createdAt": "2026-09-16T10:00:00Z",
+        "collapsed": False,
     }
     box.update(over)
     return box

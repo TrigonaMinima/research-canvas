@@ -506,3 +506,102 @@ def test_should_keep_a_left_edge_resize_after_a_reload(canvas):
     assert round(after["x"] - before["x"]) == -120
 
 
+# --- minimising a box -----------------------------------------------------
+
+
+def test_should_fold_the_body_away_when_a_box_is_minimised(canvas):
+    canvas.click('[data-box="b1"] [data-collapse]')
+    expect(canvas.locator('[data-box="b1"] [data-body]')).to_be_hidden()
+    # The header is all that is left to grab, to read, and to click again.
+    expect(canvas.locator('[data-box="b1"] .box__head')).to_be_visible()
+
+
+def test_should_mark_a_minimised_box_as_collapsed(canvas):
+    canvas.click('[data-box="b1"] [data-collapse]')
+    expect(canvas.locator('[data-box="b1"]')).to_have_attribute("data-collapsed", "1")
+
+
+def test_should_unfold_the_body_when_a_box_is_expanded_again(canvas):
+    collapse = canvas.locator('[data-box="b1"] [data-collapse]')
+    collapse.click()
+    collapse.click()
+    expect(canvas.locator('[data-box="b1"] [data-body]')).to_be_visible()
+
+
+def test_should_track_the_folded_state_on_the_collapse_button(canvas):
+    collapse = canvas.locator('[data-box="b1"] [data-collapse]')
+    expect(collapse).to_have_attribute("aria-expanded", "true")
+    collapse.click()
+    expect(collapse).to_have_attribute("aria-expanded", "false")
+
+
+def test_should_put_the_minimise_button_last_in_the_header(canvas):
+    """The fold is the outermost control: it is what a reader reaches for most."""
+    answer_from_root(canvas)
+    last = canvas.evaluate(
+        """() => {
+      const buttons = document.querySelectorAll('[data-box="b2"] .box__head button');
+      return buttons[buttons.length - 1].dataset.collapse !== undefined;
+    }"""
+    )
+    assert last
+
+
+def test_should_draw_the_minimise_button_without_a_border(canvas):
+    style = canvas.evaluate(
+        """() => {
+      const s = getComputedStyle(document.querySelector('[data-box="b1"] [data-collapse]'));
+      return { border: s.borderTopWidth, background: s.backgroundColor };
+    }"""
+    )
+    assert style["border"] == "0px"
+    assert style["background"] == "rgba(0, 0, 0, 0)"
+
+
+def test_should_say_what_the_collapse_button_will_do_next(canvas):
+    collapse = canvas.locator('[data-box="b1"] [data-collapse]')
+    expect(collapse).to_have_attribute("aria-label", "Minimise")
+    collapse.click()
+    expect(collapse).to_have_attribute("aria-label", "Expand")
+
+
+def test_should_keep_a_box_minimised_after_a_reload(canvas):
+    canvas.click('[data-box="b1"] [data-collapse]')
+    canvas.wait_for_timeout(400)  # the collapsed flag is patched in the background
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b1"]')
+    expect(canvas.locator('[data-box="b1"] [data-body]')).to_be_hidden()
+
+
+def test_should_still_draw_the_edge_out_of_a_minimised_box(canvas):
+    answer_from_root(canvas)
+    canvas.click('[data-box="b1"] [data-collapse]')
+    expect(canvas.locator('[data-edges] [data-edge="b2"]')).to_have_count(1)
+
+
+def test_should_start_that_edge_at_the_box_not_at_the_canvas_origin(canvas):
+    """Folding hides the mark the edge used to leave from, not the answer it leads to."""
+    answer_from_root(canvas)
+    canvas.click('[data-box="b1"] [data-collapse]')
+    canvas.wait_for_selector('[data-edges] [data-edge="b2"]')
+    canvas.wait_for_timeout(200)  # geometry is re-measured on the next frame
+    rect = box_rect(canvas, "b1")
+    start = edge_start(canvas, "b2")
+    assert abs(start["x"] - (rect["x"] + rect["w"])) <= 60
+    assert rect["y"] - 20 <= start["y"] <= rect["y"] + rect["h"] + 20
+
+
+def test_should_not_count_find_matches_inside_a_minimised_box(canvas):
+    canvas.click('[data-box="b1"] [data-collapse]')
+    canvas.fill("[data-find]", "residual")
+    expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
+
+
+def test_should_drop_the_find_count_when_a_box_is_folded_mid_search(canvas):
+    """Folding while a search is live: the matches inside it stop being matches."""
+    canvas.fill("[data-find]", "residual")
+    expect(canvas.locator("[data-find-count]")).not_to_have_text("0/0")
+    canvas.click('[data-box="b1"] [data-collapse]')
+    expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
+
+

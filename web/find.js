@@ -8,7 +8,17 @@ export function search(root, query) {
   if (!needle) return [];
 
   const ranges = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  // A folded box has text nobody can see, and a match in it would send the camera to
+  // a rect of nothing. Rejecting the element prunes the whole subtree in one test.
+  const walker = document.createTreeWalker(
+    root,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+    (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
+      if (node.dataset && node.dataset.collapsed === '1') return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_SKIP; // skip still descends, so only text comes back
+    },
+  );
   let node;
   while ((node = walker.nextNode())) {
     const hay = node.nodeValue.toLowerCase();

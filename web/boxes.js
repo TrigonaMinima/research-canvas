@@ -28,6 +28,9 @@ function create(box) {
   el.className = `box box--${box.kind}`;
   el.dataset.box = box.id;
   el.dataset.kind = box.kind;
+  // The document box is asked about rather than asked: no passage above it, no way
+  // back out of it, and nothing above it to delete it from.
+  const child = box.kind !== 'root';
   el.innerHTML = `
     <div class="box__resize box__resize--left" data-resize="left" title="Drag to resize"></div>
     <div class="box__resize" data-resize="right" title="Drag to resize"></div>
@@ -37,14 +40,15 @@ function create(box) {
       <span class="spacer"></span>
       <em data-status-label></em>
       <button type="button" class="chrome-btn" data-edit hidden>Edit</button>
-      ${box.kind === 'root' ? '' :
-        '<button type="button" class="chrome-btn" data-delete>Delete</button>'}
+      ${child ? '<button type="button" class="chrome-btn" data-delete>Delete</button>' : ''}
+      <button type="button" class="box__fold" data-collapse aria-expanded="true"
+              aria-label="Minimise" title="Minimise">&#8722;</button>
     </header>
     <p class="box__q" data-question hidden></p>
     <div class="box__wait" data-wait hidden>
       <span class="dot-pulse" aria-hidden="true"></span><span data-wait-label></span>
     </div>
-    <div class="prose${box.kind === 'root' ? ' prose--root' : ''}" data-body></div>
+    <div class="prose${child ? '' : ' prose--root'}" data-body></div>
     <div class="box__stopped" data-stopped hidden>
       <p class="box__reason" data-reason></p>
       <button type="button" class="chrome-btn" data-retry>Retry this answer</button>
@@ -70,6 +74,19 @@ export function update(el, box, { html, anchors, liveText, queuedAhead, editing 
   el.querySelector('[data-label]').textContent =
     box.kind === 'root' ? 'Document' : `Depth ${box.depth + 1}`;
   el.querySelector('[data-status-label]').textContent = STATUS[box.status] || box.status;
+
+  // Folded state is one attribute and no more: the stylesheet does the hiding, and
+  // edges.js and find.js both read this same signal.
+  const collapsed = !!box.collapsed;
+  if (collapsed) el.dataset.collapsed = '1';
+  else delete el.dataset.collapsed;
+
+  const fold = el.querySelector('[data-collapse]');
+  const label = collapsed ? 'Expand' : 'Minimise';
+  fold.setAttribute('aria-expanded', String(!collapsed));
+  fold.setAttribute('aria-label', label);
+  fold.title = label;
+  fold.textContent = collapsed ? '+' : '−';
 
   const question = el.querySelector('[data-question]');
   question.textContent = box.question;

@@ -321,3 +321,17 @@ def test_should_render_math_in_the_canvas_view(client, canvas):
     assert "<math" in view["bodies"]["b1"]
 
 
+# --- collapsing a box ---------------------------------------------------------
+
+
+def test_should_start_a_box_uncollapsed(client, canvas):
+    assert canvas["boxes"][0]["collapsed"] is False
+
+
+def test_should_save_a_collapsed_box(client, canvas):
+    client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"collapsed": True}}})
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == "b2")["collapsed"] is True
+
+

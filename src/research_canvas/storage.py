@@ -73,6 +73,7 @@ class Box:
     question: str = ""
     reason: str = ""
     web_search: bool = True
+    collapsed: bool = False
     created_at: str = ""
 
     def to_dict(self) -> dict:
@@ -88,6 +89,7 @@ class Box:
             "question": self.question,
             "reason": self.reason,
             "webSearch": self.web_search,
+            "collapsed": self.collapsed,
             "createdAt": self.created_at,
         }
 
@@ -105,6 +107,7 @@ class Box:
             question=data.get("question", ""),
             reason=data.get("reason", ""),
             web_search=bool(data.get("webSearch", True)),
+            collapsed=bool(data.get("collapsed", False)),
             created_at=data.get("createdAt", ""),
         )
 

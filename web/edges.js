@@ -9,6 +9,10 @@ const LEAD_GAP = 14;
 // clear of the words it runs past.
 const UNDERLINE = 1.5;
 
+// The header band of a box: where an edge lands, and where it leaves from when the
+// mark it belongs to cannot be measured.
+const HEADER = 34;
+
 export function collect(camera, canvasEl) {
   const rectOf = camera.rectReader();
   const boxes = [];
@@ -26,13 +30,22 @@ export function collect(camera, canvasEl) {
     const home = mark.closest('[data-box]');
     const source = home && rects.get(home.dataset.box);
     const m = rectOf(mark);
+    // A mark that measures as nothing is not on the desk: folded away, hidden behind
+    // the editor, or in a box being re-rendered. The cause does not matter, only that
+    // an edge from the canvas origin would read as a line straight across the desk.
+    // Such an edge leaves from its own box header, so the box still visibly owns the
+    // answers it opened.
+    const unmeasured = !m.w && !m.h;
+    if (unmeasured && !source) return;
+    const x1 = unmeasured ? source.x + source.w : m.x + m.w;
+    const y1 = unmeasured ? source.y + HEADER : m.y + m.h - UNDERLINE / 2;
     edges.push({
       id: mark.dataset.target,
-      x1: m.x + m.w,
-      y1: m.y + m.h - UNDERLINE / 2,
-      xb: source ? source.x + source.w : m.x + m.w,
+      x1,
+      y1,
+      xb: source ? source.x + source.w : x1,
       x2: target.x,
-      y2: target.y + 34,
+      y2: target.y + HEADER,
     });
   });
 

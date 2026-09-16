@@ -69,6 +69,12 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box__head .spacer{margin-left:auto}
 .grip{display:inline-block;width:11px;color:var(--line);letter-spacing:-1px}
 
+/* One glyph wide: the header has three buttons on it at 240px. The name a screen
+   reader reads comes from the aria-label boxes.js keeps in step with the state. */
+.box__fold,.ask__close{border:0;background:0 0;color:var(--ink2);cursor:pointer;padding:0 2px;transition:color .12s}
+.box__fold:hover,.ask__close:hover{color:var(--ink)}
+.box__fold{font:400 17px/1 var(--sans);margin-left:2px}
+
 .box__q{
   margin:0 0 14px;padding-left:12px;border-left:2px solid var(--accent);
   font:italic 400 15px/1.5 var(--serif);color:var(--ink);cursor:pointer;
@@ -78,6 +84,20 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box__stopped{border-top:1px solid var(--line);margin-top:2px;padding-top:14px}
 .box__reason{margin:0 0 12px;font:400 15px/1.55 var(--sans);color:var(--warn)}
 .caret{color:var(--accent)}
+
+/* Folded: the header and the question stay, and everything under them goes. Said
+   here rather than in JS, so one attribute on the box carries the whole state. */
+.box[data-collapsed="1"]{padding-bottom:16px}
+.box[data-collapsed="1"] .box__head{margin-bottom:0}
+.box[data-collapsed="1"] [data-body],
+.box[data-collapsed="1"] [data-wait],
+.box[data-collapsed="1"] [data-stopped],
+.box[data-collapsed="1"] .box__quote,
+.box[data-collapsed="1"] .box__foot{display:none}
+/* One line of it: a folded box still says what it answered. */
+.box[data-collapsed="1"] .box__q{
+  margin:12px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 
 /* The editor is a CodeMirror view, dressed here with the app's other fields. Only
    what CodeMirror draws itself, the selection and the bracket match, is themed in
