@@ -1,0 +1,683 @@
+// Deep Research — the whole app wiring. Nothing here talks to the network except
+// through api.js, and api.js only ever talks to this machine.
+
+import { api } from './api.js';
+import { Camera } from './camera.js';
+import { offsetsOf } from './anchors.js';
+import {
+  MAX_BOX_WIDTH,
+  MIN_BOX_WIDTH,
+  MIN_SELECTION_CHARS,
+  STILL_RUNNING_MESSAGE,
+  UNFINISHED,
+} from './config.js';
+import * as boxes from './boxes.js';
+import * as edges from './edges.js';
+import * as find from './find.js';
+import * as minimap from './minimap.js';
+
+const $ = (sel) => document.querySelector(sel);
+
+const el = {
+  desk: $('[data-desk]'),
+  viewport: $('[data-viewport]'),
+  canvas: $('[data-canvas]'),
+  edges: $('[data-edges]'),
+  title: $('[data-title]'),
+  runpill: $('[data-runpill]'),
+  runLabel: $('[data-run-label]'),
+  findInput: $('[data-find]'),
+  findCount: $('[data-find-count]'),
+  zoomLevel: $('[data-zoom-level]'),
+  themeLabel: $('[data-theme-label]'),
+  minimap: $('[data-minimap]'),
+  miniSvg: $('[data-mini-svg]'),
+  askLayer: $('[data-ask-layer]'),
+  toast: $('[data-toast]'),
+  empty: $('[data-empty]'),
+  paste: $('[data-paste]'),
+  note: $('[data-note]'),
+  list: $('[data-canvas-list]'),
+};
+
+const state = {
+  canvas: null,
+  bodies: {},
+  live: new Map(),     // boxId -> text streamed so far
+  streams: new Map(),  // boxId -> EventSource
+  geometry: { boxes: [], edges: [] },
+  find: { ranges: [], index: 0 },
+};
+
+const camera = new Camera(el.canvas, measure);
+
+// --- small helpers ------------------------------------------------------------
+
+let toastTimer = null;
+function flash(message) {
+  el.toast.textContent = message;
+  el.toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.toast.hidden = true; }, 2600);
+}
+
+const boxById = (id) => state.canvas && state.canvas.boxes.find((b) => b.id === id);
+
+function saveCamera() {
+  if (!state.canvas) return;
+  api.patchCanvas(state.canvas.id, {
+    camera: { tx: camera.tx, ty: camera.ty, scale: camera.scale },
+  }).catch(() => {});
+}
+const anchorsIn = (id) =>
+  (state.canvas ? state.canvas.anchors : []).filter((a) => a.box === id);
+const running = () =>
+  (state.canvas ? state.canvas.boxes : []).filter((b) => UNFINISHED.has(b.status));
+
+// --- rendering ----------------------------------------------------------------
+
+function render() {
+  if (!state.canvas) return;
+  const alive = new Set(state.canvas.boxes.map((b) => b.id));
+  el.canvas.querySelectorAll('[data-box]').forEach((node) => {
+    if (!alive.has(node.dataset.box)) node.remove();
+  });
+
+  const busy = running();
+  const queuedAhead = busy.filter((b) => b.status === 'running').length;
+  for (const box of state.canvas.boxes) {
+    const node = boxes.ensure(el.canvas, box);
+    boxes.update(node, box, {
+      html: state.bodies[box.id],
+      anchors: anchorsIn(box.id),
+      liveText: state.live.get(box.id),
+      queuedAhead,
+      editing: !!edit && box.id === edit.id,
+    });
+  }
+
+  el.title.textContent = state.canvas.title;
+  el.runpill.hidden = busy.length === 0;
+  if (busy.length) {
+    el.runLabel.textContent = `${busy.length} answer${busy.length === 1 ? '' : 's'} running`;
+  }
+  requestAnimationFrame(measure);
+}
+
+let lastGeometry = '';
+function measure() {
+  if (!state.canvas) return;
+  // The camera moves the editor by transform and a drag moves it by `left`, neither
+  // of which fires a scroll event. CodeMirror renders the lines it believes are on
+  // screen, so it is told whenever the app re-reads geometry — above the early return
+  // below, which only means the edges have not moved.
+  if (edit && edit.view) edit.view.requestMeasure();
+  el.zoomLevel.textContent = `${Math.round(camera.scale * 100)}%`;
+  const next = edges.collect(camera, el.canvas);
+  const signature = JSON.stringify(next);
+  if (signature === lastGeometry) return;
+  lastGeometry = signature;
+  state.geometry = next;
+  edges.render(el.edges, next.edges, next.boxes);
+  minimap.render(el.miniSvg, next.boxes, camera);
+}
+
+// --- opening and closing canvases ---------------------------------------------
+
+function adopt(view) {
+  state.canvas = view;
+  state.bodies = view.bodies || {};
+  setTheme(view.theme, false);
+}
+
+// `loaded` lets the create path reuse the view it already has instead of re-fetching.
+async function open(id, { fresh = false, loaded = null } = {}) {
+  const view = loaded || (await api.readCanvas(id));
+  adopt(view);
+  el.empty.hidden = true;
+  el.desk.hidden = false;
+  history.replaceState(null, '', `?c=${encodeURIComponent(id)}`);
+
+  const c = view.camera;
+  const root = boxById(view.rootId);
+  // A canvas nobody has moved yet opens with its document in view. Computed from
+  // the model, not the DOM, so the camera is settled before anything can be clicked.
+  if (root && c.tx === 0 && c.ty === 0 && c.scale === 1) {
+    camera.set({ scale: 1 });
+    camera.centerOn({ x: root.x, y: root.y, w: root.w, h: 0 }, false);
+    saveCamera(); // from here on the canvas remembers where you left it
+  } else {
+    camera.set({ tx: c.tx, ty: c.ty, scale: c.scale });
+  }
+  render();
+  if (fresh) flash('Canvas created — highlight any passage to ask');
+
+  for (const box of running()) listen(box.id);
+}
+
+async function showEmpty() {
+  for (const stream of state.streams.values()) stream.close();
+  state.streams.clear();
+  state.live.clear();
+  state.canvas = null;
+  lastGeometry = '';
+  el.canvas.querySelectorAll('[data-box]').forEach((n) => n.remove());
+  el.edges.replaceChildren();
+  find.clear();
+  el.findInput.value = '';
+  el.findCount.textContent = '0/0';
+  el.paste.value = '';
+  history.replaceState(null, '', location.pathname);
+  el.empty.hidden = false;
+
+  const canvases = await api.listCanvases();
+  el.list.replaceChildren();
+  for (const item of canvases) {
+    const li = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.open = item.id;
+    button.innerHTML = `<span class="name"></span><span class="meta"></span>`;
+    button.querySelector('.name').textContent = item.title;
+    button.querySelector('.meta').textContent =
+      `${item.boxes} box${item.boxes === 1 ? '' : 'es'} · ${item.updatedAt.slice(0, 10)}`;
+    li.append(button);
+    el.list.append(li);
+  }
+}
+
+// --- answers ------------------------------------------------------------------
+
+function listen(boxId) {
+  if (state.streams.has(boxId)) return;
+  const source = new EventSource(api.streamUrl(state.canvas.id, boxId));
+  state.streams.set(boxId, source);
+
+  const stop = () => { source.close(); state.streams.delete(boxId); };
+
+  source.addEventListener('status', (event) => {
+    const box = boxById(boxId);
+    if (box) box.status = JSON.parse(event.data).status;
+    render();
+  });
+
+  source.addEventListener('text', (event) => {
+    const box = boxById(boxId);
+    if (!box) return;
+    box.status = 'running';
+    state.live.set(boxId, (state.live.get(boxId) || '') + JSON.parse(event.data).text);
+    render();
+  });
+
+  source.addEventListener('done', (event) => {
+    const data = JSON.parse(event.data);
+    const box = boxById(boxId);
+    if (box) {
+      box.status = data.status;
+      box.reason = data.reason || '';
+    }
+    state.bodies[boxId] = data.html || '';
+    state.live.delete(boxId);
+    stop();
+    render();
+  });
+
+  source.onerror = () => {
+    // The browser retries by itself; a closed stream means the run is over.
+    if (source.readyState === EventSource.CLOSED) stop();
+  };
+}
+
+// --- asking -------------------------------------------------------------------
+
+let ask = null; // { boxEl, offsets, rect, webSearch }
+
+function closeAsk() {
+  ask = null;
+  el.askLayer.replaceChildren();
+}
+
+function openAsk(boxEl, offsets, clientRect) {
+  closeAsk();
+  ask = { boxEl, offsets, rect: camera.rectOf(boxEl), webSearch: state.canvas.webSearch,
+          anchorRect: clientToCanvas(clientRect) };
+
+  const node = document.createElement('div');
+  node.className = 'ask';
+  node.dataset.ask = '1';
+  node.innerHTML = `
+    <div class="ask__head">
+      <span>Ask about</span><em data-ask-depth></em>
+      <span class="spacer"></span>
+      <button type="button" class="ask__close" data-ask-cancel
+              aria-label="Close" title="Close (Esc)">×</button>
+    </div>
+    <blockquote class="ask__quote" data-ask-quote></blockquote>
+    <label class="sr-only" for="ask-field">Your question</label>
+    <textarea id="ask-field" data-ask-input placeholder="What do you want to know?"></textarea>
+    <div class="ask__foot">
+      <button type="button" class="webtoggle" data-ask-web aria-pressed="true">
+        <span class="track" aria-hidden="true"><span class="knob"></span></span>
+        <span>Web search</span>
+      </button>
+      <span class="ask__hint">The answer lands beside this passage</span>
+      <button type="button" class="btn-primary" data-ask-send>Ask</button>
+    </div>`;
+
+  const box = boxById(boxEl.dataset.box);
+  node.querySelector('[data-ask-depth]').textContent =
+    box.kind === 'root' ? 'the document' : `depth ${box.depth + 1}`;
+  node.querySelector('[data-ask-quote]').textContent = offsets.quote;
+  node.querySelector('[data-ask-web]').setAttribute(
+    'aria-pressed', String(state.canvas.webSearch));
+
+  const left = Math.min(Math.max(12, clientRect.left), window.innerWidth - 404);
+  const top = Math.min(clientRect.bottom + 10, window.innerHeight - 240);
+  node.style.left = `${left}px`;
+  node.style.top = `${Math.max(63, top)}px`;
+  el.askLayer.append(node);
+
+  const input = node.querySelector('[data-ask-input]');
+  input.addEventListener('keydown', (event) => {
+    // A question is one thought, so Enter sends it. Shift+Enter is the escape hatch
+    // for a second line, and isComposing keeps Enter free to commit an IME candidate.
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    submitAsk();
+  });
+  input.focus();
+}
+
+function clientToCanvas(rect) {
+  const a = camera.toCanvas(rect.left, rect.top);
+  const b = camera.toCanvas(rect.right, rect.bottom);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+}
+
+// Free space to the right of the source box. The camera never moves for this.
+function placement(sourceRect, anchorRect) {
+  const x = sourceRect.x + sourceRect.w + 180;
+  let y = Math.max(anchorRect.y + anchorRect.h - 40, sourceRect.y);
+  const taken = state.geometry.boxes;
+  while (taken.some((b) =>
+    Math.abs(b.x - x) < 460 && y < b.y + b.h + 40 && y + 420 > b.y - 40)) {
+    y += 80;
+  }
+  return { x, y };
+}
+
+async function submitAsk() {
+  if (!ask) return;
+  const node = el.askLayer.querySelector('.ask');
+  const question = node.querySelector('[data-ask-input]').value.trim();
+  if (!question) { flash('Ask a question before sending.'); return; }
+
+  const source = boxById(ask.boxEl.dataset.box);
+  const spot = placement(ask.rect, ask.anchorRect);
+  const payload = {
+    boxId: source.id,
+    question,
+    x: spot.x,
+    y: spot.y,
+    webSearch: ask.webSearch,
+    anchor: { start: ask.offsets.start, end: ask.offsets.end, quote: ask.offsets.quote },
+  };
+  closeAsk();
+  window.getSelection().removeAllRanges();
+
+  let result;
+  try {
+    result = await api.ask(state.canvas.id, payload);
+  } catch (error) {
+    flash(error.message);
+    return;
+  }
+
+  state.canvas.boxes.push(result.box);
+  if (result.anchor) state.canvas.anchors.push(result.anchor);
+  state.bodies[result.box.id] = '';
+  render();
+  flash(`Answer box added at depth ${result.box.depth + 1} — the view stays where you are`);
+  listen(result.box.id);
+}
+
+// --- editing a box ------------------------------------------------------------
+
+// The box whose source is open: `{ id, view, pane }`, or null when none is.
+let edit = null;
+
+// Half a megabyte of CodeMirror, fetched the first time someone edits rather than on
+// every canvas load. The promise is the cache; a second Edit click reuses it.
+let editorModule = null;
+const loadEditor = () => (editorModule ||= import('./editor.js'));
+
+// The pane belongs to the edit, not to the box, so it is built and thrown away with
+// the view it holds. Same lifetime as the ask popover, for the same reason.
+function openPane(boxEl) {
+  const pane = document.createElement('div');
+  pane.dataset.editPane = '';
+  pane.innerHTML = `
+    <div class="box__editor" data-editor></div>
+    <div class="box__edit-foot">
+      <span class="box__hint">Enter saves · Shift+Enter new line · Tab indents · Esc discards</span>
+      <button type="button" class="btn-primary" data-edit-save>Save</button>
+    </div>`;
+  boxEl.querySelector('[data-body]').after(pane);
+  return pane;
+}
+
+async function openEditor(boxEl) {
+  const id = boxEl.dataset.box;
+  if (edit) closeEditor();
+  // Claimed before the fetch, so an Escape while the source is in flight still
+  // cancels. Nothing is built yet, so the box keeps showing its rendered body.
+  edit = { id, view: null, pane: null };
+  let loaded;
+  try {
+    // The canvas view carries rendered HTML, so the markdown is fetched on demand,
+    // and the editor loads alongside it instead of ahead of it.
+    loaded = await Promise.all([api.readBody(state.canvas.id, id), loadEditor()]);
+  } catch (error) {
+    if (edit && edit.id === id) edit = null;
+    flash(error.message);
+    return;
+  }
+  if (!edit || edit.id !== id) return; // cancelled while the source was on its way
+
+  const [{ markdown: source }, editor] = loaded;
+  edit.pane = openPane(boxEl);
+  render(); // the body has to be hidden before CodeMirror measures what is left
+  edit.view = editor.mount(edit.pane.querySelector('[data-editor]'), source,
+    { onSave: saveEdit });
+  // `render` has already queued the one geometry pass, which now also reaches the view.
+}
+
+function closeEditor() {
+  if (!edit) return;
+  // One view at a time, living exactly as long as the edit does. A hundred boxes each
+  // holding an editor would cost the canvas its frame rate.
+  if (edit.view) edit.view.destroy();
+  if (edit.pane) edit.pane.remove();
+  edit = null;
+  render();
+}
+
+function saveEdit() {
+  if (!edit || !edit.view) return;
+  const { id, view } = edit;
+  api.writeBody(state.canvas.id, id, view.state.doc.toString())
+    .then(({ html }) => {
+      // One body changed, so one body is replaced. The rest of the view still holds.
+      state.bodies[id] = html;
+      if (edit && edit.id === id) closeEditor();
+      else render(); // the reader walked away from the edit before it landed
+    })
+    .catch((error) => flash(error.message));
+}
+
+// --- selection ----------------------------------------------------------------
+
+function onSelection() {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+  const range = selection.getRangeAt(0);
+
+  const from = range.startContainer.parentElement?.closest('[data-body]');
+  const to = range.endContainer.parentElement?.closest('[data-body]');
+  if (!from || from !== to) return; // a selection across two boxes is not a question
+
+  const boxEl = from.closest('[data-box]');
+  if (boxEl.dataset.status !== 'done') {
+    flash(STILL_RUNNING_MESSAGE);
+    return;
+  }
+  if (range.toString().trim().length < MIN_SELECTION_CHARS) return;
+
+  const offsets = offsetsOf(from, range);
+  if (!offsets) return;
+  openAsk(boxEl, offsets, range.getBoundingClientRect());
+}
+
+// --- theme --------------------------------------------------------------------
+
+// `remember` is off when we are only reflecting a theme we were just told about.
+function setTheme(theme, remember = true) {
+  const next = theme === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = next;
+  el.themeLabel.textContent = next === 'dark' ? 'Light' : 'Dark';
+  if (!remember) return;
+  try { localStorage.setItem('deep-research-theme', next); } catch { /* private mode */ }
+  if (state.canvas) api.patchCanvas(state.canvas.id, { theme: next }).catch(() => {});
+}
+
+// --- find ---------------------------------------------------------------------
+
+function runFind() {
+  const query = el.findInput.value;
+  state.find.ranges = query.trim() ? find.search(el.canvas, query) : [];
+  state.find.index = 0;
+  find.paint(state.find.ranges);
+  el.findCount.textContent = find.label(0, state.find.ranges.length);
+}
+
+function stepFind(delta) {
+  const total = state.find.ranges.length;
+  if (!total) return;
+  state.find.index = (state.find.index + delta + total) % total;
+  el.findCount.textContent = find.label(state.find.index, total);
+  const rect = state.find.ranges[state.find.index].getBoundingClientRect();
+  camera.centerOnAnchor(clientToCanvas(rect));
+}
+
+// --- pointer behaviour --------------------------------------------------------
+
+let gesture = null;
+
+el.viewport.addEventListener('mousedown', (event) => {
+  if (event.button !== 0) return;
+  const resize = event.target.closest('[data-resize]');
+  const drag = event.target.closest('[data-drag]');
+  const box = event.target.closest('[data-box]');
+
+  if (resize && box) {
+    const model = boxById(box.dataset.box);
+    gesture = { kind: 'resize', box: model, el: box, x: event.clientX, w: model.w };
+  } else if (drag && box) {
+    const model = boxById(box.dataset.box);
+    gesture = { kind: 'move', box: model, el: box,
+                x: event.clientX, y: event.clientY, bx: model.x, by: model.y };
+  } else if (!box) {
+    gesture = { kind: 'pan', x: event.clientX, y: event.clientY };
+    el.desk.dataset.dragging = '1';
+  } else {
+    return; // a press inside a box body is the start of a selection
+  }
+  event.preventDefault();
+});
+
+window.addEventListener('mousemove', (event) => {
+  if (!gesture) return;
+  gesture.moved = true;
+  if (gesture.kind === 'pan') {
+    camera.panBy(event.clientX - gesture.x, event.clientY - gesture.y);
+    gesture.x = event.clientX;
+    gesture.y = event.clientY;
+    return;
+  }
+  if (gesture.kind === 'move') {
+    gesture.box.x = gesture.bx + (event.clientX - gesture.x) / camera.scale;
+    gesture.box.y = gesture.by + (event.clientY - gesture.y) / camera.scale;
+    gesture.el.style.left = `${gesture.box.x}px`;
+    gesture.el.style.top = `${gesture.box.y}px`;
+  } else {
+    const width = gesture.w + (event.clientX - gesture.x) / camera.scale;
+    gesture.box.w = Math.min(MAX_BOX_WIDTH, Math.max(MIN_BOX_WIDTH, width));
+    gesture.el.style.width = `${gesture.box.w}px`;
+  }
+  measure();
+});
+
+window.addEventListener('mouseup', () => {
+  if (!gesture) return;
+  const done = gesture;
+  gesture = null;
+  delete el.desk.dataset.dragging;
+
+  if (done.kind === 'pan') {
+    if (done.moved) saveCamera();
+    return;
+  }
+  if (!done.moved) return; // a click on a button in the header is not a drag
+  const patch = done.kind === 'move'
+    ? { x: done.box.x, y: done.box.y }
+    : { w: done.box.w };
+  api.patchCanvas(state.canvas.id, { boxes: { [done.box.id]: patch } }).catch(() => {});
+  measure();
+});
+
+el.viewport.addEventListener('mouseup', () => {
+  if (gesture) return;
+  // Let the browser finish settling the selection before reading it.
+  setTimeout(onSelection, 0);
+});
+
+el.viewport.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  if (event.ctrlKey || event.metaKey) {
+    camera.zoomTo(camera.scale * (1 - event.deltaY * 0.01), event.clientX, event.clientY);
+  } else {
+    camera.panBy(-event.deltaX, -event.deltaY);
+  }
+}, { passive: false });
+
+// --- clicks -------------------------------------------------------------------
+
+document.addEventListener('click', (event) => {
+  const t = event.target;
+  const hit = (sel) => t.closest?.(sel);
+
+  // Anything outside the popover dismisses it, including the click that does
+  // something else. The selection that opened it lands after this, on a timeout.
+  if (ask && !hit('[data-ask]')) closeAsk();
+
+  const mark = hit('mark[data-anchor]');
+  if (mark) {
+    const target = el.canvas.querySelector(`[data-box="${mark.dataset.target}"]`);
+    if (target) camera.centerOn(camera.rectOf(target));
+    return;
+  }
+
+  const del = hit('[data-delete]');
+  if (del) {
+    const box = del.closest('[data-box]');
+    api.deleteBox(state.canvas.id, box.dataset.box).then((view) => {
+      adopt(view);
+      render();
+    }).catch((error) => flash(error.message));
+    return;
+  }
+
+  const retry = hit('[data-retry]');
+  if (retry) {
+    const boxEl = retry.closest('[data-box]');
+    const box = boxById(boxEl.dataset.box);
+    api.retry(state.canvas.id, box.id).then((fresh) => {
+      Object.assign(box, fresh);
+      state.live.set(box.id, '');
+      state.bodies[box.id] = '';
+      render();
+      listen(box.id);
+    }).catch((error) => flash(error.message));
+    return;
+  }
+
+  const editBtn = hit('[data-edit]');
+  if (editBtn) { openEditor(editBtn.closest('[data-box]')); return; }
+
+  if (hit('[data-edit-save]')) { saveEdit(); return; }
+
+  if (hit('[data-ask-cancel]')) { closeAsk(); return; }
+  if (hit('[data-ask-send]')) { submitAsk(); return; }
+  const web = hit('[data-ask-web]');
+  if (web) {
+    ask.webSearch = !ask.webSearch;
+    web.setAttribute('aria-pressed', String(ask.webSearch));
+    return;
+  }
+
+  const openItem = hit('[data-open]');
+  if (openItem) { open(openItem.dataset.open); return; }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  // The popover sits on top of the editor, so it goes first.
+  if (ask) closeAsk();
+  else if (edit) closeEditor();
+});
+
+el.findInput.addEventListener('input', runFind);
+$('[data-find-next]').addEventListener('click', () => stepFind(1));
+$('[data-find-prev]').addEventListener('click', () => stepFind(-1));
+$('[data-zoom-in]').addEventListener('click', () => { camera.zoomIn(); render(); });
+$('[data-zoom-out]').addEventListener('click', () => { camera.zoomOut(); render(); });
+$('[data-zoom-fit]').addEventListener('click', () => camera.fit(state.geometry.boxes));
+$('[data-theme-toggle]').addEventListener('click', () =>
+  setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+$('[data-crumb-home]').addEventListener('click', showEmpty);
+$('[data-new]').addEventListener('click', showEmpty);
+
+el.minimap.addEventListener('click', (event) => {
+  const frame = el.minimap.getBoundingClientRect();
+  const spot = minimap.toCanvas(
+    state.geometry.boxes, event.clientX - frame.left, event.clientY - frame.top);
+  if (!spot) return;
+  camera.centerOnPoint(spot.x, spot.y);
+});
+
+// --- the empty state ----------------------------------------------------------
+
+for (const tab of document.querySelectorAll('[data-tab]')) {
+  tab.addEventListener('click', () => {
+    for (const other of document.querySelectorAll('[data-tab]')) {
+      const on = other === tab;
+      other.setAttribute('aria-selected', String(on));
+      document.querySelector(`[data-panel="${other.dataset.tab}"]`).hidden = !on;
+    }
+  });
+}
+
+$('[data-research-note]').addEventListener('click', () =>
+  flash('Research runs are P1 — not in the v1 skeleton'));
+
+$('[data-create]').addEventListener('click', async () => {
+  const markdown = el.paste.value;
+  el.note.removeAttribute('data-refused');
+  try {
+    const view = await api.createCanvas(markdown);
+    await open(view.id, { fresh: true, loaded: view });
+  } catch (error) {
+    el.note.textContent = error.message;
+    el.note.dataset.refused = '1';
+  }
+});
+
+// --- boot ---------------------------------------------------------------------
+
+window.addEventListener('resize', () => { lastGeometry = ''; measure(); });
+
+(async function boot() {
+  let saved = null;
+  try { saved = localStorage.getItem('deep-research-theme'); } catch { /* private mode */ }
+  const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  setTheme(saved || system, false);
+
+  const wanted = new URLSearchParams(location.search).get('c');
+  if (wanted) {
+    try {
+      await open(wanted);
+      return;
+    } catch { /* it was deleted; fall through to the list */ }
+  }
+  await showEmpty();
+})();

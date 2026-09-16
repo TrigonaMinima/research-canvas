@@ -1,0 +1,303 @@
+"""Layer 2: real requests against the API."""
+
+from __future__ import annotations
+
+from research_canvas import storage
+from research_canvas.config import BLANK_BODY_MESSAGE, DISPLAY_NAME
+from research_canvas.storage import REFUSED_MESSAGE
+
+
+def test_should_create_a_canvas_from_pasted_markdown(client, sample_markdown):
+    response = client.post("/api/canvases", json={"markdown": sample_markdown})
+    assert response.status_code == 201
+
+
+def test_should_title_the_canvas_from_the_first_heading(client, sample_markdown):
+    response = client.post("/api/canvases", json={"markdown": sample_markdown})
+    assert response.json()["title"] == "Attention Is All You Need"
+
+
+def test_should_refuse_a_paste_that_is_too_short(client):
+    assert client.post("/api/canvases", json={"markdown": "hi"}).status_code == 422
+
+
+def test_should_explain_why_a_short_paste_was_refused(client):
+    response = client.post("/api/canvases", json={"markdown": "hi"})
+    assert response.json()["detail"] == REFUSED_MESSAGE
+
+
+def test_should_list_a_created_canvas(client, canvas):
+    listed = client.get("/api/canvases").json()
+    assert [c["id"] for c in listed] == [canvas["id"]]
+
+
+def test_should_return_rendered_html_for_the_root_box(client, canvas):
+    body = client.get(f"/api/canvases/{canvas['id']}").json()
+    assert "<h1>" in body["bodies"][body["rootId"]]
+
+
+def test_should_404_an_unknown_canvas(client):
+    assert client.get("/api/canvases/nope").status_code == 404
+
+
+def test_should_404_a_canvas_id_that_escapes_the_root(client):
+    assert client.get("/api/canvases/..%2F..%2Fetc").status_code == 404
+
+
+def test_should_save_a_camera_move(client, canvas):
+    client.patch(f"/api/canvases/{canvas['id']}", json={"camera": {"tx": 5, "ty": 6, "scale": 0.5}})
+    assert client.get(f"/api/canvases/{canvas['id']}").json()["camera"]["scale"] == 0.5
+
+
+def test_should_save_a_box_move(client, canvas):
+    root = canvas["rootId"]
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {root: {"x": 40, "y": 80}}})
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == root)["x"] == 40
+
+
+def test_should_reject_a_zoom_outside_the_allowed_range(client, canvas):
+    response = client.patch(f"/api/canvases/{canvas['id']}", json={"camera": {"scale": 9}})
+    assert response.status_code == 422
+
+
+def test_should_create_a_pending_box_when_asked(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    assert response.json()["box"]["status"] == "pending"
+
+
+def test_should_place_the_new_box_where_the_client_asked(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(x=900, y=120))
+    assert (response.json()["box"]["x"], response.json()["box"]["y"]) == (900, 120)
+
+
+def test_should_record_the_anchor_that_opened_the_box(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    assert response.json()["anchor"]["quote"] == "Transformer"
+
+
+def test_should_refuse_an_empty_question(client, canvas):
+    assert client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(q="  ")).status_code == 422
+
+
+def test_should_refuse_a_selection_shorter_than_three_characters(client, canvas):
+    body = _ask()
+    body["anchor"]["quote"] = "Tr"
+    assert client.post(f"/api/canvases/{canvas['id']}/ask", json=body).status_code == 422
+
+
+def test_should_refuse_a_question_from_a_box_that_is_still_running(client, canvas):
+    client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b1", "question": "First?", "x": 900, "y": 80},
+    )
+    answer = client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b2", "question": "Follow up?", "x": 1400, "y": 80},
+    )
+    assert answer.status_code == 409
+
+
+def test_should_explain_why_a_running_box_refused_the_question(client, canvas):
+    client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b1", "question": "First?", "x": 900, "y": 80},
+    )
+    answer = client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b2", "question": "Follow up?", "x": 1400, "y": 80},
+    )
+    assert "still running" in answer.json()["detail"]
+
+
+def test_should_survive_a_restart_with_the_question_kept(client, canvas):
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    reopened = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in reopened if b["id"] == asked["id"])["question"] == "Why self-attention?"
+
+
+def test_should_mark_an_unfinished_box_interrupted_after_a_restart(client, canvas):
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    reopened = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in reopened if b["id"] == asked["id"])["status"] == "interrupted"
+
+
+def test_should_stream_the_answer_text(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer(
+        [
+            event(kind="text", text="Because "),
+            event(kind="text", text="it is parallel."),
+            event(kind="done"),
+        ]
+    )
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    stream = client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream").text
+    assert "it is parallel." in stream
+
+
+def test_should_persist_the_answer_body_after_streaming(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer([event(kind="text", text="Because it is parallel."), event(kind="done")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    body = client.get(f"/api/canvases/{canvas['id']}").json()
+    assert body["bodies"][asked["id"]].strip().startswith("<p>Because it is parallel.")
+
+
+def test_should_mark_the_box_done_after_streaming(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer([event(kind="text", text="ok"), event(kind="done")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == asked["id"])["status"] == "done"
+
+
+def test_should_surface_a_failed_answer_with_its_reason(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer([event(kind="failed", reason="Usage limit reached on your Claude plan.")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert "Usage limit" in next(b for b in boxes if b["id"] == asked["id"])["reason"]
+
+
+def test_should_keep_the_anchor_when_an_answer_fails(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer([event(kind="failed", reason="nope")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    assert client.get(f"/api/canvases/{canvas['id']}").json()["anchors"][0]["target"] == asked["id"]
+
+
+def test_should_put_a_retried_box_back_to_pending(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer([event(kind="failed", reason="nope")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    retried = client.post(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/retry").json()
+    assert retried["status"] == "pending"
+
+
+def test_should_delete_a_box_and_its_anchor(client, canvas, fake_answer):
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.delete(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}")
+    assert client.get(f"/api/canvases/{canvas['id']}").json()["anchors"] == []
+
+
+def test_should_refuse_to_delete_the_root_box(client, canvas):
+    response = client.delete(f"/api/canvases/{canvas['id']}/boxes/{canvas['rootId']}")
+    assert response.status_code == 422
+
+
+def test_should_serve_the_app_shell(client):
+    assert DISPLAY_NAME in client.get("/").text
+
+
+def _ask(q: str = "Why self-attention?", x: float = 500, y: float = 0) -> dict:
+    return {
+        "boxId": "b1",
+        "question": q,
+        "x": x,
+        "y": y,
+        "anchor": {"start": 4, "end": 15, "quote": "Transformer"},
+    }
+
+
+# --- editing a body -----------------------------------------------------------
+
+
+def test_should_return_the_markdown_source_of_a_box(client, canvas):
+    body = client.get(f"/api/canvases/{canvas['id']}/boxes/b1/body").json()
+    assert body["markdown"].startswith("# Attention Is All You Need")
+
+
+def test_should_404_the_body_of_an_unknown_box(client, canvas):
+    assert client.get(f"/api/canvases/{canvas['id']}/boxes/b9/body").status_code == 404
+
+
+def test_should_save_an_edited_body(client, canvas):
+    client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body",
+        json={"markdown": "# Attention Is All You Need\n\nEdited by the reader."},
+    )
+    body = client.get(f"/api/canvases/{canvas['id']}/boxes/b1/body").json()
+    assert body["markdown"].endswith("Edited by the reader.")
+
+
+def test_should_render_an_edited_body_into_the_canvas_view(client, canvas):
+    client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body",
+        json={"markdown": "# Kept\n\nEdited by the reader."},
+    )
+    view = client.get(f"/api/canvases/{canvas['id']}").json()
+    assert "<p>Edited by the reader.</p>" in view["bodies"]["b1"]
+
+
+def test_should_return_only_the_edited_body(client, canvas):
+    """A 20,000-word root is not re-rendered because one answer box was corrected."""
+    response = client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body",
+        json={"markdown": "# Kept\n\nEdited by the reader."},
+    )
+    assert response.json() == {
+        "boxId": "b1",
+        "html": "<h1>Kept</h1>\n<p>Edited by the reader.</p>\n",
+    }
+
+
+def test_should_keep_an_anchor_whose_passage_survives_an_edit(client, canvas, sample_markdown):
+    client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={
+            "boxId": "b1",
+            "question": "What is it?",
+            "x": 900,
+            "y": 80,
+            "anchor": {"start": 0, "end": 19, "quote": "residual connection"},
+        },
+    )
+    client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body",
+        json={"markdown": f"# Preface\n\nOne more line.\n\n{sample_markdown}"},
+    )
+    view = client.get(f"/api/canvases/{canvas['id']}").json()
+    assert [a["quote"] for a in view["anchors"]] == ["residual connection"]
+
+
+def test_should_refuse_a_blank_body(client, canvas):
+    response = client.put(
+        f"/api/canvases/{canvas['id']}/boxes/b1/body", json={"markdown": "   \n\t "}
+    )
+    assert response.status_code == 422
+
+
+def test_should_explain_why_a_blank_body_was_refused(client, canvas):
+    response = client.put(f"/api/canvases/{canvas['id']}/boxes/b1/body", json={"markdown": ""})
+    assert response.json()["detail"] == BLANK_BODY_MESSAGE
+
+
+def _running_answer(client, canvas):
+    """Ask, and keep the new box genuinely live, the way a real stream holds it."""
+    client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b1", "question": "First?", "x": 900, "y": 80},
+    )
+    return storage.live(canvas["id"], "b2")
+
+
+def test_should_refuse_an_edit_while_the_box_is_still_running(client, canvas):
+    with _running_answer(client, canvas):
+        response = client.put(
+            f"/api/canvases/{canvas['id']}/boxes/b2/body", json={"markdown": "Sneaked in."}
+        )
+    assert response.status_code == 409
+
+
+def test_should_explain_why_a_running_box_refused_an_edit(client, canvas):
+    with _running_answer(client, canvas):
+        response = client.put(
+            f"/api/canvases/{canvas['id']}/boxes/b2/body", json={"markdown": "Sneaked in."}
+        )
+    assert "still running" in response.json()["detail"]

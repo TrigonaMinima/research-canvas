@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deep Research</title>
+<meta name="color-scheme" content="light dark">
+<link rel="stylesheet" href="/static/fonts.css">
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+<div class="desk" data-desk>
+  <div class="vp" data-viewport role="application" aria-label="Research canvas" tabindex="0">
+    <div class="canvas" data-canvas>
+      <svg class="edges" data-edges aria-hidden="true" focusable="false"></svg>
+    </div>
+  </div>
+
+  <header class="chrome" data-chrome role="banner">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <button type="button" data-crumb-home>Canvases</button>
+      <span class="sep" aria-hidden="true">/</span>
+      <span class="title" data-title></span>
+    </nav>
+
+    <div class="runpill" data-runpill hidden>
+      <span class="dot" aria-hidden="true"></span>
+      <span data-run-label></span>
+    </div>
+
+    <div class="tools">
+      <div class="findbox" role="search">
+        <input type="search" data-find aria-label="Find in canvas" placeholder="Find in canvas">
+        <span class="count" data-find-count aria-live="polite">0/0</span>
+        <button type="button" data-find-prev aria-label="Previous match">&#8593;</button>
+        <button type="button" data-find-next aria-label="Next match">&#8595;</button>
+      </div>
+
+      <div class="zoomgroup" role="group" aria-label="Zoom">
+        <button type="button" data-zoom-out aria-label="Zoom out">&#8722;</button>
+        <span class="level" data-zoom-level aria-live="polite">100%</span>
+        <button type="button" data-zoom-in aria-label="Zoom in">+</button>
+        <button type="button" class="fit" data-zoom-fit>FIT</button>
+      </div>
+
+      <button type="button" class="chrome-btn" data-theme-toggle aria-label="Switch theme">
+        <span data-theme-label>Dark</span>
+      </button>
+      <button type="button" class="chrome-btn chrome-btn--accent" data-new>New canvas</button>
+    </div>
+  </header>
+
+  <button type="button" class="minimap" data-minimap aria-label="Canvas overview">
+    <svg width="196" height="132" viewBox="0 0 196 132" aria-hidden="true" focusable="false"
+         data-mini-svg></svg>
+  </button>
+
+  <div data-ask-layer></div>
+  <output class="toast" data-toast role="status" hidden></output>
+</div>
+
+<section class="empty" data-empty>
+  <div class="empty__inner">
+    <p class="eyebrow">Deep Research</p>
+    <h1>Start a canvas</h1>
+    <p class="empty__lede">
+      Import a document, highlight any passage, and ask. Answers land beside the passage they
+      came from, to whatever depth the question goes.
+    </p>
+
+    <div class="card">
+      <div class="tabs" role="tablist" aria-label="How to start">
+        <button type="button" role="tab" id="tab-paste" aria-controls="panel-paste"
+                aria-selected="true" data-tab="paste">Paste markdown</button>
+        <button type="button" role="tab" id="tab-research" aria-controls="panel-research"
+                aria-selected="false" data-tab="research">Research a topic</button>
+      </div>
+
+      <div role="tabpanel" id="panel-paste" aria-labelledby="tab-paste" data-panel="paste">
+        <label class="sr-only" for="paste-field">Markdown to import</label>
+        <textarea id="paste-field" data-paste spellcheck="false"
+                  placeholder="# Paste a paper, a spec, a chapter&#10;&#10;Markdown in, canvas out."></textarea>
+        <div class="empty__row">
+          <span class="empty__note" data-note>Nothing is uploaded. The text stays on this machine.</span>
+          <button type="button" class="btn-create" data-create>Create canvas</button>
+        </div>
+      </div>
+
+      <div role="tabpanel" id="panel-research" aria-labelledby="tab-research"
+           data-panel="research" hidden>
+        <label class="sr-only" for="topic-field">Topic to research</label>
+        <input type="text" id="topic-field" data-topic placeholder="A question worth an afternoon">
+        <p class="empty__note--research" data-research-note>
+          A research run reads the web and writes the document for you. It is next on the list,
+          not in this build.
+        </p>
+        <div class="empty__row">
+          <button type="button" class="btn-disabled" data-research-start disabled>Start research</button>
+        </div>
+      </div>
+    </div>
+
+    <ul class="canvaslist" data-canvas-list></ul>
+
+    <div class="empty__foot">
+      <span data-footer-left>Local only &middot; nothing leaves this machine</span>
+      <span data-footer-right></span>
+    </div>
+  </div>
+</section>
+
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

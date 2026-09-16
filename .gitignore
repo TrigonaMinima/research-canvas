@@ -1,0 +1,24 @@
+# Research canvases live here. Local only, never committed.
+canvases/
+
+# Dev server port files (one per branch/worktree).
+.dev/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Playwright
+test-results/
+playwright-report/
+
+# macOS
+.DS_Store
+
+# build-time only; the built bundle in web/vendor/ is committed.
+# package-lock.json is not ignored: `make vendor` runs `npm ci` against it.
+vendor/node_modules/
