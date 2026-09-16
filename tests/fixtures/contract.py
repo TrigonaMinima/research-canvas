@@ -61,6 +61,7 @@ CLIENT_CONFIG_KEYS = {
     "minBoxWidth",
     "maxBoxWidth",
     "minSelectionChars",
+    "chromeHeight",
     "unfinished",
     "stillRunningMessage",
 }

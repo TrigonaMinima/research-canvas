@@ -1,9 +1,12 @@
 // The infinite desk: one translate/scale on the canvas layer, everything else follows.
 
-import { MAX_SCALE, MIN_SCALE } from './config.js';
+import { CHROME_HEIGHT, MAX_SCALE, MIN_SCALE } from './config.js';
 import { bounds } from './geom.js';
 
 export const ZOOM_STEP = 1.25;
+
+// A box revealed under the chrome bar would open with its header out of reach.
+export const CHROME_GAP = 12;
 
 const clamp = (s) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, s));
 
@@ -102,6 +105,15 @@ export class Camera {
 
   centerOnAnchor(rect) {
     this.centerOnPoint(rect.x + rect.w / 2, rect.y);
+  }
+
+  // A box you jumped to reads best whole and centred, so this centres its real
+  // middle. A box taller than the window is held back at the chrome bar rather than
+  // centred through it, which would hide the header that says whose answer it is.
+  reveal(rect) {
+    this.centerOnPoint(rect.x + rect.w / 2, rect.y + rect.h / 2, {
+      floor: CHROME_HEIGHT + CHROME_GAP - rect.y * this.scale,
+    });
   }
 
   fit(boxes) {

@@ -2,9 +2,10 @@
 // through api.js, and api.js only ever talks to this machine.
 
 import { api } from './api.js';
-import { Camera } from './camera.js';
+import { Camera, CHROME_GAP } from './camera.js';
 import { offsetsOf } from './anchors.js';
 import {
+  CHROME_HEIGHT,
   MAX_BOX_WIDTH,
   MIN_BOX_WIDTH,
   MIN_SELECTION_CHARS,
@@ -286,7 +287,7 @@ function openAsk(boxEl, offsets, clientRect) {
   const left = Math.min(Math.max(12, clientRect.left), window.innerWidth - 404);
   const top = Math.min(clientRect.bottom + 10, window.innerHeight - 240);
   node.style.left = `${left}px`;
-  node.style.top = `${Math.max(63, top)}px`;
+  node.style.top = `${Math.max(CHROME_HEIGHT + CHROME_GAP, top)}px`;
   el.askLayer.append(node);
 
   const input = node.querySelector('[data-ask-input]');
@@ -351,6 +352,32 @@ async function submitAsk() {
   render();
   flash(`Answer box added at depth ${result.box.depth + 1} — the view stays where you are`);
   listen(result.box.id);
+}
+
+// --- moving to a box ----------------------------------------------------------
+
+// Where you landed, said once and briefly: on a desk this size the camera arriving
+// is easy to miss. One at a time, so a quick second jump cannot leave a stale ring.
+let flashTimer = null;
+let flashed = null;
+
+function pulse(node) {
+  if (flashed) delete flashed.dataset.flash;
+  clearTimeout(flashTimer);
+  flashed = node;
+  node.dataset.flash = '1';
+  // Matches the lw-flash keyframe in styles.css: the ring is removed as it fades out.
+  flashTimer = setTimeout(() => {
+    delete node.dataset.flash;
+    flashed = null;
+  }, 900);
+}
+
+function revealBox(id) {
+  const target = el.canvas.querySelector(`[data-box="${id}"]`);
+  if (!target) return;
+  camera.reveal(camera.rectOf(target));
+  pulse(target);
 }
 
 // --- editing a box ------------------------------------------------------------
@@ -512,11 +539,13 @@ el.viewport.addEventListener('mousedown', (event) => {
     const model = boxById(box.dataset.box);
     gesture = { kind: 'move', box: model, el: box,
                 x: event.clientX, y: event.clientY, bx: model.x, by: model.y };
-  } else if (!box) {
+  } else if (box || event.target.closest('[data-edge]')) {
+    // A press inside a box body starts a selection, and a press on an edge is on its
+    // way to being a jump. Neither one drags the desk out from under it.
+    return;
+  } else {
     gesture = { kind: 'pan', x: event.clientX, y: event.clientY };
     el.desk.dataset.dragging = '1';
-  } else {
-    return; // a press inside a box body is the start of a selection
   }
   event.preventDefault();
 });
@@ -594,11 +623,11 @@ document.addEventListener('click', (event) => {
   if (ask && !hit('[data-ask]')) closeAsk();
 
   const mark = hit('mark[data-anchor]');
-  if (mark) {
-    const target = el.canvas.querySelector(`[data-box="${mark.dataset.target}"]`);
-    if (target) camera.centerOn(camera.rectOf(target));
-    return;
-  }
+  if (mark) { revealBox(mark.dataset.target); return; }
+
+  // The edge is the same journey drawn out, so it lands in the same place.
+  const edge = hit('[data-edge]');
+  if (edge) { revealBox(edge.dataset.edge); return; }
 
   const collapse = hit('[data-collapse]');
   if (collapse) {

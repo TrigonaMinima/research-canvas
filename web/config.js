@@ -9,7 +9,12 @@ export const MAX_SCALE = served.maxScale;
 export const MIN_BOX_WIDTH = served.minBoxWidth;
 export const MAX_BOX_WIDTH = served.maxBoxWidth;
 export const MIN_SELECTION_CHARS = served.minSelectionChars;
+export const CHROME_HEIGHT = served.chromeHeight;
 export const STILL_RUNNING_MESSAGE = served.stillRunningMessage;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);
+
+// The stylesheet needs the chrome height as well, and cannot fetch it itself.
+// Handed over here so config.py stays the one owner of the number.
+document.documentElement.style.setProperty('--chrome-h', `${CHROME_HEIGHT}px`);

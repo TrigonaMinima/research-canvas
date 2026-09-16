@@ -8,6 +8,9 @@
   --serif:'Literata',Georgia,'Times New Roman',serif;
   --sans:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  /* The height before /api/config lands: web/config.js sets this property from
+     CHROME_HEIGHT as soon as it resolves, so config.py owns the real number. */
+  --chrome-h:53px;
   color-scheme:light;
 }
 [data-theme="dark"]{
@@ -42,6 +45,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .canvas{position:absolute;left:0;top:0;width:1px;height:1px;transform-origin:0 0}
 .canvas[data-anim="1"]{transition:transform .44s cubic-bezier(.22,.7,.2,1)}
 .edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5}
+/* Each edge takes its own clicks, while the empty space between them stays desk. */
+.edges g{pointer-events:auto;cursor:pointer}
 
 /* --- boxes ---------------------------------------------------------------- */
 
@@ -151,10 +156,24 @@ mark[data-anchor]{
   border-radius:2px;padding:0 1px;cursor:pointer;color:inherit;
 }
 
+/* Where the camera just landed, on a desk large enough to lose track of. app.js sets
+   and clears the attribute; the ring is only how it reads. An outline, so the box
+   keeps the shadow it already has. */
+@keyframes lw-flash{
+  0%{outline-color:transparent}
+  22%{outline-color:var(--accent)}
+  100%{outline-color:transparent}
+}
+[data-box][data-flash="1"],mark[data-flash="1"]{
+  outline:2px solid transparent;outline-offset:2px;
+  animation:lw-flash .9s cubic-bezier(.22,.7,.2,1);
+}
+[data-box][data-flash="1"]{outline-offset:3px}
+
 /* --- chrome bar ----------------------------------------------------------- */
 
 .chrome{
-  position:absolute;left:0;right:0;top:0;height:53px;display:flex;align-items:center;gap:18px;
+  position:absolute;left:0;right:0;top:0;height:var(--chrome-h);display:flex;align-items:center;gap:18px;
   padding:0 16px;background:var(--chrome);backdrop-filter:blur(12px);
   border-bottom:1px solid var(--line);z-index:20;
 }
@@ -253,6 +272,8 @@ mark[data-anchor]{
 @media (prefers-reduced-motion:reduce){
   .canvas[data-anim="1"]{transition:none}
   .dot-pulse,.runpill .dot{animation:none;opacity:1}
+  /* The ring still says where you landed; it just holds still until app.js drops it. */
+  [data-box][data-flash="1"],mark[data-flash="1"]{animation:none;outline-color:var(--accent)}
 }
 
 .sr-only{

@@ -13,6 +13,9 @@ const UNDERLINE = 1.5;
 // mark it belongs to cannot be measured.
 const HEADER = 34;
 
+// A hairline curve is too thin to click, so a fat transparent twin takes the clicks.
+const HIT_WIDTH = 14;
+
 export function collect(camera, canvasEl) {
   const rectOf = camera.rectReader();
   const boxes = [];
@@ -62,6 +65,8 @@ export function render(layer, edges, boxes) {
   }
 
   for (const e of edges) {
+    // The .edges layer stays pointer-transparent and `.edges g` in the stylesheet
+    // turns the mouse back on, so only the edges themselves answer to a click.
     const g = svg('g', { 'data-edge': e.id });
     const lead = e.xb - e.x1 > 4;
     if (lead) {
@@ -72,12 +77,17 @@ export function render(layer, edges, boxes) {
       }));
     }
     const sx = Math.max(e.x1, e.xb + LEAD_GAP);
+    const d = `M ${sx} ${e.y1} C ${e.xb + 110} ${e.y1}, ${e.x2 - 90} ${e.y2}, ${e.x2} ${e.y2}`;
     g.append(svg('path', {
-      d: `M ${sx} ${e.y1} C ${e.xb + 110} ${e.y1}, ${e.x2 - 90} ${e.y2}, ${e.x2} ${e.y2}`,
-      fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.25, opacity: 0.55,
+      d, fill: 'none', stroke: 'var(--accent)', 'stroke-width': 1.25, opacity: 0.55,
     }));
     g.append(svg('circle', { cx: sx, cy: e.y1, r: 3, fill: 'var(--accent)', opacity: 0.8 }));
     g.append(svg('circle', { cx: e.x2, cy: e.y2, r: 3, fill: 'var(--accent)', opacity: 0.8 }));
+    // Last, so nothing thinner sits on top of the hit area.
+    g.append(svg('path', {
+      d, fill: 'none', stroke: 'transparent', 'stroke-width': HIT_WIDTH,
+      'pointer-events': 'stroke',
+    }));
     layer.append(g);
   }
 }

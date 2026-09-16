@@ -453,6 +453,18 @@ def test_a_running_box_cannot_be_edited(canvas):
 
 # --- folding, framing, and finding your way back --------------------------
 
+# The chrome bar sits over the desk, so a jump that parks a header under it has
+# hidden the one row you need to grab.
+
+
+# The edges layer has no viewBox, so a point on a path is already in canvas px.
+EDGE_MIDPOINT = """(target) => {
+  // The curve is the last path in the group; the dashed lead, when drawn, is first.
+  const path = document.querySelector('[data-edge="' + target + '"] path:last-of-type');
+  const at = path.getPointAtLength(path.getTotalLength() / 2);
+  return [at.x, at.y];
+}"""
+
 QUOTE_BEFORE_QUESTION = """(id) => {
   const scope = document.querySelector('[data-box="' + id + '"]');
   const quote = scope.querySelector('[data-quote]');
@@ -477,6 +489,12 @@ def answer_from_root(page, question: str = "What is a residual connection?") -> 
     """Ask about the stock passage and wait for the answer to land."""
     ask(page, "b1", QUOTE, question)
     page.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+
+
+def jump_to(page, box: str) -> None:
+    """Click the highlight that opened a box and wait for the camera to settle."""
+    page.locator(f'[data-box="b1"] mark[data-target="{box}"]').first.click()
+    page.wait_for_timeout(700)
 
 
 # --- resizing from either edge --------------------------------------------
@@ -630,5 +648,51 @@ def test_should_put_the_quote_above_the_question(canvas):
 def test_should_not_quote_anything_on_the_root_box(canvas):
     answer_from_root(canvas)
     expect(canvas.locator('[data-box="b1"] [data-quote]')).to_have_count(0)
+
+
+# --- jumping to the answer ------------------------------------------------
+
+
+def test_should_frame_the_answer_when_its_highlight_is_clicked(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")
+    seen = canvas.locator('[data-box="b2"]').bounding_box()
+    cx, cy = view_centre(canvas)
+    # Generous: the camera aims a little high so a long answer reads from its top.
+    assert abs(seen["x"] + seen["width"] / 2 - cx) <= 300
+    assert abs(seen["y"] + seen["height"] / 2 - cy) <= 300
+
+
+def test_should_keep_the_answer_header_clear_of_the_chrome_bar(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")
+    assert canvas.locator('[data-box="b2"]').bounding_box()["y"] >= CHROME_HEIGHT
+
+
+def test_should_flash_the_answer_box_when_its_highlight_is_clicked(canvas):
+    answer_from_root(canvas)
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
+    expect(canvas.locator('[data-box="b2"]')).to_have_attribute("data-flash", "1")
+
+
+def test_should_frame_and_flash_the_answer_when_its_edge_is_clicked(canvas):
+    answer_from_root(canvas)
+    x, y = canvas.evaluate(EDGE_MIDPOINT, "b2")
+    canvas.mouse.click(*to_client(canvas, x, y))
+    expect(canvas.locator('[data-box="b2"]')).to_have_attribute("data-flash", "1")
+    canvas.wait_for_timeout(700)
+    seen = canvas.locator('[data-box="b2"]').bounding_box()
+    cx, _ = view_centre(canvas)
+    assert abs(seen["x"] + seen["width"] / 2 - cx) <= 300
+
+
+def test_should_leave_the_camera_alone_when_a_click_lands_on_the_bare_desk(canvas):
+    """Making edges clickable must not turn an empty click into a pan."""
+    answer_from_root(canvas)
+    before = transform_of(canvas)
+    height = canvas.evaluate("() => window.innerHeight")
+    canvas.mouse.click(10, height - 10)
+    canvas.wait_for_timeout(600)
+    assert transform_of(canvas) == before
 
 

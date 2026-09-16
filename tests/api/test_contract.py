@@ -88,5 +88,6 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["minBoxWidth"] == config.MIN_BOX_WIDTH
     assert served["maxBoxWidth"] == config.MAX_BOX_WIDTH
     assert served["minSelectionChars"] == config.MIN_SELECTION_CHARS
+    assert served["chromeHeight"] == config.CHROME_HEIGHT
     assert served["stillRunningMessage"] == config.STILL_RUNNING_MESSAGE
     assert set(served["unfinished"]) == set(config.UNFINISHED)

@@ -99,6 +99,9 @@ MIN_SCALE = 0.1
 MAX_SCALE = 2.0
 MIN_PASTE_CHARS = 40
 MIN_SELECTION_CHARS = 3
+# The chrome bar owns the top of the window. The camera keeps a revealed box clear
+# of it, and styles.css mirrors this into --chrome-h.
+CHROME_HEIGHT = 53
 
 # --- box vocabulary -----------------------------------------------------------
 
