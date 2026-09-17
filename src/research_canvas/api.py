@@ -58,6 +58,8 @@ class AskBody(BaseModel):
     question: str
     x: float = 0.0
     y: float = 0.0
+    # The browser sends the width it laid the box out with; the server clamps it again.
+    w: float | None = Field(default=None, ge=MIN_BOX_WIDTH, le=MAX_BOX_WIDTH)
     anchor: AnchorBody | None = None
     webSearch: bool | None = None
 
@@ -186,6 +188,7 @@ def _add_question(canvas: storage.Canvas, body: AskBody) -> dict:
         question=body.question.strip(),
         x=body.x,
         y=body.y,
+        w=body.w,
         web_search=body.webSearch,
     )
 

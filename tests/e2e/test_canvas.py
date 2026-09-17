@@ -473,6 +473,16 @@ QUOTE_BEFORE_QUESTION = """(id) => {
 }"""
 
 
+def overlap(a: dict, b: dict) -> bool:
+    """Whether two canvas rects share any area at all."""
+    return (
+        a["x"] < b["x"] + b["w"]
+        and b["x"] < a["x"] + a["w"]
+        and a["y"] < b["y"] + b["h"]
+        and b["y"] < a["y"] + a["h"]
+    )
+
+
 def resize(page, box: str, edge: str, dx: float) -> None:
     """Drag one of a box's two handles sideways by dx screen pixels."""
     handle = page.locator(f'[data-box="{box}"] [data-resize="{edge}"]').bounding_box()
@@ -741,3 +751,27 @@ def test_should_hide_the_way_back_while_the_box_is_being_edited(canvas):
     expect(canvas.locator('[data-box="b2"] [data-goparent]')).to_be_hidden()
 
 
+# --- a new answer inherits its parent's width -----------------------------
+
+
+def test_should_open_an_answer_at_the_width_of_the_box_it_came_from(canvas):
+    answer_from_root(canvas)
+    width = canvas.locator('[data-box="b2"]').bounding_box()["width"]
+    assert round(width) == ROOT_BOX_WIDTH
+
+
+def test_should_inherit_the_resized_width_of_a_parent_answer(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")  # brings the handle on screen with the scale still at 1
+    resize(canvas, "b2", "right", 120)
+    ask(canvas, "b2", "carries the input", "Why add it back?")
+    canvas.wait_for_selector('[data-box="b3"]')
+    width = canvas.locator('[data-box="b3"]').bounding_box()["width"]
+    assert round(width) == ROOT_BOX_WIDTH + 120
+
+
+def test_should_not_overlap_two_answers_asked_off_the_same_box(canvas):
+    answer_from_root(canvas)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    assert not overlap(box_rect(canvas, "b2"), box_rect(canvas, "b3"))

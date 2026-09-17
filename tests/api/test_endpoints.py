@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from research_canvas import storage
-from research_canvas.config import BLANK_BODY_MESSAGE, DISPLAY_NAME
+from research_canvas.config import (
+    BLANK_BODY_MESSAGE,
+    DISPLAY_NAME,
+    MAX_BOX_WIDTH,
+    MIN_BOX_WIDTH,
+)
 from research_canvas.storage import REFUSED_MESSAGE
 
 
@@ -195,14 +200,19 @@ def test_should_serve_the_app_shell(client):
     assert DISPLAY_NAME in client.get("/").text
 
 
-def _ask(q: str = "Why self-attention?", x: float = 500, y: float = 0) -> dict:
-    return {
+def _ask(
+    q: str = "Why self-attention?", x: float = 500, y: float = 0, w: float | None = None
+) -> dict:
+    body = {
         "boxId": "b1",
         "question": q,
         "x": x,
         "y": y,
         "anchor": {"start": 4, "end": 15, "quote": "Transformer"},
     }
+    if w is not None:  # omitted rather than null: no width means "inherit the parent"
+        body["w"] = w
+    return body
 
 
 # --- editing a body -----------------------------------------------------------
@@ -335,3 +345,24 @@ def test_should_save_a_collapsed_box(client, canvas):
     assert next(b for b in boxes if b["id"] == "b2")["collapsed"] is True
 
 
+# --- the width a new answer opens at ------------------------------------------
+
+
+def test_should_give_a_new_answer_the_width_of_its_parent(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    assert response.json()["box"]["w"] == canvas["boxes"][0]["w"]
+
+
+def test_should_honour_an_explicit_width_when_asking(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(w=520))
+    assert response.json()["box"]["w"] == 520
+
+
+def test_should_refuse_an_asked_width_below_the_minimum(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(w=MIN_BOX_WIDTH - 1))
+    assert response.status_code == 422
+
+
+def test_should_refuse_an_asked_width_above_the_maximum(client, canvas):
+    response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(w=MAX_BOX_WIDTH + 1))
+    assert response.status_code == 422

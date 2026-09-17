@@ -7,7 +7,7 @@ import json
 import pytest
 
 from research_canvas import storage
-from research_canvas.config import FORMAT_VERSION
+from research_canvas.config import FORMAT_VERSION, MAX_BOX_WIDTH, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
 
 
 def test_should_use_first_heading_as_title(canvas_root, sample_markdown):
@@ -98,3 +98,32 @@ def test_should_leave_no_partial_file_when_a_save_fails(canvas_root, sample_mark
 def test_should_reject_a_canvas_id_that_escapes_the_root(canvas_root):
     with pytest.raises(storage.CanvasNotFound):
         storage.load("../../etc")
+
+
+# --- answer width ------------------------------------------------------------
+
+
+def test_should_give_an_answer_the_width_of_its_parent(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why self-attention?")
+    assert box.w == float(ROOT_BOX_WIDTH)
+
+
+def test_should_clamp_an_inherited_width_to_the_maximum(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    canvas.box(canvas.root_id).w = float(MAX_BOX_WIDTH) * 2
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    assert box.w == float(MAX_BOX_WIDTH)
+
+
+def test_should_clamp_an_inherited_width_to_the_minimum(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    canvas.box(canvas.root_id).w = 10.0
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    assert box.w == float(MIN_BOX_WIDTH)
+
+
+def test_should_prefer_an_explicit_width_over_the_inherited_one(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a", w=320.0)
+    assert box.w == 320.0

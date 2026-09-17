@@ -6,8 +6,8 @@ same lists. A field that drifts on one side fails on the other.
 
 from __future__ import annotations
 
-from research_canvas.config import ANSWER_BOX_WIDTH, FORMAT_VERSION, ROOT_BOX_WIDTH
 from research_canvas.config import BOX_STATUSES as _CONFIG_STATUSES
+from research_canvas.config import FORMAT_VERSION, ROOT_BOX_WIDTH
 
 SUMMARY_KEYS = {"id", "title", "updatedAt", "boxes"}
 
@@ -48,7 +48,7 @@ VIEW_KEYS = {
 
 ASK_RESULT_KEYS = {"box", "anchor"}
 
-ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "webSearch", "anchor"}
+ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "w", "webSearch", "anchor"}
 
 STREAM_EVENTS = {"status", "init", "text", "done"}
 
@@ -107,7 +107,7 @@ def make_view(**over) -> dict:
                 kind="answer",
                 x=1040.0,
                 y=120.0,
-                w=float(ANSWER_BOX_WIDTH),
+                w=float(ROOT_BOX_WIDTH),
                 depth=1,
                 parent="b1",
                 question="What is a residual connection?",

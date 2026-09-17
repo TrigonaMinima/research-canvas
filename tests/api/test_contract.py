@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from tests.fixtures.contract import (
     ANCHOR_KEYS,
+    ASK_REQUEST_KEYS,
     ASK_RESULT_KEYS,
     BOX_KEYS,
     BOX_STATUSES,
@@ -14,7 +15,7 @@ from tests.fixtures.contract import (
     VIEW_KEYS,
 )
 
-from research_canvas import config
+from research_canvas import api, config
 
 
 def test_a_canvas_view_carries_every_documented_field(canvas):
@@ -56,6 +57,10 @@ def test_asking_answers_in_the_documented_shape(client, canvas):
     assert set(result) == ASK_RESULT_KEYS
     assert set(result["box"]) == BOX_KEYS
     assert set(result["anchor"]) == ANCHOR_KEYS
+
+
+def test_the_ask_payload_accepts_every_documented_field():
+    assert set(api.AskBody.model_fields) == ASK_REQUEST_KEYS
 
 
 def test_the_stream_only_sends_documented_events(client, canvas, fake_answer):

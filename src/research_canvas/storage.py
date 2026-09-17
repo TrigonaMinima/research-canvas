@@ -20,11 +20,12 @@ from itertools import count
 from . import md
 from .anchors import Anchor
 from .config import (
-    ANSWER_BOX_WIDTH,
     BOX_DIR,
     CANVAS_FILE,
     CANVAS_ROOT,
     FORMAT_VERSION,
+    MAX_BOX_WIDTH,
+    MIN_BOX_WIDTH,
     MIN_PASTE_CHARS,
     ROOT_BOX_ID,
     ROOT_BOX_WIDTH,
@@ -231,6 +232,7 @@ def add_answer(
     question: str,
     x: float = 0.0,
     y: float = 0.0,
+    w: float | None = None,
     web_search: bool | None = None,
 ) -> Box:
     parent = canvas.box(parent_id)
@@ -239,7 +241,9 @@ def add_answer(
         kind="answer",
         x=x,
         y=y,
-        w=float(ANSWER_BOX_WIDTH),
+        # An answer opens as wide as the box it came from, so a reader who widened one
+        # branch keeps that column width all the way down it.
+        w=_clamp_width(parent.w if w is None else w),
         depth=parent.depth + 1,
         parent=parent_id,
         status="pending",
@@ -394,6 +398,10 @@ def _atomic_write(path, text: str) -> None:
     except OSError:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _clamp_width(w: float) -> float:
+    return min(float(MAX_BOX_WIDTH), max(float(MIN_BOX_WIDTH), float(w)))
 
 
 def _next_id(prefix: str, existing: Iterable) -> str:

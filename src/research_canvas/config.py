@@ -92,7 +92,6 @@ MAX_CONCURRENT_RUNS = 3
 # --- canvas geometry (ported from the design) ---------------------------------
 
 ROOT_BOX_WIDTH = 680
-ANSWER_BOX_WIDTH = 420
 MIN_BOX_WIDTH = 240
 MAX_BOX_WIDTH = 1400
 MIN_SCALE = 0.1

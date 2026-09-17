@@ -308,12 +308,19 @@ function clientToCanvas(rect) {
 }
 
 // Free space to the right of the source box. The camera never moves for this.
-function placement(sourceRect, anchorRect) {
-  const x = sourceRect.x + sourceRect.w + 180;
+// A box now opens at its parent's width, so the collision test reads the widths it
+// is actually given rather than the 420px the answer box used to be.
+const GUTTER = 40;
+const COLUMN_GAP = 180;
+const ASSUMED_HEIGHT = 420;
+
+function placement(sourceRect, anchorRect, width) {
+  const x = sourceRect.x + sourceRect.w + COLUMN_GAP;
   let y = Math.max(anchorRect.y + anchorRect.h - 40, sourceRect.y);
   const taken = state.geometry.boxes;
   while (taken.some((b) =>
-    Math.abs(b.x - x) < 460 && y < b.y + b.h + 40 && y + 420 > b.y - 40)) {
+    x < b.x + b.w + GUTTER && x + width + GUTTER > b.x &&
+    y < b.y + b.h + GUTTER && y + ASSUMED_HEIGHT > b.y - GUTTER)) {
     y += 80;
   }
   return { x, y };
@@ -326,12 +333,16 @@ async function submitAsk() {
   if (!question) { flash('Ask a question before sending.'); return; }
 
   const source = boxById(ask.boxEl.dataset.box);
-  const spot = placement(ask.rect, ask.anchorRect);
+  // The width the browser lays the box out with is the width the server records,
+  // so placement above and the stored box cannot disagree.
+  const width = clampWidth(source.w);
+  const spot = placement(ask.rect, ask.anchorRect, width);
   const payload = {
     boxId: source.id,
     question,
     x: spot.x,
     y: spot.y,
+    w: width,
     webSearch: ask.webSearch,
     anchor: { start: ask.offsets.start, end: ask.offsets.end, quote: ask.offsets.quote },
   };
