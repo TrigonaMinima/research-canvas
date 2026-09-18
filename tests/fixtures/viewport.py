@@ -87,6 +87,27 @@ def stored_anchor(page, server: str) -> dict:
     return view["anchors"][0]
 
 
+def fold_help(page) -> None:
+    """Fold the shortcuts card away. It sits over the top-right corner of the desk, and
+    a press that lands on it is not a press on whatever is underneath."""
+    card = page.locator("[data-help]")
+    if card.count() and not card.get_attribute("data-folded"):
+        page.click("[data-help-toggle]")
+
+
+def drag_header_by(page, box: str, dx_canvas: float, dy_canvas: float) -> None:
+    """Drag a box by its header, moving it a given distance in canvas pixels."""
+    fold_help(page)  # a header can sit under the card, and the card takes the press
+    scale = scale_of(page)
+    handle = page.locator(f'[data-box="{box}"] .box__head').bounding_box()
+    x = handle["x"] + handle["width"] / 2
+    y = handle["y"] + handle["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx_canvas * scale, y + dy_canvas * scale, steps=8)
+    page.mouse.up()
+
+
 # The camera flips `data-anim` to '0' when its own transition has landed, so no test
 # has to guess at a sleep. camera.js writes it in one place; this reads it in one.
 CAMERA_SETTLED = "() => document.querySelector('[data-canvas]').dataset.anim === '0'"

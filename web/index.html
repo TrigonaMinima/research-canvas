@@ -57,6 +57,47 @@
     </div>
   </header>
 
+  <!-- Every gesture here is a drag or a modifier, and none of them announce
+       themselves. The card says so once, in the corner the reader is not using. -->
+  <!-- Folded in the markup, not only by the script: the card is a chip until a reader
+       asks for it, and an open card painted for one frame at boot is a flash of the
+       thing it is meant to stay out of the way of. -->
+  <aside class="help" data-help data-folded="1" aria-label="Shortcuts">
+    <button type="button" class="help__toggle" data-help-toggle aria-controls="help-body"
+            aria-expanded="false" aria-label="Show shortcuts">
+      <span class="help__title">Shortcuts</span>
+      <span class="help__sign" data-help-sign aria-hidden="true">?</span>
+    </button>
+
+    <div class="help__body" id="help-body" data-help-body>
+      <h3>Ask</h3>
+      <dl>
+        <dt>Select a passage</dt><dd>opens the question</dd>
+        <dt><kbd>Enter</kbd></dt><dd>send it</dd>
+        <dt><kbd>Shift</kbd> + <kbd>Enter</kbd></dt><dd>new line</dd>
+      </dl>
+
+      <h3>Select</h3>
+      <dl>
+        <dt><kbd data-mod></kbd> + click</dt><dd>ring a box</dd>
+        <dt><kbd data-mod></kbd> + drag</dt><dd>sweep a band</dd>
+        <dt>Select</dt><dd>drag with no key held</dd>
+        <dt>Click bare desk</dt><dd>let the selection go</dd>
+      </dl>
+
+      <h3>Edit</h3>
+      <dl>
+        <dt><kbd>Enter</kbd></dt><dd>save</dd>
+        <dt><kbd>Tab</kbd></dt><dd>indent</dd>
+        <dt><kbd>Esc</kbd></dt><dd>discard</dd>
+      </dl>
+
+      <p class="help__foot">
+        <kbd>Esc</kbd> closes what is open, then clears the selection, then leaves Select.
+      </p>
+    </div>
+  </aside>
+
   <button type="button" class="minimap" data-minimap aria-label="Canvas overview">
     <svg width="196" height="132" viewBox="0 0 196 132" aria-hidden="true" focusable="false"
          data-mini-svg></svg>

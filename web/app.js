@@ -50,6 +50,9 @@ const el = {
   note: $('[data-note]'),
   list: $('[data-canvas-list]'),
   selectMode: $('[data-select-mode]'),
+  help: $('[data-help]'),
+  helpToggle: $('[data-help-toggle]'),
+  helpSign: $('[data-help-sign]'),
 };
 
 const state = {
@@ -924,6 +927,26 @@ function onSelection() {
   openAsk(boxEl, offsets, range.getBoundingClientRect());
 }
 
+// --- the shortcuts card -------------------------------------------------------
+
+const HELP_KEY = 'deep-research-help';
+
+// A Mac keyboard says ⌘ and no other keyboard does. The card is written with the key
+// this machine has rather than printing both and leaving the reader to pick.
+const MOD_LABEL =
+  /mac/i.test(navigator.userAgentData?.platform || navigator.platform || '') ? '⌘' : 'Ctrl';
+
+function setHelpFolded(folded) {
+  if (folded) el.help.dataset.folded = '1';
+  else delete el.help.dataset.folded;
+  el.helpToggle.setAttribute('aria-expanded', String(!folded));
+  el.helpToggle.setAttribute('aria-label', folded ? 'Show shortcuts' : 'Hide shortcuts');
+  el.helpSign.textContent = folded ? '?' : '\u2212';
+  // Whichever way the reader left it. This is a habit of the browser rather than of
+  // the canvas, so it is not written to disk with the rest.
+  try { localStorage.setItem(HELP_KEY, folded ? 'folded' : 'open'); } catch { /* private mode */ }
+}
+
 // --- theme --------------------------------------------------------------------
 
 // `remember` is off when we are only reflecting a theme we were just told about.
@@ -1321,6 +1344,7 @@ $('[data-zoom-fit]').addEventListener('click', () => camera.fit(state.geometry.b
 $('[data-fold-all]').addEventListener('click', () => setAllCollapsed(true));
 $('[data-unfold-all]').addEventListener('click', () => setAllCollapsed(false));
 el.selectMode.addEventListener('click', () => setSelectMode(!selectMode));
+el.helpToggle.addEventListener('click', () => setHelpFolded(!el.help.dataset.folded));
 $('[data-theme-toggle]').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 $('[data-crumb-home]').addEventListener('click', showEmpty);
@@ -1366,6 +1390,12 @@ $('[data-create]').addEventListener('click', async () => {
 window.addEventListener('resize', () => { lastGeometry = ''; measure(); });
 
 (async function boot() {
+  for (const key of document.querySelectorAll('[data-mod]')) key.textContent = MOD_LABEL;
+  // A chip until asked for, so only an opened card is worth remembering.
+  let help = null;
+  try { help = localStorage.getItem(HELP_KEY); } catch { /* private mode */ }
+  setHelpFolded(help !== 'open');
+
   let saved = null;
   try { saved = localStorage.getItem('deep-research-theme'); } catch { /* private mode */ }
   const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';

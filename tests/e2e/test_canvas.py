@@ -29,10 +29,10 @@ from tests.fixtures.selection import (
 from tests.fixtures.viewport import (
     box_rect,
     canvas_id_of,
+    drag_header_by,
     edge_start,
     line_rects_of,
     rect_of,
-    scale_of,
     to_client,
     transform_of,
     view_centre,
@@ -581,18 +581,6 @@ def jump_to(page, box: str) -> None:
     """Click the highlight that opened a box and wait for the camera to settle."""
     page.locator(f'[data-box="b1"] mark[data-target="{box}"]').first.click()
     page.wait_for_timeout(700)
-
-
-def drag_header_by(page, box: str, dx_canvas: float, dy_canvas: float) -> None:
-    """Drag a box by its header, moving it a given distance in canvas pixels."""
-    scale = scale_of(page)
-    handle = page.locator(f'[data-box="{box}"] .box__head').bounding_box()
-    x = handle["x"] + handle["width"] / 2
-    y = handle["y"] + handle["height"] / 2
-    page.mouse.move(x, y)
-    page.mouse.down()
-    page.mouse.move(x + dx_canvas * scale, y + dy_canvas * scale, steps=8)
-    page.mouse.up()
 
 
 # --- resizing from either edge --------------------------------------------

@@ -1,13 +1,13 @@
 # Tests
 
-436 tests. 433 run on every `make test`; the 3 marked `live` spend real Claude usage and
+449 tests. 446 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          433 tests, no usage spent
+make test          unit + api + e2e          446 tests, no usage spent
 make test-unit     tests/unit                 82
 make test-api      tests/api                  77  (3 live deselected)
-make test-e2e      tests/e2e                 277
+make test-e2e      tests/e2e                 290
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 82 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 61 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 234 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 277 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 247 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 290 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
@@ -96,7 +96,7 @@ a snap can be shown stopping at a block boundary instead of reading `PaperEach` 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (234)
+### 4 — Frontend against the real API (247)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -190,6 +190,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   the second leaving the mode, and a canvas switch dropping both. Six cover letting go:
   Escape, a click on bare desk, another canvas, a pan that keeps it, a band over boxes that
   are all selected removing them, and a band over a mix adding the rest.
+- `test_help.py` (13) — the shortcuts card in the top-right corner. It rests as a chip, so
+  the reader gets the desk and not a panel: folded when a canvas opens, opened from the chip,
+  folded again from its header, and left whichever way it was on the next visit, open or shut.
+  The rest read what is on it: the toggle saying what it will do in either state, the modifier
+  printed the way this machine spells it, the band and the ring named because nothing else
+  names them, panning and clicking a highlight left off because a reader finds those in the
+  first minute, a drag on the card leaving the desk where it was, and the card kept off the
+  first screen, where there is no canvas to work on.
 - `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
   on, since a caret hit-test lands between glyphs and a press past the middle of a letter
   used to cost that letter for good. Six read the popover quote: a start inside a word, an
@@ -221,7 +229,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 277)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 290)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -301,6 +309,6 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
-| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. |
+| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
 | `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. |

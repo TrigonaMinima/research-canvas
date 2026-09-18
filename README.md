@@ -38,6 +38,8 @@ plain files in a folder you own. The only thing that leaves is the Claude reques
 - Find in canvas, with a match counter and previous and next.
 - Read the whole canvas at a glance in the minimap, and switch between light and dark.
 - Write standing instructions once and have every answer follow them.
+- Open the "?" chip in the top-right corner for the gestures that have no button of
+  their own.
 
 Answers stream in as they are written. Nothing on the canvas moves while you read.
 

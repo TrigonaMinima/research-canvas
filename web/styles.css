@@ -227,6 +227,39 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
   cursor:pointer;padding:0;z-index:15;
 }
 
+/* --- the shortcuts card ---------------------------------------------------- */
+
+/* The corner opposite the minimap, under the chrome bar. Absolute like the minimap,
+   so both corners are measured from the same desk. */
+.help{
+  position:absolute;right:16px;top:calc(var(--chrome-h) + 12px);width:264px;
+  background:var(--chrome);backdrop-filter:blur(12px);border:1px solid var(--line);
+  border-radius:4px;z-index:15;overflow:hidden;
+}
+.help__toggle{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+  border:0;background:0 0;cursor:pointer;padding:9px 12px;color:var(--ink2);
+  font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;
+}
+.help__sign{font:400 14px/1 var(--sans);color:var(--ink2)}
+.help__body{max-height:min(56vh,520px);overflow:auto;padding:0 12px 12px}
+.help__body h3{margin:10px 0 5px;font:500 10px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+.help__body dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0}
+.help__body dt{color:var(--ink);font:400 11.5px/1.4 var(--sans)}
+.help__body dd{margin:0;color:var(--ink2);font:400 11.5px/1.4 var(--sans);text-align:right}
+.help__foot{margin:12px 0 0;color:var(--ink2);font:400 11px/1.5 var(--sans)}
+.help kbd{
+  border:1px solid var(--line);border-radius:3px;background:var(--paper2);color:var(--ink);
+  font:500 10.5px/1 var(--mono);padding:2px 4px;
+}
+
+/* Folded is a chip and nothing else: one attribute, and the rest is this rule. */
+.help[data-folded="1"]{width:auto;border-radius:50%}
+.help[data-folded="1"] .help__body,
+.help[data-folded="1"] .help__title{display:none}
+.help[data-folded="1"] .help__toggle{width:32px;height:32px;justify-content:center;padding:0}
+.help[data-folded="1"] .help__sign{font:500 13px/1 var(--sans)}
+
 /* --- ask popover ---------------------------------------------------------- */
 
 /* One raised surface, used by the ask popover and the instructions sheet alike.
