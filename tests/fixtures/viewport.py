@@ -56,11 +56,20 @@ def canvas_id_of(page) -> str:
     return page.evaluate("() => new URLSearchParams(location.search).get('c')")
 
 
+# The camera flips `data-anim` to '0' when its own transition has landed, so no test
+# has to guess at a sleep. camera.js writes it in one place; this reads it in one.
+CAMERA_SETTLED = "() => document.querySelector('[data-canvas]').dataset.anim === '0'"
+
+
+def wait_for_camera(page) -> None:
+    """Block until the camera has stopped moving, however it was set going."""
+    page.wait_for_function(CAMERA_SETTLED)
+
+
 def zoom_to_fit(page) -> None:
-    """Fit every box on screen and wait for the camera, which flips `data-anim` to '0'
-    when its own transition has landed. No fixed sleep to outgrow."""
+    """Fit every box on screen, then wait for the camera to land."""
     page.click("[data-zoom-fit]")
-    page.wait_for_function("() => document.querySelector('[data-canvas]').dataset.anim === '0'")
+    wait_for_camera(page)
 
 
 def to_client(page, x: float, y: float) -> tuple[float, float]:

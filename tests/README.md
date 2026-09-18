@@ -1,13 +1,13 @@
 # Tests
 
-349 tests. 346 run on every `make test`; the 3 marked `live` spend real Claude usage and
+353 tests. 350 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          346 tests, no usage spent
+make test          unit + api + e2e          350 tests, no usage spent
 make test-unit     tests/unit                 79
 make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 200
+make test-e2e      tests/e2e                 204
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 79 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 158 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 200 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 162 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 204 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -89,7 +89,7 @@ text into a new box. `GET /api/config` is left unrouted and served by the real s
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (158)
+### 4 — Frontend against the real API (162)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -98,7 +98,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (102) — the root box, selection gating (cross-box, non-`done`, under three
+- `test_canvas.py` (106) — the root box, selection gating (cross-box, non-`done`, under three
   characters), asking, streaming, the anchor mark, the edge, asking *inside* an answer,
   jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing the ask
   popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere outside,
@@ -124,7 +124,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   the way back reading "the document" at depth 1 and naming the depth deeper, missing on the
   document, landing on the passage the answer came from, flashing it, and hidden while the box
   is being edited; and an answer opening at its parent's width, inheriting a resized parent's
-  width, and two answers off one box not overlapping. Ten cover the fixed vertical gap two
+  width, and two answers off one box not overlapping.
+  Four cover how long that ring lasts, because the attribute alone says nothing about what is
+  drawn: the CSS duration read back off the box, the ring still up well past the 900ms it
+  used to last and gone of its own accord afterwards, reaching the same answer a second time
+  starting it over rather than serving out the rest of the first, and a still ring under
+  reduced motion, where no animation ends and the timer is the only thing taking it down.
+  That last one also proves the rewind cannot throw when there is no animation to rewind.
+  Ten cover the fixed vertical gap two
   boxes at one depth keep: two long answers stacking exactly `BOX_GAP` apart once the taller
   one lands, that stacking surviving a reload, two overlapping boxes written straight to disk
   being stacked when the canvas is merely opened, the boxes below rising when one is
@@ -156,7 +163,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 200)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 204)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -233,6 +240,6 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
-| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. |
+| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
 | `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. |

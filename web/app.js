@@ -538,8 +538,19 @@ async function submitAsk() {
 
 // --- moving to a box ----------------------------------------------------------
 
-// Where you landed, said once and briefly: on a desk this size the camera arriving
-// is easy to miss. One at a time, so a quick second jump cannot leave a stale ring.
+// Where you landed, said once and held: on a desk this size the camera arriving is
+// easy to miss, and the pan alone takes most of half a second.
+//
+// Handed to the stylesheet the way config.js hands over --chrome-h. No fallback there
+// on purpose, unlike --chrome-h: the module that sets data-flash is the module that
+// sets this, so a missing value means a broken hand-over and should fail loudly
+// rather than quietly ring for no time at all.
+const FLASH_MS = 5000;
+document.documentElement.style.setProperty('--flash-ms', `${FLASH_MS}ms`);
+
+// One at a time, so a quick second jump cannot leave a stale ring. A box element
+// survives a re-render and keeps its ring; a mark does not, so a sibling answer
+// landing inside the five seconds can take an inline ring down early.
 let flashTimer = null;
 let flashed = null;
 
@@ -548,11 +559,17 @@ function pulse(node) {
   clearTimeout(flashTimer);
   flashed = node;
   node.dataset.flash = '1';
-  // Matches the lw-flash keyframe in styles.css: the ring is removed as it fades out.
+  // Clearing and re-setting the attribute in one task never restarts the animation:
+  // the style is recalculated once and sees no net change. Rewind it by hand, so
+  // arriving twice rings for the full five seconds and not the rest of the first.
+  // Reduced motion drops the animation entirely, and this is then a no-op.
+  node.getAnimations()
+    .filter((a) => a.animationName === 'lw-flash')
+    .forEach((a) => { a.currentTime = 0; });
   flashTimer = setTimeout(() => {
     delete node.dataset.flash;
     flashed = null;
-  }, 900);
+  }, FLASH_MS);
 }
 
 function revealBox(id) {

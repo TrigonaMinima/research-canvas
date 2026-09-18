@@ -26,6 +26,7 @@ from tests.fixtures.viewport import (
     to_client,
     transform_of,
     view_centre,
+    wait_for_camera,
     zoom_to_fit,
 )
 
@@ -465,6 +466,19 @@ EDGE_MIDPOINT = """(target) => {
   return [at.x, at.y];
 }"""
 
+# Computed CSS answers in seconds; the tests count in milliseconds.
+FLASH_DURATION = """(box) => {
+  const el = document.querySelector('[data-box="' + box + '"]');
+  return parseFloat(getComputedStyle(el).animationDuration) * 1000;
+}"""
+
+# How far into the ring we are: the only way to see a restart that did not happen.
+FLASH_ELAPSED = """(box) => {
+  const [ring] = document.querySelector('[data-box="' + box + '"]')
+    .getAnimations().filter((a) => a.animationName === 'lw-flash');
+  return ring ? ring.currentTime : null;
+}"""
+
 QUOTE_BEFORE_QUESTION = """(id) => {
   const scope = document.querySelector('[data-box="' + id + '"]');
   const quote = scope.querySelector('[data-quote]');
@@ -777,6 +791,46 @@ def test_should_flash_the_answer_box_when_its_highlight_is_clicked(canvas):
     answer_from_root(canvas)
     canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
     expect(canvas.locator('[data-box="b2"]')).to_have_attribute("data-flash", "1")
+
+
+def test_should_draw_the_ring_for_a_five_second_css_duration(canvas):
+    """The CSS duration, not just the attribute: a JS-only change would not be seen."""
+    answer_from_root(canvas)
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
+    assert canvas.evaluate(FLASH_DURATION, "b2") == 5000
+
+
+def test_should_take_the_ring_down_on_its_own_after_five_seconds(canvas):
+    answer_from_root(canvas)
+    box = canvas.locator('[data-box="b2"]')
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
+    canvas.wait_for_timeout(1500)  # well past the 900ms the ring used to last
+    expect(box).to_have_attribute("data-flash", "1", timeout=1000)
+    # And it does come down. Polling costs the ring's remaining life and no more, but
+    # the wait has to clear 5s: that is also playwright's default, and the two would race.
+    expect(box).not_to_have_attribute("data-flash", "1", timeout=8000)
+
+
+def test_should_start_the_ring_over_when_the_answer_is_reached_again(canvas):
+    """Clearing and re-setting the attribute in one task does not restart the animation."""
+    answer_from_root(canvas)
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
+    # Waiting on the camera rather than on the clock, so the second visit lands well
+    # inside the ring rather than after it. The highlight is off screen by then; the
+    # edge it drew is not, and leads to the same box.
+    wait_for_camera(canvas)
+    x, y = canvas.evaluate(EDGE_MIDPOINT, "b2")
+    canvas.mouse.click(*to_client(canvas, x, y))
+    assert canvas.evaluate(FLASH_ELAPSED, "b2") < 200
+
+
+def test_should_hold_a_still_ring_when_motion_is_reduced(canvas):
+    """No animation to end, so the timer in app.js is the only thing taking it down."""
+    canvas.emulate_media(reduced_motion="reduce")
+    answer_from_root(canvas)
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.click()
+    expect(canvas.locator('[data-box="b2"]')).to_have_attribute("data-flash", "1")
+    assert canvas.evaluate(FLASH_ELAPSED, "b2") is None
 
 
 def test_should_frame_and_flash_the_answer_when_its_edge_is_clicked(canvas):

@@ -163,18 +163,24 @@ mark[data-anchor]{
 }
 
 /* Where the camera just landed, on a desk large enough to lose track of. app.js sets
-   and clears the attribute; the ring is only how it reads. An outline, so the box
-   keeps the shadow it already has. */
+   and clears the attribute and owns --flash-ms; the ring is only how it reads. An
+   outline, so the box keeps the shadow it already has. A bloom, a long hold, a fade:
+   the offsets are percentages, so that shape survives a change of duration. */
 @keyframes lw-flash{
-  0%{outline-color:transparent}
-  22%{outline-color:var(--accent)}
+  /* The easing belongs to the bloom alone. On the animation it would warp these
+     offsets instead, ending the hold a third of the way in and smearing the fade. */
+  0%{outline-color:transparent;animation-timing-function:cubic-bezier(.22,.7,.2,1)}
+  4%,82%{outline-color:var(--accent)}
   100%{outline-color:transparent}
 }
 [data-box][data-flash="1"],mark[data-flash="1"]{
-  outline:2px solid transparent;outline-offset:2px;
-  animation:lw-flash .9s cubic-bezier(.22,.7,.2,1);
+  outline:2px solid transparent;
+  animation:lw-flash var(--flash-ms) linear;
 }
 [data-box][data-flash="1"]{outline-offset:3px}
+/* Held this long, a ring around a few words of running text carries more weight than
+   one around a whole box, so it is drawn lighter. */
+mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 
 /* --- chrome bar ----------------------------------------------------------- */
 
