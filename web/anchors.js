@@ -47,12 +47,20 @@ function mathSpans(nodes) {
   return spans;
 }
 
+// What counts as inside a word, for the snap below. Letters and digits from any
+// script, since a body is arbitrary markdown, and the apostrophes that sit inside a
+// word rather than beside it. A hyphen is left out: it reads as a boundary.
+const WORD = /[\p{L}\p{N}_'’]/u;
+const SPACE = /\s/;
+
 // Where a DOM range sits in that same plain text.
 export function offsetsOf(bodyEl, range) {
   const { text, nodes } = index(bodyEl);
   const spans = mathSpans(nodes);
   let start = null;
   let end = null;
+  let startEntry = null; // the text node each edge landed in, for the snap below
+  let endEntry = null;
   for (const entry of nodes) {
     // Membership by intersection, not by container identity: an edge dropped inside
     // a rendered formula has an element as its container and matches no text node.
@@ -67,10 +75,31 @@ export function offsetsOf(bodyEl, range) {
       from = Math.min(from, span.from);
       to = Math.max(to, span.to);
     }
-    if (start === null || from < start) start = from;
-    if (end === null || to > end) end = to;
+    if (start === null || from < start) { start = from; startEntry = entry; }
+    if (end === null || to > end) { end = to; endEntry = entry; }
   }
   if (start === null || end === null || end <= start) return null;
+
+  // A caret hit-test lands between glyphs, so a press past the middle of a letter
+  // starts the selection after it. A reader who drags across a passage means its
+  // words: an edge left inside a word snaps out to the whole of it, and space dragged
+  // in at an edge is dropped. An edge a formula moved keeps the place it put it.
+  //
+  // A word grows only inside the text node its edge landed in. Two blocks meet with
+  // nothing between them in this text, so the end of one heading is not the start of
+  // the next word. Trimming space may cross a node; growing a word never does.
+  if (!startEntry.math) {
+    while (start < end && SPACE.test(text[start])) start += 1;
+    while (start > startEntry.from && WORD.test(text[start - 1]) && WORD.test(text[start])) {
+      start -= 1;
+    }
+  }
+  if (!endEntry.math) {
+    while (end > start && SPACE.test(text[end - 1])) end -= 1;
+    while (end < endEntry.to && WORD.test(text[end]) && WORD.test(text[end - 1])) end += 1;
+  }
+  if (end <= start) return null;
+
   // The quote is read back out of the text the offsets measure, never out of the
   // selection. The two then agree by construction, whatever the browser makes of a
   // selection inside MathML, so both resolvers keep matching the same string.

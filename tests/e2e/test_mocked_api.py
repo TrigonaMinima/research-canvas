@@ -12,7 +12,7 @@ import json
 import pytest
 from playwright.sync_api import expect
 from tests.fixtures.contract import make_box, make_view
-from tests.fixtures.selection import QUOTE, ask
+from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, send_question
 
 pytestmark = pytest.mark.e2e
 
@@ -147,6 +147,21 @@ def test_asking_posts_the_documented_payload(mocked):
     assert body["boxId"] == "b1"
     assert body["question"] == "Why does it help?"
     assert body["anchor"]["quote"] == "Each"
+
+
+def test_a_word_snap_stops_at_the_block_it_started_in(mocked):
+    """This body puts the heading straight against the paragraph.
+
+    Rendered markdown keeps a newline between two blocks, so only a canned body can
+    show what a snap does at a boundary with nothing in it: reaching back out of
+    `Each` must stop at the paragraph, not run on into `A Mocked Paper`.
+    """
+    start, end = find_offsets(mocked, "b1", "Each sub-layer")
+    mocked.evaluate(SELECT, ["b1", start + 1, end])
+    send_question(mocked, "Why does it help?")
+    mocked.wait_for_selector('[data-box="b3"]')
+    body = next(b for m, u, b in mocked.sent if m == "POST" and u.endswith("/ask"))
+    assert body["anchor"]["quote"] == "Each sub-layer"
 
 
 def test_a_mocked_stream_paints_its_text_into_the_new_box(mocked):

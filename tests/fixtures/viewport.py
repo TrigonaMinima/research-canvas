@@ -56,6 +56,12 @@ def canvas_id_of(page) -> str:
     return page.evaluate("() => new URLSearchParams(location.search).get('c')")
 
 
+def stored_anchor(page, server: str) -> dict:
+    """The anchor as the server kept it, read back over the API."""
+    view = page.request.get(f"{server}/api/canvases/{canvas_id_of(page)}").json()
+    return view["anchors"][0]
+
+
 # The camera flips `data-anim` to '0' when its own transition has landed, so no test
 # has to guess at a sleep. camera.js writes it in one place; this reads it in one.
 CAMERA_SETTLED = "() => document.querySelector('[data-canvas]').dataset.anim === '0'"

@@ -1,13 +1,13 @@
 # Tests
 
-357 tests. 354 run on every `make test`; the 3 marked `live` spend real Claude usage and
+368 tests. 365 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          354 tests, no usage spent
+make test          unit + api + e2e          365 tests, no usage spent
 make test-unit     tests/unit                 79
 make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 208
+make test-e2e      tests/e2e                 219
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -21,9 +21,9 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 |---|-------|-------|-------|
 | 1 | API function tests | `tests/unit/` | 79 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
-| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 166 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 208 |
+| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 176 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 219 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -78,12 +78,14 @@ instructions: empty by default, saved and handed back, served again on the next 
 over the cap with its reason, and — the two that matter — the text reaching the prompt a run
 is given, and that prompt untouched when no instructions are set.
 
-### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 12)
+### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 13)
 
 Playwright with `page.route` answering the canvas, ask, and stream calls from canned
 payloads. No storage, no runner. Covers rendering (title, boxes, questions, status, anchors,
 edges, body HTML), the request the app sends when you ask, and a mocked SSE stream painting
-text into a new box. `GET /api/config` is left unrouted and served by the real server, like
+text into a new box. One more belongs to the highlight snap: this body puts the heading
+straight against the paragraph, which rendered markdown never does, so it is the only place
+a snap can be shown stopping at a block boundary instead of reading `PaperEach` as one word. `GET /api/config` is left unrouted and served by the real server, like
 `index.html` and the modules: `web/config.js` awaits it before any app code runs.
 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
@@ -144,6 +146,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   back, every header button tracking the bulk fold, the find count dropping to nothing, the
   fold reaching the server in one patch and surviving a reload, an open editor closing on the
   way down, and the stack closing its gaps in one pass whether an editor was open or not.
+- `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
+  on, since a caret hit-test lands between glyphs and a press past the middle of a letter
+  used to cost that letter for good. Six read the popover quote: a start inside a word, an
+  end inside a word, both at once, an edge already on a boundary left alone, and neither edge
+  reaching past the word it repairs. Four follow one repaired selection downstream, to the
+  stored anchor and its offset, the marks in the source box, the quote on the answer box, and
+  the space a drag brought in, dropped — that one read off the stored quote, because rendered
+  text hides it.
 - `test_math.py` (10) — a canvas imported from `fixtures/math_doc.md`: inline math as
   `<math>`, display math as a block, an `align` block, prices left as prose, a quote stored
   across a formula that matches its own offsets, that highlight restored after a reload, a
@@ -165,7 +175,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 208)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 219)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
