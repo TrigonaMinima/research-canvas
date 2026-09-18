@@ -19,11 +19,16 @@ def canvas(client, sample_markdown):
 
 @pytest.fixture
 def fake_answer(monkeypatch):
-    """Replace the Claude subprocess so tests never spend real usage."""
+    """Replace the Claude subprocess so tests never spend real usage.
+
+    Every prompt the app would have sent lands in `make.prompts`, so a test can assert
+    what a run was told without standing up a stub of its own.
+    """
     from research_canvas import api, runner
 
     def make(events):
         async def fake_run(prompt, *, web_search):
+            make.prompts.append(prompt)
             for event in events:
                 yield event
 
@@ -31,4 +36,5 @@ def fake_answer(monkeypatch):
         return fake_run
 
     make.Event = runner.Event
+    make.prompts = []
     return make

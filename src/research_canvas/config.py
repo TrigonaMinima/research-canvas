@@ -26,6 +26,9 @@ CANVAS_FILE = "canvas.json"
 ROOT_DOC_FILE = "root.md"
 BOX_DIR = "boxes"
 
+# One file beside the canvases, not inside any of them: the instructions are global.
+INSTRUCTIONS_FILE = "instructions.md"
+
 # --- dev server ---------------------------------------------------------------
 
 # The port is chosen fresh at launch and written here. Nothing hardcodes a port.
@@ -89,6 +92,24 @@ NO_TOOLS = ""
 # How many answers may run at once before the rest queue.
 MAX_CONCURRENT_RUNS = 3
 
+# --- standing instructions ----------------------------------------------------
+# What the reader wants of every answer, on every canvas. Sent as text in the prompt,
+# because the run has no file access to read it with (US-7).
+
+# This text rides on every single run, so it is bounded.
+MAX_INSTRUCTIONS_CHARS = 4000
+
+INSTRUCTIONS_HEADING = "Standing instructions from the reader"
+
+# Said out loud in the prompt: without it, "always greet me warmly" silently fights
+# the preamble and the answer style becomes a coin toss.
+# Names the rules it defers to as well as where they sit. "Above" is what a model
+# resolves reliably; naming them is what survives the block being moved.
+INSTRUCTIONS_PRECEDENCE = (
+    "These apply to every answer. Where one conflicts with the answering and formatting "
+    "rules stated above, those rules win."
+)
+
 # --- canvas geometry (ported from the design) ---------------------------------
 
 ROOT_BOX_WIDTH = 680
@@ -115,3 +136,6 @@ UNFINISHED = frozenset({"pending", "queued", "running"})
 STILL_RUNNING_MESSAGE = "That box is still running — ask once it is done"
 EDIT_WHILE_RUNNING_MESSAGE = "That box is still running — edit once it is done"
 BLANK_BODY_MESSAGE = "A box cannot be empty — write something or press Escape"
+INSTRUCTIONS_TOO_LONG_MESSAGE = (
+    f"Instructions are capped at {MAX_INSTRUCTIONS_CHARS:,} characters — trim them and save again"
+)

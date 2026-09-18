@@ -48,6 +48,9 @@ VIEW_KEYS = {
 
 ASK_RESULT_KEYS = {"box", "anchor"}
 
+# Global, not canvas state: one block of text the reader applies to everything.
+INSTRUCTIONS_KEYS = {"markdown"}
+
 ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "w", "webSearch", "anchor"}
 
 STREAM_EVENTS = {"status", "init", "text", "done"}
@@ -64,6 +67,7 @@ CLIENT_CONFIG_KEYS = {
     "chromeHeight",
     "unfinished",
     "stillRunningMessage",
+    "maxInstructionsChars",
 }
 
 BOX_STATUSES = set(_CONFIG_STATUSES)  # one definition, in config

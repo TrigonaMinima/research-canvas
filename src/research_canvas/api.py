@@ -21,6 +21,7 @@ from .config import (
     EDIT_WHILE_RUNNING_MESSAGE,
     MAX_BOX_WIDTH,
     MAX_CONCURRENT_RUNS,
+    MAX_INSTRUCTIONS_CHARS,
     MAX_SCALE,
     MIN_BOX_WIDTH,
     MIN_SCALE,
@@ -81,6 +82,10 @@ class BodyBody(BaseModel):
     markdown: str
 
 
+class InstructionsBody(BaseModel):
+    markdown: str
+
+
 class PatchBody(BaseModel):
     camera: CameraBody | None = None
     boxes: dict[str, BoxPatch] | None = None
@@ -104,7 +109,25 @@ def client_config() -> dict:
         "chromeHeight": CHROME_HEIGHT,
         "unfinished": sorted(UNFINISHED),
         "stillRunningMessage": STILL_RUNNING_MESSAGE,
+        "maxInstructionsChars": MAX_INSTRUCTIONS_CHARS,
     }
+
+
+# --- standing instructions ----------------------------------------------------
+
+
+@app.get("/api/instructions")
+def read_instructions() -> dict:
+    return {"markdown": storage.read_instructions()}
+
+
+@app.put("/api/instructions")
+def write_instructions(body: InstructionsBody) -> dict:
+    try:
+        storage.write_instructions(body.markdown)
+    except storage.InstructionsTooLong as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"markdown": body.markdown}
 
 
 # --- canvases -----------------------------------------------------------------

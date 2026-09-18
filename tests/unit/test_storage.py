@@ -7,7 +7,14 @@ import json
 import pytest
 
 from research_canvas import storage
-from research_canvas.config import FORMAT_VERSION, MAX_BOX_WIDTH, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
+from research_canvas.config import (
+    FORMAT_VERSION,
+    INSTRUCTIONS_FILE,
+    MAX_BOX_WIDTH,
+    MAX_INSTRUCTIONS_CHARS,
+    MIN_BOX_WIDTH,
+    ROOT_BOX_WIDTH,
+)
 
 
 def test_should_use_first_heading_as_title(canvas_root, sample_markdown):
@@ -127,3 +134,38 @@ def test_should_prefer_an_explicit_width_over_the_inherited_one(canvas_root, sam
     canvas = storage.create_canvas(sample_markdown)
     box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a", w=320.0)
     assert box.w == 320.0
+
+
+# --- standing instructions ----------------------------------------------------
+
+
+def test_should_return_empty_instructions_when_the_file_is_missing(canvas_root):
+    assert storage.read_instructions() == ""
+
+
+def test_should_round_trip_the_instructions(canvas_root):
+    storage.write_instructions("Answer in British English.")
+    assert storage.read_instructions() == "Answer in British English."
+
+
+def test_should_keep_the_instructions_as_a_plain_file_on_disk(canvas_root):
+    storage.write_instructions("Be brief.")
+    assert (canvas_root / INSTRUCTIONS_FILE).read_text(encoding="utf-8") == "Be brief."
+
+
+def test_should_refuse_instructions_over_the_cap(canvas_root):
+    with pytest.raises(storage.InstructionsTooLong):
+        storage.write_instructions("x" * (MAX_INSTRUCTIONS_CHARS + 1))
+
+
+def test_should_keep_the_earlier_instructions_when_a_save_is_refused(canvas_root):
+    storage.write_instructions("Be brief.")
+    with pytest.raises(storage.InstructionsTooLong):
+        storage.write_instructions("x" * (MAX_INSTRUCTIONS_CHARS + 1))
+    assert storage.read_instructions() == "Be brief."
+
+
+def test_should_not_list_the_instructions_file_as_a_canvas(canvas_root, sample_markdown):
+    storage.create_canvas(sample_markdown)
+    storage.write_instructions("Be brief.")
+    assert len(storage.list_canvases()) == 1

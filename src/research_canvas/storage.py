@@ -24,7 +24,10 @@ from .config import (
     CANVAS_FILE,
     CANVAS_ROOT,
     FORMAT_VERSION,
+    INSTRUCTIONS_FILE,
+    INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
+    MAX_INSTRUCTIONS_CHARS,
     MIN_BOX_WIDTH,
     MIN_PASTE_CHARS,
     ROOT_BOX_ID,
@@ -45,6 +48,10 @@ class ImportRefused(ValueError):
 
 class CanvasNotFound(LookupError):
     """No canvas with that id, or the id was not a plain folder name."""
+
+
+class InstructionsTooLong(ValueError):
+    """The standing instructions were longer than every run can afford to carry."""
 
 
 @dataclass
@@ -365,6 +372,26 @@ def write_body(canvas_id: str, box_id: str, text: str) -> None:
 
 def delete_body(canvas_id: str, box_id: str) -> None:
     _body_path(canvas_id, box_id).unlink(missing_ok=True)
+
+
+# --- standing instructions ----------------------------------------------------
+# One file for the whole app. Read on every prompt build rather than cached, so
+# editing it in a text editor takes effect without restarting the server.
+
+
+def read_instructions() -> str:
+    # Only a missing file means "no instructions". An unreadable one is a fault worth
+    # hearing about, not a reason to quietly drop the reader's rules from every run.
+    try:
+        return (CANVAS_ROOT / INSTRUCTIONS_FILE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def write_instructions(text: str) -> None:
+    if len(text) > MAX_INSTRUCTIONS_CHARS:
+        raise InstructionsTooLong(INSTRUCTIONS_TOO_LONG_MESSAGE)
+    _atomic_write(CANVAS_ROOT / INSTRUCTIONS_FILE, text)
 
 
 # --- internals ----------------------------------------------------------------

@@ -8,6 +8,7 @@ questioning cannot leak into another.
 from __future__ import annotations
 
 from . import storage
+from .config import INSTRUCTIONS_HEADING, INSTRUCTIONS_PRECEDENCE
 from .storage import Box, Canvas
 
 SYSTEM_PREAMBLE = (
@@ -18,11 +19,24 @@ SYSTEM_PREAMBLE = (
 )
 
 
+def instructions_block() -> list[str]:
+    """The reader's standing instructions, or nothing at all when they have none.
+
+    Every generator calls this, so the answer runs and the research runs to come obey
+    the same one file. It is read here, not at import, so an edit needs no restart.
+    """
+    text = storage.read_instructions().strip()
+    if not text:
+        return []
+    return [f"## {INSTRUCTIONS_HEADING}", "", INSTRUCTIONS_PRECEDENCE, "", text, ""]
+
+
 def build_prompt(canvas: Canvas, box: Box) -> str:
     if not box.question.strip():
         raise ValueError(f"box {box.id} has no question to ask")
 
-    parts: list[str] = [SYSTEM_PREAMBLE, ""]
+    # Beside the preamble, not beside the question: these are rules, not the ask.
+    parts: list[str] = [SYSTEM_PREAMBLE, "", *instructions_block()]
     chain = canvas.path_to(box.id)
 
     for step in chain[:-1]:

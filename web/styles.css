@@ -71,7 +71,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box--root .box__head{gap:14px;margin:-46px -54px 26px;padding:16px 54px 14px;font-size:10.5px;letter-spacing:.14em}
 .box--answer .box__head{margin:-24px -28px 12px;padding:14px 28px 12px}
 .box__head em{font-style:normal;color:var(--accent)}
-.box__head .spacer{margin-left:auto}
+/* Every head row pushes what follows it to the right edge. */
+.spacer{margin-left:auto}
 .grip{display:inline-block;width:11px;color:var(--line);letter-spacing:-1px}
 
 /* One glyph wide: the header has three buttons on it at 240px. The name a screen
@@ -211,23 +212,26 @@ mark[data-anchor]{
 
 /* --- ask popover ---------------------------------------------------------- */
 
-.ask{
-  position:absolute;width:392px;background:var(--paper);border:1px solid var(--line);border-radius:5px;
-  box-shadow:0 2px 6px rgba(0,0,0,.08),0 24px 60px -26px rgba(0,0,0,.5);padding:14px 16px 12px;z-index:30;
+/* One raised surface, used by the ask popover and the instructions sheet alike.
+   Each of them then declares only its own width and placement. */
+.ask,.sheet{
+  position:absolute;background:var(--paper);border:1px solid var(--line);border-radius:5px;
+  box-shadow:0 2px 6px rgba(0,0,0,.08),0 24px 60px -26px rgba(0,0,0,.5);padding:14px 16px 12px;
 }
-.ask__head{display:flex;align-items:center;gap:8px;margin-bottom:10px;font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
+.ask{width:392px;z-index:30}
+.ask__head,.sheet__head{display:flex;align-items:center;gap:8px;font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
+.ask__head{margin-bottom:10px}  /* the sheet spaces its head with the lede instead */
 .ask__head em{font-style:normal;color:var(--accent)}
-.ask__head .spacer{margin-left:auto}
 .ask__close{font:400 18px/1 var(--sans);margin:-2px -4px 0 0}
 /* The passage, given one treatment wherever it is read: in the popover where the
    question is asked, and on the answer that came back. */
 .ask__quote,.box__quote{margin:0 0 12px;padding-left:10px;border-left:2px solid var(--mark);font:400 13.5px/1.5 var(--serif);color:var(--ink2);max-height:42px;overflow:hidden}
 .box__quote{cursor:pointer}
-.ask textarea,.empty textarea,.empty input[type="text"],.box__editor .cm-editor{
+.ask textarea,.sheet textarea,.empty textarea,.empty input[type="text"],.box__editor .cm-editor{
   width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:3px;
   background:var(--paper2);color:var(--ink)}
 .ask textarea{height:62px;resize:none;padding:10px 11px;font:400 14.5px/1.5 var(--sans);outline:0}
-.ask__foot,.box__edit-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.ask__foot,.sheet__foot,.box__edit-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
 .ask__hint,.box__hint{font:400 11.5px/1 var(--sans);color:var(--ink2);margin-left:auto}
 .btn-primary{border:0;border-radius:3px;background:var(--accent);color:var(--paper);cursor:pointer;font:500 12.5px/1 var(--sans);padding:9px 13px}
 
@@ -237,6 +241,20 @@ mark[data-anchor]{
 .webtoggle[aria-pressed="true"] .track{background:var(--accent)}
 .webtoggle .knob{position:absolute;top:2px;left:2px;width:8px;height:8px;border-radius:50%;background:var(--paper)}
 .webtoggle[aria-pressed="true"] .knob{left:12px}
+
+/* --- the instructions sheet ------------------------------------------------ */
+/* Its own layer, above the desk and the empty state alike, so one panel serves
+   both screens. The layer lets clicks through; only the sheet catches them, which
+   is what keeps a stray click on the canvas from discarding a long edit. */
+
+.panels{position:fixed;inset:0;z-index:60;pointer-events:none}
+.sheet{
+  pointer-events:auto;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(520px,calc(100vw - 32px));
+}
+.sheet__lede{margin:8px 0 12px;font:400 13px/1.55 var(--sans);color:var(--ink2);max-width:52ch}
+.sheet textarea{height:180px;resize:none;padding:11px 12px;font:400 14px/1.6 var(--mono);outline:0}
+.sheet__count{font:400 11.5px/1 var(--mono);color:var(--ink2);margin-right:auto}
 
 /* --- empty state ---------------------------------------------------------- */
 
@@ -268,10 +286,12 @@ mark[data-anchor]{
 
 /* --- toast ---------------------------------------------------------------- */
 
+/* Fixed at the top level, above the desk, the empty state and the sheet alike, so
+   a message is seen whichever screen raised it. */
 .toast{
-  position:absolute;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--desk);
+  position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:var(--desk);
   border-radius:4px;padding:11px 16px;font:500 13px/1 var(--sans);
-  box-shadow:0 12px 30px -14px rgba(0,0,0,.6);z-index:50;max-width:min(90vw,560px);text-align:center;
+  box-shadow:0 12px 30px -14px rgba(0,0,0,.6);z-index:70;max-width:min(90vw,560px);text-align:center;
 }
 
 @media (prefers-reduced-motion:reduce){

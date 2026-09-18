@@ -43,4 +43,10 @@ export const api = {
     send(`/api/canvases/${id}/boxes/${boxId}`, { method: 'DELETE' }),
 
   streamUrl: (id, boxId) => `/api/canvases/${id}/boxes/${boxId}/stream`,
+
+  // Global, not per canvas: the same instructions ride on every run.
+  readInstructions: () => send('/api/instructions'),
+
+  writeInstructions: (markdown) =>
+    send('/api/instructions', { method: 'PUT', ...asJson({ markdown }) }),
 };

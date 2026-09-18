@@ -1,13 +1,13 @@
 # Tests
 
-290 tests. 287 run on every `make test`; the 3 marked `live` spend real Claude usage and
+324 tests. 321 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          287 tests, no usage spent
-make test-unit     tests/unit                 67
-make test-api      tests/api                  58  (3 live deselected)
-make test-e2e      tests/e2e                 162
+make test          unit + api + e2e          321 tests, no usage spent
+make test-unit     tests/unit                 79
+make test-api      tests/api                  67  (3 live deselected)
+make test-e2e      tests/e2e                 175
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -19,26 +19,29 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 67 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 47 |
+| 1 | API function tests | `tests/unit/` | 79 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py` | 121 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 162 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 17 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 134 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 175 |
+| 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
-| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py` | 24 |
-| 9 | Contract / schema | `tests/api/test_contract.py` | 11 |
+| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
+| 9 | Contract / schema | `tests/api/test_contract.py` | 13 |
 
 ### 1 — API function tests (`tests/unit/`)
 
 Each module in isolation, no HTTP, no browser.
 
-- `test_storage.py` (17) — titles from the first heading, the refused-paste minimum, verbatim
+- `test_storage.py` (23) — titles from the first heading, the refused-paste minimum, verbatim
   document bodies, the `formatVersion` stamp, colliding-title ids, the disk round trip,
   per-answer body files, depth under the parent, newest-first listing, unfinished boxes
   becoming `interrupted` on load, no partial file when a save fails, and a canvas id that
   tries to escape the canvas root. Four cover an answer inheriting its parent's width: the
   plain case, the clamp at either end, and an explicit width winning over the inherited one.
+  Six cover the standing instructions: empty when the file was never written, the round trip,
+  the plain file left on disk, a save over the cap refused, the earlier text surviving that
+  refusal, and the file beside the canvases never listed as one.
 - `test_anchors.py` (5) — text-offset anchors resolved against rendered plain text,
   including the nearest-occurrence fallback when the document has shifted.
 - `test_markdown.py` (17) — rendering and first-heading extraction, plus twelve on
@@ -47,16 +50,21 @@ Each module in isolation, no HTTP, no browser.
   subscript and an operator macro surviving conversion, no whitespace between the MathML
   tags, and the `<code>` fallback for a formula that will not convert. One holds the line
   that matters most in prose: `It costs $5 and $10 to run.` is not mathematics.
-- `test_context.py` (8) — path-only prompt assembly (US-3): root + ancestors + the highlight
+- `test_context.py` (14) — path-only prompt assembly (US-3): root + ancestors + the highlight
   + the question, and never a sibling branch. Two assert the preamble names the maths
-  delimiters, so an answer can carry formulas the same way the document does.
+  delimiters, so an answer can carry formulas the same way the document does. Six cover the
+  standing instructions: the prompt unchanged when the file is missing, the same prompt
+  character for character when the file holds only whitespace, the text carried when it holds
+  something, placed above the document rather than beside the question, the sentence saying
+  the built-in rules win a conflict, and `instructions_block()` on its own, which is what the
+  research runs will call.
 - `test_runner.py` (13) — the `claude -p` command line, and the `stream-json` parser:
   `system/init`, `content_block_delta` text, the terminal `result`, usage-limit and
   error subtypes, and non-JSON noise.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 47)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 54)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -65,7 +73,10 @@ nothing else, the canvas view changing with it, an anchor kept when its passage 
 refused, and an edit refused while the box is genuinely live. Eight more cover this change:
 maths rendered in a saved body and in the canvas view, a box starting uncollapsed, a
 `collapsed` patch persisting, a new answer taking its parent's width, an explicit `w`
-honoured, and a `w` outside the clamps refused at either end.
+honoured, and a `w` outside the clamps refused at either end. Seven cover the standing
+instructions: empty by default, saved and handed back, served again on the next read, refused
+over the cap with its reason, and — the two that matter — the text reaching the prompt a run
+is given, and that prompt untouched when no instructions are set.
 
 ### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 12)
 
@@ -78,7 +89,7 @@ text into a new box. `GET /api/config` is left unrouted and served by the real s
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (121)
+### 4 — Frontend against the real API (133)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -119,8 +130,16 @@ The same browser, the real server, the real storage, the fake `claude`.
 - `test_chrome.py` (16) — find with its `N/M` counter and prev/next, the zoom group and its
   clamps, fit, the theme toggle and its persistence, the minimap and clicking it, the run
   pill, the breadcrumb home, and the new-canvas button.
+- `test_instructions.py` (13) — the standing-instructions panel, opened from the first screen
+  and from the chrome bar, because it is global and belongs to neither. Empty to begin with,
+  saved, still there when reopened and after a reload, `Escape` and Cancel throwing an unsaved
+  edit away, the character count against the cap, a save over the cap refused with its reason
+  and the panel left open holding the text, focus returning to the button that opened it, and
+  the one that separates this panel from the ask popover: a click outside leaves it alone.
+  One of them asks the browser what is painted on top of the refusal toast, because
+  Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 162)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 175)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `tests/e2e/test_release.py` (6) covers the PRD's release
@@ -132,7 +151,7 @@ criteria directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 17)
+### 6 — Data / persistence (`tests/unit/test_storage.py`, 23)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
 above in layer 1. The equivalent of optimistic locking is `storage.edit()`, the per-canvas
@@ -155,17 +174,18 @@ boundary the PRD actually draws, and that is tested:
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
   visible rather than merely asserted.
 
-### 8 — Validation & error paths (24)
+### 8 — Validation & error paths (27)
 
 Refused pastes under 40 characters with the exact message, an empty question, a selection
 under three characters, a zoom outside `[0.1, 2]`, 404 for an unknown canvas, 404 for a
 canvas id that escapes the root, 422 for deleting the document box, 409 for asking from
 a box that is still running, 422 for saving an empty box, 409 for editing a box whose
-answer is still streaming, and 422 for asking with a width outside the clamps, at either end. In the browser, `test_failures.py` (6) covers a usage-limit
+answer is still streaming, and 422 for asking with a width outside the clamps, at either end, and 422 for standing
+instructions over the cap, with the message the panel shows. In the browser, `test_failures.py` (6) covers a usage-limit
 stop, a crashed run, the retry button, and the rule that a failed answer keeps its question
 and its anchor.
 
-### 9 — Contract / schema (`tests/api/test_contract.py`, 11)
+### 9 — Contract / schema (`tests/api/test_contract.py`, 13)
 
 Every field name the frontend reads, asserted against what the real API returns: the canvas
 view, a box, the camera, the box statuses, one rendered body per box, a canvas summary, the
@@ -173,7 +193,9 @@ view, a box, the camera, the box statuses, one rendered body per box, a canvas s
 copy of that shape, and the mocked-API layer builds its payloads from it.
 
 `collapsed` on a box and `w` on an ask request are both in those key sets, so a field the
-browser sends or reads cannot go missing on the server without failing here.
+browser sends or reads cannot go missing on the server without failing here. Two more cover
+`/api/instructions`, read and written, so the one field the panel exchanges is pinned like
+every other.
 
 Two more cover `GET /api/config`, which is how the browser is told the clamps, the chrome-bar
 height, the unfinished-status set and the shared user-facing sentence instead of re-declaring

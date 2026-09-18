@@ -11,6 +11,7 @@ export const MAX_BOX_WIDTH = served.maxBoxWidth;
 export const MIN_SELECTION_CHARS = served.minSelectionChars;
 export const CHROME_HEIGHT = served.chromeHeight;
 export const STILL_RUNNING_MESSAGE = served.stillRunningMessage;
+export const MAX_INSTRUCTIONS_CHARS = served.maxInstructionsChars;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);

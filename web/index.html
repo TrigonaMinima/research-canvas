@@ -44,6 +44,7 @@
         <button type="button" class="fit" data-zoom-fit>FIT</button>
       </div>
 
+      <button type="button" class="chrome-btn" data-instructions-open>Instructions</button>
       <button type="button" class="chrome-btn" data-theme-toggle aria-label="Switch theme">
         <span data-theme-label>Dark</span>
       </button>
@@ -57,7 +58,6 @@
   </button>
 
   <div data-ask-layer></div>
-  <output class="toast" data-toast role="status" hidden></output>
 </div>
 
 <section class="empty" data-empty>
@@ -106,9 +106,16 @@
     <div class="empty__foot">
       <span data-footer-left>Local only &middot; nothing leaves this machine</span>
       <span data-footer-right></span>
+      <button type="button" data-instructions-open>Instructions</button>
     </div>
   </div>
 </section>
+
+<!-- Above both the desk and the empty state, so one panel and one toast serve
+     either screen. The toast used to sit inside the desk, where the empty state
+     painted over it. -->
+<div class="panels" data-panel-layer></div>
+<output class="toast" data-toast role="status" hidden></output>
 
 <script type="module" src="/static/app.js"></script>
 </body>

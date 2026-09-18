@@ -45,6 +45,17 @@ are the only tools, and only when the canvas has web search on.
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
 
+## Standing instructions
+
+One block of text applies to everything the app generates, on every canvas. Write it in the
+app (the **Instructions** button, in the chrome bar or on the first screen) or edit
+`canvases/instructions.md` directly. It is read fresh on every run, so an edit outside the app
+takes effect on the next question, with no restart.
+
+It travels inside the prompt, like the question itself. The sandbox is untouched: nothing on
+this machine is read by the run. Where an instruction conflicts with the built-in rules on
+formatting and mathematics, the built-in rules win.
+
 ## Mathematics
 
 `$E = mc^2$` inline, `$$…$$` on its own, and `\begin{align}` blocks are rendered to MathML by

@@ -6,7 +6,10 @@ from research_canvas import storage
 from research_canvas.config import (
     BLANK_BODY_MESSAGE,
     DISPLAY_NAME,
+    INSTRUCTIONS_HEADING,
+    INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
+    MAX_INSTRUCTIONS_CHARS,
     MIN_BOX_WIDTH,
 )
 from research_canvas.storage import REFUSED_MESSAGE
@@ -366,3 +369,50 @@ def test_should_refuse_an_asked_width_below_the_minimum(client, canvas):
 def test_should_refuse_an_asked_width_above_the_maximum(client, canvas):
     response = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask(w=MAX_BOX_WIDTH + 1))
     assert response.status_code == 422
+
+
+# --- standing instructions: one file, every canvas, every run -----------------
+
+
+def test_should_serve_empty_instructions_by_default(client):
+    assert client.get("/api/instructions").json() == {"markdown": ""}
+
+
+def test_should_save_and_return_the_instructions(client):
+    response = client.put("/api/instructions", json={"markdown": "Answer in British English."})
+    assert response.json() == {"markdown": "Answer in British English."}
+
+
+def test_should_serve_the_instructions_that_were_saved(client):
+    client.put("/api/instructions", json={"markdown": "Answer in British English."})
+    assert client.get("/api/instructions").json()["markdown"] == "Answer in British English."
+
+
+def test_should_reject_instructions_over_the_cap(client):
+    over = {"markdown": "x" * (MAX_INSTRUCTIONS_CHARS + 1)}
+    assert client.put("/api/instructions", json=over).status_code == 422
+
+
+def test_should_explain_why_long_instructions_were_rejected(client):
+    over = {"markdown": "x" * (MAX_INSTRUCTIONS_CHARS + 1)}
+    response = client.put("/api/instructions", json=over)
+    assert response.json()["detail"] == INSTRUCTIONS_TOO_LONG_MESSAGE
+
+
+def _run_prompt(client, canvas, fake_answer) -> str:
+    """Ask one question with the run stubbed, and hand back the prompt it was given."""
+    fake_answer([fake_answer.Event(kind="done")])
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
+    return fake_answer.prompts[0]
+
+
+def test_should_send_the_instructions_to_the_run(client, canvas, fake_answer):
+    client.put("/api/instructions", json={"markdown": "Answer in British English."})
+    assert "Answer in British English." in _run_prompt(client, canvas, fake_answer)
+
+
+def test_should_leave_the_run_prompt_alone_when_there_are_no_instructions(
+    client, canvas, fake_answer
+):
+    assert INSTRUCTIONS_HEADING not in _run_prompt(client, canvas, fake_answer)

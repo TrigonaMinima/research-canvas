@@ -7,6 +7,7 @@ import { offsetsOf } from './anchors.js';
 import {
   CHROME_HEIGHT,
   MAX_BOX_WIDTH,
+  MAX_INSTRUCTIONS_CHARS,
   MIN_BOX_WIDTH,
   MIN_SELECTION_CHARS,
   STILL_RUNNING_MESSAGE,
@@ -34,6 +35,7 @@ const el = {
   minimap: $('[data-minimap]'),
   miniSvg: $('[data-mini-svg]'),
   askLayer: $('[data-ask-layer]'),
+  panelLayer: $('[data-panel-layer]'),
   toast: $('[data-toast]'),
   empty: $('[data-empty]'),
   paste: $('[data-paste]'),
@@ -299,6 +301,85 @@ function openAsk(boxEl, offsets, clientRect) {
     submitAsk();
   });
   input.focus();
+}
+
+// --- standing instructions ----------------------------------------------------
+// One global block of text, applied to every answer on every canvas. It lives in a
+// layer of its own because the empty state paints over the desk.
+
+let panel = null;  // the control that opened the sheet, while it is open
+
+async function openInstructions(opener) {
+  if (panel) return;
+  panel = opener;  // claimed before the await, so two clicks open one sheet
+
+  let saved;
+  try {
+    saved = await api.readInstructions();
+  } catch (error) {
+    // Better no panel than a blank one: saving it would wipe instructions that are there.
+    panel = null;
+    flash(error.message);
+    return;
+  }
+  if (!panel) return;  // closed while the read was in flight
+
+  const node = document.createElement('div');
+  node.className = 'sheet';
+  node.dataset.instructions = '1';
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-label', 'Standing instructions');
+  node.innerHTML = `
+    <div class="sheet__head">
+      <span>Instructions</span>
+      <span class="spacer"></span>
+      <button type="button" class="ask__close" data-instructions-close
+              aria-label="Close" title="Close (Esc)">×</button>
+    </div>
+    <p class="sheet__lede">
+      What every answer should do, on every canvas. Sent with each question, and with the
+      research runs to come.
+    </p>
+    <label class="sr-only" for="instructions-field">Standing instructions</label>
+    <textarea id="instructions-field" data-instructions-input spellcheck="false"
+              placeholder="Answer in British English.&#10;Work an example before the theory."></textarea>
+    <div class="sheet__foot">
+      <span class="sheet__count" data-instructions-count aria-live="polite"></span>
+      <button type="button" class="chrome-btn" data-instructions-cancel>Cancel</button>
+      <button type="button" class="btn-primary" data-instructions-save>Save</button>
+    </div>`;
+
+  el.panelLayer.replaceChildren(node);
+
+  const input = node.querySelector('[data-instructions-input]');
+  const count = node.querySelector('[data-instructions-count]');
+  const tally = () => { count.textContent = `${input.value.length}/${MAX_INSTRUCTIONS_CHARS}`; };
+  // Filled before the field is on screen, so nothing typed can be overwritten later.
+  input.value = saved.markdown;
+  input.addEventListener('input', tally);
+  tally();
+  input.focus();
+}
+
+function closeInstructions() {
+  if (!panel) return;
+  const opener = panel;
+  panel = null;
+  el.panelLayer.replaceChildren();
+  opener.focus();
+}
+
+async function saveInstructions() {
+  const input = el.panelLayer.querySelector('[data-instructions-input]');
+  if (!input) return;
+  try {
+    await api.writeInstructions(input.value);
+    closeInstructions();
+    flash('Instructions saved');
+  } catch (error) {
+    // The panel stays open: the text is only in this textarea until it is accepted.
+    flash(error.message);
+  }
 }
 
 function clientToCanvas(rect) {
@@ -696,6 +777,14 @@ document.addEventListener('click', (event) => {
 
   if (hit('[data-edit-save]')) { saveEdit(); return; }
 
+  const instructions = hit('[data-instructions-open]');
+  if (instructions) { openInstructions(instructions); return; }
+  if (hit('[data-instructions-close]') || hit('[data-instructions-cancel]')) {
+    closeInstructions();
+    return;
+  }
+  if (hit('[data-instructions-save]')) { saveInstructions(); return; }
+
   if (hit('[data-ask-cancel]')) { closeAsk(); return; }
   if (hit('[data-ask-send]')) { submitAsk(); return; }
   const web = hit('[data-ask-web]');
@@ -711,8 +800,9 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  // The popover sits on top of the editor, so it goes first.
-  if (ask) closeAsk();
+  // Topmost first: the sheet, then the popover, then the editor under both.
+  if (panel) closeInstructions();
+  else if (ask) closeAsk();
   else if (edit) closeEditor();
 });
 

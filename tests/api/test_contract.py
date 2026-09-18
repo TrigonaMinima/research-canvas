@@ -10,6 +10,7 @@ from tests.fixtures.contract import (
     BOX_STATUSES,
     CAMERA_KEYS,
     CLIENT_CONFIG_KEYS,
+    INSTRUCTIONS_KEYS,
     STREAM_EVENTS,
     SUMMARY_KEYS,
     VIEW_KEYS,
@@ -79,6 +80,15 @@ def test_the_stream_only_sends_documented_events(client, canvas, fake_answer):
     assert sent <= STREAM_EVENTS
 
 
+def test_the_instructions_payload_carries_the_field_the_browser_reads(client):
+    assert set(client.get("/api/instructions").json()) == INSTRUCTIONS_KEYS
+
+
+def test_the_saved_instructions_come_back_in_the_same_shape(client):
+    saved = client.put("/api/instructions", json={"markdown": "Be brief."})
+    assert set(saved.json()) == INSTRUCTIONS_KEYS
+
+
 # --- the served config: what keeps the browser from re-declaring these ---------
 
 
@@ -95,4 +105,5 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["minSelectionChars"] == config.MIN_SELECTION_CHARS
     assert served["chromeHeight"] == config.CHROME_HEIGHT
     assert served["stillRunningMessage"] == config.STILL_RUNNING_MESSAGE
+    assert served["maxInstructionsChars"] == config.MAX_INSTRUCTIONS_CHARS
     assert set(served["unfinished"]) == set(config.UNFINISHED)
