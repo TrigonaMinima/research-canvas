@@ -708,17 +708,30 @@ function stepFind(delta) {
   camera.centerOnAnchor(clientToCanvas(rect));
 }
 
-// --- folding a box ------------------------------------------------------------
+// --- folding boxes ------------------------------------------------------------
 
-function setCollapsed(box, collapsed) {
-  if (!box || box.collapsed === collapsed) return;
-  box.collapsed = collapsed;
-  if (collapsed && edit && edit.id === box.id) closeEditor();
+// One box or every box: the sequence a fold has to go through is the same either way,
+// and doing it once keeps a hundred boxes to one render rather than a hundred.
+function applyCollapsed(targets, collapsed) {
+  const patch = {};
+  for (const box of targets) {
+    if (!box || box.collapsed === collapsed) continue;
+    box.collapsed = collapsed;
+    patch[box.id] = { collapsed };
+  }
+  if (!Object.keys(patch).length) return;
+  // Before the restack is queued: the pass declines to stack while an editor is open.
+  if (collapsed && edit && patch[edit.id]) closeEditor();
   render();
   runFind(); // folding changes what is findable, and a stale range has no rect to fly to
   // The fold and whatever it moves go in one patch, so two writes cannot race.
-  scheduleRestack({ [box.id]: { collapsed } });
+  scheduleRestack(patch);
 }
+
+const setCollapsed = (box, collapsed) => applyCollapsed([box], collapsed);
+
+const setAllCollapsed = (collapsed) =>
+  applyCollapsed(state.canvas ? state.canvas.boxes : [], collapsed);
 
 // --- pointer behaviour --------------------------------------------------------
 
@@ -913,6 +926,8 @@ $('[data-find-prev]').addEventListener('click', () => stepFind(-1));
 $('[data-zoom-in]').addEventListener('click', () => { camera.zoomIn(); render(); });
 $('[data-zoom-out]').addEventListener('click', () => { camera.zoomOut(); render(); });
 $('[data-zoom-fit]').addEventListener('click', () => camera.fit(state.geometry.boxes));
+$('[data-fold-all]').addEventListener('click', () => setAllCollapsed(true));
+$('[data-unfold-all]').addEventListener('click', () => setAllCollapsed(false));
 $('[data-theme-toggle]').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 $('[data-crumb-home]').addEventListener('click', showEmpty);

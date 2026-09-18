@@ -1,13 +1,13 @@
 # Tests
 
-330 tests. 327 run on every `make test`; the 3 marked `live` spend real Claude usage and
+349 tests. 346 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          327 tests, no usage spent
+make test          unit + api + e2e          346 tests, no usage spent
 make test-unit     tests/unit                 79
 make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 181
+make test-e2e      tests/e2e                 200
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 79 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 148 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 190 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 158 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 200 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -89,7 +89,7 @@ text into a new box. `GET /api/config` is left unrouted and served by the real s
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (148)
+### 4 — Frontend against the real API (158)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -98,7 +98,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (94) — the root box, selection gating (cross-box, non-`done`, under three
+- `test_canvas.py` (102) — the root box, selection gating (cross-box, non-`done`, under three
   characters), asking, streaming, the anchor mark, the edge, asking *inside* an answer,
   jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing the ask
   popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere outside,
@@ -130,15 +130,23 @@ The same browser, the real server, the real storage, the fake `claude`.
   being stacked when the canvas is merely opened, the boxes below rising when one is
   minimised and dropping back when it is expanded, a box at another depth and a sibling under
   a different parent both left where they are, a box dragged onto a sibling re-stacking on
-  mouseup, and a second refresh moving nothing.
+  mouseup, and a second refresh moving nothing. Eight cover folding every box at once:
+  Collapse all folding the document along with its answers, Expand all bringing them all
+  back, every header button tracking the bulk fold, the find count dropping to nothing, the
+  fold reaching the server in one patch and surviving a reload, an open editor closing on the
+  way down, and the stack closing its gaps in one pass whether an editor was open or not.
 - `test_math.py` (10) — a canvas imported from `fixtures/math_doc.md`: inline math as
   `<math>`, display math as a block, an `align` block, prices left as prose, a quote stored
   across a formula that matches its own offsets, that highlight restored after a reload, a
   formula-only selection wrapped in one mark, its edge drawn and leaving from the formula
   rather than the box edge, and math rendered in an answer body.
-- `test_chrome.py` (16) — find with its `N/M` counter and prev/next, the zoom group and its
+- `test_chrome.py` (18) — find with its `N/M` counter and prev/next, the zoom group and its
   clamps, fit, the theme toggle and its persistence, the minimap and clicking it, the run
-  pill, the breadcrumb home, and the new-canvas button.
+  pill, the breadcrumb home, and the new-canvas button. Two cover the Collapse all and
+  Expand all pair: both buttons sit with the other view controls, and a narrowed window
+  leaves them at full width with no label clipped. The bar is one flex row with no wrap, so
+  something has to give; it is the title, which ellipsises. The fold itself is proved in
+  `test_canvas.py`.
 - `test_instructions.py` (13) — the standing-instructions panel, opened from the first screen
   and from the chrome bar, because it is global and belongs to neither. Empty to begin with,
   saved, still there when reopened and after a reload, `Escape` and Cancel throwing an unsaved
@@ -148,7 +156,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 190)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 200)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and

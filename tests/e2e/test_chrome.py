@@ -102,3 +102,32 @@ def test_theme_survives_a_reload(canvas, server):
 
 def test_run_pill_is_hidden_while_nothing_runs(canvas):
     expect(canvas.locator("[data-runpill]")).to_be_hidden()
+
+
+def test_both_fold_buttons_sit_with_the_other_view_controls(canvas):
+    expect(canvas.locator(".tools [data-fold-all]")).to_have_text("Collapse all")
+    expect(canvas.locator(".tools [data-unfold-all]")).to_have_text("Expand all")
+
+
+def test_the_view_controls_keep_their_width_when_the_bar_is_tight(canvas):
+    """The bar is one flex row with no wrap, so a narrow window has to squeeze something.
+    The title ellipsises; the controls hold their size. A clipped button still clicks, so
+    only a measurement catches a squeezed label."""
+    measure = """() => ({
+      tools: Math.round(document.querySelector('.tools').getBoundingClientRect().width),
+      clipped: [...document.querySelectorAll('.tools button')]
+        .filter((b) => b.scrollWidth > b.clientWidth + 1
+                    || b.scrollHeight > b.clientHeight + 1)
+        .map((b) => b.textContent.trim() || b.getAttribute('aria-label')),
+    })"""
+    canvas.evaluate(
+        "() => { document.querySelector('[data-title]').textContent = "
+        "'A Canvas With A Very Long Title Indeed '.repeat(3); }"
+    )
+    roomy = canvas.evaluate(measure)
+
+    canvas.set_viewport_size({"width": 1100, "height": 900})
+    tight = canvas.evaluate(measure)
+
+    assert tight["clipped"] == []
+    assert tight["tools"] == roomy["tools"], "the view controls gave up width to the title"

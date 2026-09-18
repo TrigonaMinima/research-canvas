@@ -676,6 +676,65 @@ def test_should_drop_the_find_count_when_a_box_is_folded_mid_search(canvas):
     expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
 
 
+# --- folding every box at once ---------------------------------------------
+
+
+def test_should_fold_every_box_including_the_document(canvas):
+    answer_from_root(canvas)
+    canvas.click("[data-fold-all]")
+    expect(canvas.locator("[data-box]")).to_have_count(2)
+    expect(canvas.locator('[data-box]:not([data-collapsed="1"])')).to_have_count(0)
+
+
+def test_should_expand_every_box_again(canvas):
+    answer_from_root(canvas)
+    canvas.click("[data-fold-all]")
+    canvas.click("[data-unfold-all]")
+    expect(canvas.locator("[data-box][data-collapsed]")).to_have_count(0)
+    expect(canvas.locator('[data-box="b2"] [data-body]')).to_be_visible()
+
+
+def test_should_track_a_bulk_fold_on_every_box_button(canvas):
+    """The header buttons are the way back out, so each one has to know it is folded."""
+    answer_from_root(canvas)
+    for button, expanded in (("[data-fold-all]", "false"), ("[data-unfold-all]", "true")):
+        canvas.click(button)
+        for box in ("b1", "b2"):
+            expect(canvas.locator(f'[data-box="{box}"] [data-collapse]')).to_have_attribute(
+                "aria-expanded", expanded
+            )
+
+
+def test_should_drop_the_find_count_when_every_box_is_folded(canvas):
+    canvas.fill("[data-find]", "residual")
+    expect(canvas.locator("[data-find-count]")).not_to_have_text("0/0")
+    canvas.click("[data-fold-all]")
+    expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
+
+
+def test_should_keep_a_bulk_fold_after_a_reload(canvas, server):
+    answer_from_root(canvas)
+    canvas.click("[data-fold-all]")
+    canvas.wait_for_timeout(400)  # every fold rides in one background patch
+
+    # The server's own copy, so a patch that carried only one box cannot pass.
+    view = canvas.request.get(f"{server}/api/canvases/{canvas_id_of(canvas)}").json()
+    assert all(box["collapsed"] for box in view["boxes"]), view["boxes"]
+
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b2"]')
+    expect(canvas.locator('[data-box="b1"] [data-body]')).to_be_hidden()
+    expect(canvas.locator('[data-box="b2"] [data-body]')).to_be_hidden()
+
+
+def test_should_close_the_editor_when_every_box_is_folded(canvas):
+    """There is nothing to edit inside a folded box, the same as the per-box fold."""
+    open_editor(canvas, "b1")
+    canvas.click("[data-fold-all]")
+    expect(canvas.locator(CONTENT.format(box="b1"))).to_have_count(0)
+    expect(canvas.locator('[data-box="b1"]')).to_have_attribute("data-collapsed", "1")
+
+
 # --- the quote and the question on an answer ------------------------------
 
 
@@ -925,6 +984,35 @@ def test_should_reopen_the_gap_when_a_minimised_box_is_expanded(canvas):
     assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
     assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
     assert b4["y"] == pytest.approx(settled_b4_y, abs=1)
+
+
+def test_should_close_every_gap_when_every_box_is_folded(canvas):
+    three_long_answers(canvas)
+
+    settled(canvas)  # record where the stack really lands, not a mid-pass y
+    before_b4_y = box_rect(canvas, "b4")["y"]
+    canvas.click("[data-fold-all]")
+    settled(canvas)
+
+    b2, b3, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b3"), box_rect(canvas, "b4")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
+    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
+    assert b4["y"] < before_b4_y
+
+
+def test_should_still_stack_when_a_bulk_fold_closes_the_editor(canvas):
+    """`restack` refuses to stack while an editor is open, so the close has to land
+    before the queued pass reads it, not after."""
+    three_long_answers(canvas)
+
+    settled(canvas)
+    open_editor(canvas, "b3")
+    canvas.click("[data-fold-all]")
+    settled(canvas)
+
+    b2, b3, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b3"), box_rect(canvas, "b4")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
+    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
 
 
 def test_should_leave_a_box_at_another_depth_alone(canvas):
