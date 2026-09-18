@@ -12,7 +12,7 @@ import pytest
 from playwright.sync_api import expect
 from tests.fixtures.editor import SAVE_BUTTON, edit
 from tests.fixtures.selection import SELECT, find_offsets, plain_text, send_question
-from tests.fixtures.viewport import box_rect, edge_start, rect_of
+from tests.fixtures.viewport import box_rect, canvas_id_of, edge_start, rect_of
 
 from .conftest import FIXTURES, canvas_from
 
@@ -80,8 +80,7 @@ def highlight_the_formula(page) -> None:
 
 def stored_anchor(page, server: str) -> dict:
     """The anchor as the server kept it, read back over the API."""
-    canvas_id = page.evaluate("() => new URLSearchParams(location.search).get('c')")
-    view = page.request.get(f"{server}/api/canvases/{canvas_id}").json()
+    view = page.request.get(f"{server}/api/canvases/{canvas_id_of(page)}").json()
     return view["anchors"][0]
 
 
