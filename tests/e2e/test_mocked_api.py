@@ -174,4 +174,4 @@ def test_the_canvas_list_renders_from_the_payload(page, server: str):
         ),
     )
     page.goto(server + "/")
-    expect(page.locator("[data-canvas-list] button")).to_contain_text("A Mocked Paper")
+    expect(page.locator("[data-canvas-list] a")).to_contain_text("A Mocked Paper")

@@ -6,6 +6,7 @@ import { Camera, CHROME_GAP } from './camera.js';
 import { offsetsOf } from './anchors.js';
 import {
   CHROME_HEIGHT,
+  DISPLAY_NAME,
   MAX_BOX_WIDTH,
   MAX_INSTRUCTIONS_CHARS,
   MIN_BOX_WIDTH,
@@ -19,6 +20,10 @@ import * as find from './find.js';
 import * as minimap from './minimap.js';
 
 const $ = (sel) => document.querySelector(sel);
+
+// The address of a canvas. Relative on purpose: the port is picked fresh on every
+// launch, so an absolute URL would be wrong the moment it was written down.
+const canvasHref = (id) => `?c=${encodeURIComponent(id)}`;
 
 const el = {
   desk: $('[data-desk]'),
@@ -112,6 +117,8 @@ function render() {
   }
 
   el.title.textContent = state.canvas.title;
+  // Several canvases open at once are several browser tabs, so each one says which.
+  document.title = `${state.canvas.title} · ${DISPLAY_NAME}`;
   el.runpill.hidden = busy.length === 0;
   if (busy.length) {
     el.runLabel.textContent = `${busy.length} answer${busy.length === 1 ? '' : 's'} running`;
@@ -151,7 +158,7 @@ async function open(id, { fresh = false, loaded = null } = {}) {
   adopt(view);
   el.empty.hidden = true;
   el.desk.hidden = false;
-  history.replaceState(null, '', `?c=${encodeURIComponent(id)}`);
+  history.replaceState(null, '', canvasHref(id));
 
   const c = view.camera;
   const root = boxById(view.rootId);
@@ -183,20 +190,21 @@ async function showEmpty() {
   el.findCount.textContent = '0/0';
   el.paste.value = '';
   history.replaceState(null, '', location.pathname);
+  document.title = DISPLAY_NAME;
   el.empty.hidden = false;
 
   const canvases = await api.listCanvases();
   el.list.replaceChildren();
   for (const item of canvases) {
     const li = document.createElement('li');
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.dataset.open = item.id;
-    button.innerHTML = `<span class="name"></span><span class="meta"></span>`;
-    button.querySelector('.name').textContent = item.title;
-    button.querySelector('.meta').textContent =
+    // A real link, which is what lets a canvas be opened in its own tab, or copied.
+    const link = document.createElement('a');
+    link.href = canvasHref(item.id);
+    link.innerHTML = `<span class="name"></span><span class="meta"></span>`;
+    link.querySelector('.name').textContent = item.title;
+    link.querySelector('.meta').textContent =
       `${item.boxes} box${item.boxes === 1 ? '' : 'es'} · ${item.updatedAt.slice(0, 10)}`;
-    li.append(button);
+    li.append(link);
     el.list.append(li);
   }
 }
@@ -730,6 +738,13 @@ document.addEventListener('click', (event) => {
   // something else. The selection that opened it lands after this, on a timeout.
   if (ask && !hit('[data-ask]')) closeAsk();
 
+  // A modifier or non-primary click on any link belongs to the browser: that is how a
+  // canvas opens in a second tab. Middle-click never arrives here at all, since it
+  // fires auxclick rather than click.
+  const modified =
+    event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
+  if (modified && hit('a[href]')) return;
+
   const mark = hit('mark[data-anchor]');
   if (mark) { revealBox(mark.dataset.target); return; }
 
@@ -794,8 +809,12 @@ document.addEventListener('click', (event) => {
     return;
   }
 
-  const openItem = hit('[data-open]');
-  if (openItem) { open(openItem.dataset.open); return; }
+  const canvasLink = hit('a[href^="?c="]');
+  if (canvasLink) {
+    event.preventDefault();
+    open(new URLSearchParams(canvasLink.search).get('c'));
+    return;
+  }
 });
 
 document.addEventListener('keydown', (event) => {

@@ -280,7 +280,8 @@ mark[data-anchor]{
 
 .canvaslist{margin:16px 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}
 .canvaslist li{border-bottom:1px solid var(--line)}
-.canvaslist button{display:flex;width:100%;gap:12px;align-items:baseline;border:0;background:transparent;cursor:pointer;padding:12px 2px;text-align:left}
+.canvaslist a{display:flex;gap:12px;align-items:baseline;padding:12px 2px;color:inherit;border:0}
+.canvaslist a:hover .name{color:var(--accent)}
 .canvaslist .name{font:600 14px/1.3 var(--serif);color:var(--ink)}
 .canvaslist .meta{margin-left:auto;font:400 11.5px/1 var(--sans);color:var(--ink2)}
 

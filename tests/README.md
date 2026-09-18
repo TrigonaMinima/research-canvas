@@ -1,13 +1,13 @@
 # Tests
 
-324 tests. 321 run on every `make test`; the 3 marked `live` spend real Claude usage and
+330 tests. 327 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          321 tests, no usage spent
+make test          unit + api + e2e          327 tests, no usage spent
 make test-unit     tests/unit                 79
 make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 175
+make test-e2e      tests/e2e                 181
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 79 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 134 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 175 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 139 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 181 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -89,12 +89,15 @@ text into a new box. `GET /api/config` is left unrouted and served by the real s
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (133)
+### 4 — Frontend against the real API (138)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
-- `test_empty_state.py` (10) — the two tabs, the paste field, the refused short paste, the
-  disabled research button and its P1 message, the canvas list.
+- `test_empty_state.py` (15) — the two tabs, the paste field, the refused short paste, the
+  disabled research button and its P1 message, and the canvas list. Five cover opening a
+  canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
+  opens a second tab, a middle click leaves the first tab where it was, the tab is named
+  after the canvas, and two canvases edited in two tabs each keep their own edit.
 - `test_canvas.py` (85) — the root box, selection gating (cross-box, non-`done`, under three
   characters), asking, streaming, the anchor mark, the edge, asking *inside* an answer,
   jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing the ask
@@ -139,11 +142,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 175)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 181)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
-started on a fresh random port. `tests/e2e/test_release.py` (6) covers the PRD's release
-criteria directly:
+started on a fresh random port. `test_standards.py` (18) holds the web-standards and
+accessibility checks: the language, the title, the single `h1`, unique ids, the tab pattern,
+a name on every visible button, a label on every visible field, and a name and a destination
+on every visible link. `tests/e2e/test_release.py` (6) covers the PRD's release criteria
+directly:
 
 - a pending box on screen within 300ms of asking;
 - a 20,000-word document with 100 answer boxes: every box drawn, every edge drawn, fit

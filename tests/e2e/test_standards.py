@@ -18,6 +18,18 @@ NAMES = """
   .map(el => el.outerHTML.slice(0, 90))
 """
 
+# A link is only a link if it goes somewhere and says where.
+NAMELESS_LINKS = """
+() => [...document.querySelectorAll('a')]
+  .filter(el => el.offsetParent !== null)
+  .filter(el => !el.getAttribute('href')
+      || !((el.textContent || '').trim()
+           || el.getAttribute('aria-label')
+           || el.getAttribute('aria-labelledby')
+           || el.getAttribute('title')))
+  .map(el => el.outerHTML.slice(0, 90))
+"""
+
 UNLABELLED_INPUTS = """
 () => [...document.querySelectorAll('input, textarea, select')]
   .filter(el => el.offsetParent !== null)
@@ -57,6 +69,16 @@ def test_every_visible_button_has_an_accessible_name(app):
 
 def test_every_visible_field_has_a_label(app):
     assert app.evaluate(UNLABELLED_INPUTS) == []
+
+
+def test_every_visible_link_has_a_name_and_a_destination(app):
+    """The canvas list is links now, so the list is where this has to hold."""
+    app.fill("[data-paste]", "# A Title\n\n" + ("A sentence worth importing. " * 4))
+    app.click("[data-create]")
+    app.wait_for_selector('[data-box="b1"]')
+    app.click("[data-crumb-home]")
+    app.wait_for_selector("[data-canvas-list] a")
+    assert app.evaluate(NAMELESS_LINKS) == []
 
 
 def test_ids_are_unique(app):
