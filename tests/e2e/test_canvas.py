@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 import pytest
 from playwright.sync_api import expect
 from tests.fixtures.editor import (
@@ -967,14 +969,18 @@ def test_should_inherit_the_resized_width_of_a_parent_answer(canvas):
 
 
 def test_should_not_overlap_two_answers_asked_off_the_same_box(canvas):
+    """Now >= rather than exactly BOX_GAP: under the new rule each child keeps its own
+    passage, so two answers this close on the parent are no longer packed to the bare
+    minimum the way the old, height-guessing placement() left them. The exact-gap case
+    is covered separately, by the [[fake:long]] collision tests below."""
     answer_from_root(canvas)
     ask(canvas, "b1", "layer normalisation", "What does it normalise?")
     canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
     b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
     assert not overlap(b2, b3)
-    # A fixed gap is the requirement; "not overlapping" alone would also pass on the
-    # accidental spacing the old, height-guessing placement() already produces.
-    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+    # BOX_GAP is a floor, not the target now: "not overlapping" alone would also pass
+    # on spacing far wider than the minimum, so the floor is still worth asserting.
+    assert gap_between(b2, b3) >= BOX_GAP - 1, f"b2={b2} b3={b3}"
 
 
 # --- restack: a fixed gap between boxes stacked under the same parent -----
@@ -1058,6 +1064,10 @@ def test_should_stack_overlapping_boxes_when_the_canvas_is_opened(
 
 
 def test_should_close_the_gap_when_a_box_above_is_minimised(canvas):
+    """Now >= rather than exactly BOX_GAP for both gaps: three_long_answers seats each
+    box beside its own passage first, and folding b3 can leave either gap wider than
+    the bare minimum. The exact-gap case is covered separately, by the [[fake:long]]
+    collision tests below."""
     three_long_answers(canvas)
 
     settled(canvas)  # record where the stack really lands, not a mid-pass y
@@ -1066,8 +1076,8 @@ def test_should_close_the_gap_when_a_box_above_is_minimised(canvas):
     settled(canvas)
 
     b2, b3, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b3"), box_rect(canvas, "b4")
-    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
-    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
+    assert gap_between(b2, b3) >= BOX_GAP - 1, f"b2={b2} b3={b3}"
+    assert gap_between(b3, b4) >= BOX_GAP - 1, f"b3={b3} b4={b4}"
     assert b4["y"] < before_b4_y
 
 
@@ -1118,7 +1128,10 @@ def test_should_still_stack_when_a_bulk_fold_closes_the_editor(canvas):
 
 
 def test_should_leave_a_box_at_another_depth_alone(canvas):
-    """A child is never stacked with its own parent, even if a drag makes them overlap."""
+    """A child is never stacked with its own parent, even if a drag makes them overlap.
+    Still holds under the new rule too, but for a different reason now: the drag is a
+    vertical one, so it pins b3, and a pinned box keeps exactly the y it was dropped
+    at through every later settle pass."""
     answer_from_root(canvas)  # b2, depth 1
     ask(canvas, "b2", "carries the input", "Why add it back?")
     canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
@@ -1139,15 +1152,14 @@ def test_should_leave_a_box_at_another_depth_alone(canvas):
     assert settled_b3["y"] == pytest.approx(dropped_b3["y"], abs=1)
 
 
-def test_should_not_move_a_sibling_under_a_different_parent(canvas):
+def test_should_push_an_unpinned_group_clear_of_the_one_a_drag_just_pinned(canvas):
     """Two depth-2 boxes with different parents can land in the same column (both
     parents are the same width, so both children sit one COLUMN_GAP further right).
-    Forcing them to overlap, the way test_should_leave_a_box_at_another_depth_alone
-    forces a child onto its own parent, is the only way this test can actually go red
-    if a restack pass ever groups by depth instead of by parent: recording "before"
-    and "after" a mere reload cannot, because a depth-grouped restack would already
-    have coupled them the first time it ran, on the earlier run finishing, and every
-    later trigger would just reproduce that same, already-wrong pair of positions."""
+    This used to be test_should_not_move_a_sibling_under_a_different_parent, and its
+    premise — that dragging one onto the other moves nothing — is gone: dragging b5
+    onto b4 now pins b5 exactly where it lands, and a pinned group is never shifted,
+    so the settle pass owes a clear place only to b4's group. b4 is free to move; b5,
+    holding the pin, is not."""
     ask(canvas, "b1", QUOTE, "What is a residual connection?")
     canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
     ask(canvas, "b1", "layer normalisation", "What does it normalise?")
@@ -1170,8 +1182,10 @@ def test_should_not_move_a_sibling_under_a_different_parent(canvas):
 
     settled(canvas)
     settled_b4, settled_b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
-    assert settled_b4["y"] == pytest.approx(dropped_b4["y"], abs=1)
-    assert settled_b5["y"] == pytest.approx(dropped_b5["y"], abs=1)
+    # The pin holds b5 exactly where it was dropped.
+    assert settled_b5["y"] == pytest.approx(dropped_b5["y"], abs=1), settled_b5
+    # b4's group is the one free to move, and it must move clear rather than overlap.
+    assert not overlap(settled_b4, settled_b5), f"b4={settled_b4} b5={settled_b5}"
 
 
 def test_should_restack_when_a_box_is_dragged_onto_a_sibling(canvas):
@@ -1209,3 +1223,349 @@ def test_should_move_nothing_on_a_second_refresh(canvas):
 
     for box in STACKED:
         assert second[box]["y"] == pytest.approx(first[box]["y"], abs=1), box
+
+
+# --- restack: each child beside its own passage, and a drag that pins it -------
+
+# ANCHOR_LEAD is imported inside the two tests that need it, not at module scope: a
+# module-level import fails collection for the whole file the moment the constant is
+# missing or renamed, which would take down every other test in it too. Everywhere
+# else, `edge_start` already carries the anchor's position, so nothing needs it.
+
+
+def test_should_seat_an_answer_anchor_lead_above_its_passage_underline(canvas):
+    """`edge_start` reads the same point the edge itself leaves from — the mark's
+    underline, already adjusted for the hairline the edge is drawn from the middle
+    of — so subtracting ANCHOR_LEAD from it is the one exact check available; the
+    mark's own bounding box is not, because it fragments across elements."""
+    from research_canvas.config import ANCHOR_LEAD
+
+    answer_from_root(canvas)  # b2, the only child, nothing above it to push it down
+    settled(canvas)
+
+    anchor = edge_start(canvas, "b2")
+    box = box_rect(canvas, "b2")
+    assert box["y"] == pytest.approx(anchor["y"] - ANCHOR_LEAD, abs=1), f"box={box} anchor={anchor}"
+
+
+def test_should_space_siblings_further_apart_when_their_passages_sit_far_apart(canvas):
+    """Each child keeps its own passage now, rather than being packed to the minimum
+    the way the old, height-guessing restack left them: two passages far apart on the
+    parent land the children further apart than BOX_GAP, not right at it."""
+    ask(canvas, "b1", "an encoder and a decoder", "Explain encoders")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert gap_between(b2, b3) > BOX_GAP + 1, f"b2={b2} b3={b3}"
+
+
+def test_should_land_exactly_a_box_gap_apart_when_two_tall_answers_would_collide(canvas):
+    """Even the two most distant passages in this document collide once both answers
+    are long enough to tower over the space between their anchors; the settle pass
+    still holds them to exactly BOX_GAP, the same fixed minimum the old height-blind
+    stack produced, just reached by each box's own anchor now rather than by holding
+    whichever box happened to be on top."""
+    ask_long(canvas, "b1", "an encoder and a decoder", "Explain encoders", "b2")
+    ask_long(canvas, "b1", "layer normalisation", "Explain layer normalisation", "b3")
+    settled(canvas)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+
+
+def seat_of(page, box: str) -> float:
+    """Where a box would sit if nothing else were in the column: ANCHOR_LEAD above the
+    underline of its own passage."""
+    from research_canvas.config import ANCHOR_LEAD
+
+    return edge_start(page, box)["y"] - ANCHOR_LEAD
+
+
+def test_should_balance_a_colliding_pair_evenly_around_their_passages(canvas):
+    """Two boxes that collide are rigid: the gap between them is fixed, so all the
+    layout chooses is where the pair as a whole sits. Hanging it off the upper box's
+    passage leaves every pixel of the crowding to the lower box and wastes the space
+    above the upper one. Split evenly, each box is the same distance from its own
+    passage, one above and one below, which is the least either can be.
+    """
+    answer_from_root(canvas)  # b2, off QUOTE
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+    above = b2["y"] - seat_of(canvas, "b2")
+    below = b3["y"] - seat_of(canvas, "b3")
+    assert above < -1, f"b2 did not rise above its own passage: {above:.1f}"
+    assert below > 1, f"b3 did not stay below its own passage: {below:.1f}"
+    assert above == pytest.approx(-below, abs=1), f"above={above:.1f} below={below:.1f}"
+
+
+def test_should_leave_siblings_that_do_not_collide_at_their_own_passages(canvas):
+    """Balancing is for boxes that touch. Two short answers off passages far enough
+    apart never touch, so neither has anything to share and both stay exactly on their
+    own passage rather than drifting towards each other.
+    """
+    ask(canvas, "b1", "an encoder and a decoder", "Explain encoders")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    for box in ("b2", "b3"):
+        rect = box_rect(canvas, box)
+        assert rect["y"] == pytest.approx(seat_of(canvas, box), abs=1), f"{box}={rect}"
+
+
+def test_should_not_lift_a_family_above_the_top_of_its_parent(canvas):
+    """A family taller than the passages it hangs off wants to climb, and left alone it
+    would climb clean off the top of the document it came from. It stops at the parent's
+    own top, and the boxes below it stay in order and clear of each other.
+    """
+    three_long_answers(canvas)
+    settled(canvas)
+
+    root = box_rect(canvas, "b1")
+    boxes = [box_rect(canvas, b) for b in ("b2", "b3", "b4")]
+    assert boxes[0]["y"] >= root["y"] - 1, f"root={root} b2={boxes[0]}"
+    for upper, lower in pairwise(boxes):
+        assert gap_between(upper, lower) >= BOX_GAP - 1, f"upper={upper} lower={lower}"
+        assert not overlap(upper, lower), f"upper={upper} lower={lower}"
+
+
+def test_should_stop_a_family_at_the_top_of_a_short_parent(canvas):
+    """The floor matters most where the parent is small. Two long answers off two
+    passages a line apart inside a short answer box want to climb hundreds of pixels to
+    balance, and there is no document underneath them to make that look reasonable.
+    They stop dead on their parent's own top edge.
+    """
+    answer_from_root(canvas)  # b2, a short answer, the parent here
+    ask_long(canvas, "b2", "carries the input", "Why add it back?", "b3")
+    ask_long(canvas, "b2", "adds it back", "And then what?", "b4")
+    settled(canvas)
+
+    parent = box_rect(canvas, "b2")
+    b3, b4 = box_rect(canvas, "b3"), box_rect(canvas, "b4")
+    assert b3["y"] == pytest.approx(parent["y"], abs=1), f"parent={parent} b3={b3}"
+    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1), f"b3={b3} b4={b4}"
+
+
+def test_should_order_siblings_by_passage_not_by_when_they_were_asked(canvas):
+    """A question asked from a passage higher in the parent opens its box above one
+    asked earlier from a passage lower down: order follows the passage, not the ask."""
+    lower_start, _ = find_offsets(canvas, "b1", "layer normalisation")
+    higher_start, _ = find_offsets(canvas, "b1", QUOTE)
+    assert higher_start < lower_start  # sanity: QUOTE really does sit above in the doc
+
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", QUOTE, "What is a residual connection?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert b3["y"] < b2["y"], f"b2={b2} b3={b3}"
+
+
+def test_should_let_a_box_rise_back_to_its_own_passage_once_the_box_above_is_minimised(
+    canvas,
+):
+    """The tall neighbour above no longer blocks it once folded: b3 has to return to
+    its own anchor position exactly, not merely to somewhere higher than before."""
+    from research_canvas.config import ANCHOR_LEAD
+
+    ask_long(canvas, "b1", "an encoder and a decoder", "Explain encoders", "b2")
+    ask(canvas, "b1", QUOTE, "What is a residual connection?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    canvas.click('[data-box="b2"] [data-collapse]')
+    settled(canvas)
+
+    anchor = edge_start(canvas, "b3")
+    b3 = box_rect(canvas, "b3")
+    assert b3["y"] == pytest.approx(anchor["y"] - ANCHOR_LEAD, abs=1), f"b3={b3} anchor={anchor}"
+
+
+def test_should_carry_a_child_down_when_its_parent_is_dragged(canvas):
+    """A child's seat is held as an offset from its parent's top, so moving the parent
+    moves every child under it by the same amount."""
+    answer_from_root(canvas)  # b2
+    settled(canvas)
+    child_before = box_rect(canvas, "b2")
+
+    drag_header_by(canvas, "b1", 0, 150)
+    settled(canvas)
+
+    child_after = box_rect(canvas, "b2")
+    assert child_after["y"] - child_before["y"] == pytest.approx(150, abs=1), (
+        f"before={child_before} after={child_after}"
+    )
+
+
+def test_should_keep_two_families_in_one_column_clear_of_each_other(canvas):
+    """b4 and b5 have different parents but land in the same column, because their
+    parents (b2 and b3) are the same width. A tall b4 must not be left overlapping
+    b5, even with no drag involved and the two families never mixed at any depth.
+    Checked again after a reload, since the cross-family shift is the one part of
+    the pass no other idempotence test in this file already covers."""
+    ask(canvas, "b1", QUOTE, "What is a residual connection?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    ask_long(canvas, "b2", "carries the input", "Go deeper", "b4")
+    ask(canvas, "b3", "carries the input", "Why write it that way?")
+    canvas.wait_for_selector('[data-box="b5"][data-status="done"]', timeout=20000)
+    settled(canvas)
+
+    b4, b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
+    assert b4["x"] == pytest.approx(b5["x"], abs=1), f"not in the same column: b4={b4} b5={b5}"
+    assert not overlap(b4, b5), f"b4={b4} b5={b5}"
+
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b5"][data-status="done"]')
+    settled(canvas)
+    reloaded_b4, reloaded_b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
+    assert reloaded_b4["y"] == pytest.approx(b4["y"], abs=1), f"b4 moved on reload: {b4}"
+    assert reloaded_b5["y"] == pytest.approx(b5["y"], abs=1), f"b5 moved on reload: {b5}"
+
+
+def test_should_stay_where_it_was_dropped_after_a_vertical_drag(canvas):
+    """Dropping a box at a height of your own choosing pins it there: the settle pass
+    that runs right after the drag must not pull it back to its own passage."""
+    answer_from_root(canvas)  # b2
+    zoom_to_fit(canvas)  # b2 opens to the right of the root, past the edge of the window
+    settled(canvas)
+    before = box_rect(canvas, "b2")
+
+    drag_header_by(canvas, "b2", 0, 300)
+    settled(canvas)
+
+    after = box_rect(canvas, "b2")
+    assert after["y"] == pytest.approx(before["y"] + 300, abs=1), f"before={before} after={after}"
+
+
+def test_should_keep_a_pin_after_a_reload(canvas, server):
+    """The pin is stored on the box, not just held in memory: a reload must not let
+    the settle pass move it back to its passage, and the server's own copy must say
+    why, since that is the one place a browser-only pass could never put right."""
+    answer_from_root(canvas)  # b2
+    zoom_to_fit(canvas)  # b2 opens to the right of the root, past the edge of the window
+    settled(canvas)
+    before = box_rect(canvas, "b2")
+
+    drag_header_by(canvas, "b2", 0, 300)
+    canvas.wait_for_timeout(400)  # the pin is patched in the background
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b2"]')
+    settled(canvas)
+
+    after = box_rect(canvas, "b2")
+    assert after["y"] == pytest.approx(before["y"] + 300, abs=1), f"before={before} after={after}"
+
+    view = canvas.request.get(f"{server}/api/canvases/{canvas_id_of(canvas)}").json()
+    stored = {b["id"]: b for b in view["boxes"]}
+    assert stored["b2"].get("pinned") is True, stored
+
+
+def test_should_only_show_the_unpin_button_on_a_pinned_box(canvas):
+    """Mirrors test_should_track_the_folded_state_on_the_collapse_button: the button's
+    visibility is what the box's own pinned flag drives, checked before and after."""
+    answer_from_root(canvas)  # b2
+    zoom_to_fit(canvas)  # b2 opens to the right of the root, past the edge of the window
+    unpin = canvas.locator('[data-box="b2"] [data-unpin]')
+    expect(unpin).to_be_hidden()
+
+    drag_header_by(canvas, "b2", 0, 300)
+    settled(canvas)
+
+    expect(unpin).to_be_visible()
+
+
+def test_should_return_a_box_to_its_passage_when_unpin_is_clicked(canvas):
+    """Compared against the position the box held before the drag, not the
+    ANCHOR_LEAD constant directly: whatever the layout's own maths puts there is
+    what "back beside its passage" has to mean once the pin is gone."""
+    answer_from_root(canvas)  # b2
+    zoom_to_fit(canvas)  # b2 opens to the right of the root, past the edge of the window
+    settled(canvas)
+    natural = box_rect(canvas, "b2")
+
+    # Up, not down: the minimap sits fixed in the bottom-right corner of the window,
+    # and a downward drag from a zoomed-to-fit view can land the header behind it.
+    drag_header_by(canvas, "b2", 0, -150)
+    settled(canvas)
+    assert box_rect(canvas, "b2")["y"] != pytest.approx(natural["y"], abs=1)  # sanity: it moved
+
+    canvas.click('[data-box="b2"] [data-unpin]')
+    settled(canvas)
+
+    after = box_rect(canvas, "b2")
+    assert after["y"] == pytest.approx(natural["y"], abs=1), f"natural={natural} after={after}"
+
+
+def test_should_move_an_unpinned_sibling_clear_of_a_pinned_one(canvas):
+    """Same parent this time, not a different one: dragging b2 onto b3's seat pins b2
+    there, and b3 — never touched, never pinned — has to step aside rather than sit
+    on top of it."""
+    answer_from_root(canvas)  # b2
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    zoom_to_fit(canvas)  # both children open to the right of the root, past the window edge
+    settled(canvas)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    drag_header_by(canvas, "b2", 0, b3["y"] - b2["y"])
+    dropped_b2, dropped_b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert overlap(dropped_b2, dropped_b3), (
+        f"drag did not land on the sibling: {dropped_b2} {dropped_b3}"
+    )
+
+    settled(canvas)
+    settled_b2, settled_b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert settled_b2["y"] == pytest.approx(dropped_b2["y"], abs=1), settled_b2
+    assert not overlap(settled_b2, settled_b3), f"b2={settled_b2} b3={settled_b3}"
+
+
+def test_should_clear_an_unpinned_box_of_a_pin_that_sits_out_of_passage_order(canvas):
+    """Pins do not have to agree with reading order. Drag the third answer up onto the
+    first one's seat and pin the second where it stands, and the pinned tops no longer
+    descend down the column. The box still free has to clear every pin around it, not
+    only the one next to it in reading order, which is what a canvas of hand-dragged
+    boxes shows up.
+    """
+    ask(canvas, "b1", "encoder-decoder", "What is that structure?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    answer_from_root(canvas)  # b3, off a passage below the first
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b4"][data-status="done"]', timeout=20000)
+    zoom_to_fit(canvas)  # all three open to the right of the root, past the window edge
+    settled(canvas)
+
+    # b3 is pinned where it already sits, in the middle of the column.
+    drag_header_by(canvas, "b3", 0, 60)
+    settled(canvas)
+
+    # b4, last by passage, is pinned at the top of the column, above both of them.
+    b2, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b4")
+    drag_header_by(canvas, "b4", 0, b2["y"] - b4["y"])
+    settled(canvas)
+
+    after = {box: box_rect(canvas, box) for box in ("b2", "b3", "b4")}
+    assert not overlap(after["b2"], after["b4"]), after
+    assert not overlap(after["b2"], after["b3"]), after
+
+
+def test_should_not_pin_a_box_from_a_sideways_only_drag(canvas):
+    """Moving x is a width choice, not a height choice: it must leave the box free
+    for the next settle pass to place it beside its passage, same as it always was."""
+    answer_from_root(canvas)  # b2
+    zoom_to_fit(canvas)  # b2 opens to the right of the root, past the edge of the window
+    drag_header_by(canvas, "b2", 150, 0)
+    settled(canvas)
+    expect(canvas.locator('[data-box="b2"] [data-unpin]')).to_be_hidden()

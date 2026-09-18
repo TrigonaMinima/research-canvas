@@ -1,13 +1,13 @@
 # Tests
 
-368 tests. 365 run on every `make test`; the 3 marked `live` spend real Claude usage and
+392 tests. 389 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          365 tests, no usage spent
-make test-unit     tests/unit                 79
-make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 219
+make test          unit + api + e2e          389 tests, no usage spent
+make test-unit     tests/unit                 82
+make test-api      tests/api                  73  (3 live deselected)
+make test-e2e      tests/e2e                 237
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -19,12 +19,12 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 79 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
+| 1 | API function tests | `tests/unit/` | 82 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 57 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 176 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 219 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 194 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 237 |
+| 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
 | 9 | Contract / schema | `tests/api/test_contract.py` | 13 |
@@ -64,7 +64,7 @@ Each module in isolation, no HTTP, no browser.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 54)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 57)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -76,7 +76,9 @@ maths rendered in a saved body and in the canvas view, a box starting uncollapse
 honoured, and a `w` outside the clamps refused at either end. Seven cover the standing
 instructions: empty by default, saved and handed back, served again on the next read, refused
 over the cap with its reason, and — the two that matter — the text reaching the prompt a run
-is given, and that prompt untouched when no instructions are set.
+is given, and that prompt untouched when no instructions are set. Three cover pinning: a box
+starting unpinned, a `pinned` patch saved, and `pinned: false` saved too, since letting the
+layout have the box back has to travel like any other value.
 
 ### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 13)
 
@@ -91,7 +93,7 @@ a snap can be shown stopping at a block boundary instead of reading `PaperEach` 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (166)
+### 4 — Frontend against the real API (194)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -100,52 +102,68 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (110) — the root box, selection gating (cross-box, non-`done`, under three
-  characters), asking, streaming, the anchor mark, the edge, asking *inside* an answer,
-  jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing the ask
-  popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere outside,
-  and a click inside that must *not* close it. Two cover sending the question from the
-  keyboard: `Enter` sends it, and `Shift+Enter` opens a second line instead. One reads the
-  edge's `d` attribute back and asserts the lead-out leaves from the mark's underline, so it
-  can never strike through the words it runs past. Nineteen cover editing a box: the Edit
-  button on the document and on an answer, the markdown source rather than the rendered HTML,
-  the whole document on screen with no scrollbar inside the editor, the caret landing on the
-  first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter` saving,
-  `Shift+Enter` opening a new line and carrying a list marker onto it, the Save button,
-  `Escape` throwing the edit away, a blank edit refused with its reason, an edit surviving a
-  reload, a mark and its edge still there when the passage survives, and no Edit button at
-  all while an answer is still running. Thirty-six cover this change: the left handle
-  widening a box, stopping at the minimum, and surviving a reload; minimising a box down to
-  its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the label
-  tracking the fold, the fold surviving a reload, the outgoing edge still drawn and still
-  starting at the box rather than the canvas origin, find no longer counting inside a
+- `test_canvas.py` (128) — the root box, selection gating (cross-box, non-`done`, under
+  three characters), asking, streaming, the anchor mark, the edge, asking *inside* an
+  answer, jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing
+  the ask popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere
+  outside, and a click inside that must *not* close it. Two cover sending the question from
+  the keyboard: `Enter` sends it, and `Shift+Enter` opens a second line instead. One reads
+  the edge's `d` attribute back and asserts the lead-out leaves from the mark's underline,
+  so it can never strike through the words it runs past. Nineteen cover editing a box: the
+  Edit button on the document and on an answer, the markdown source rather than the rendered
+  HTML, the whole document on screen with no scrollbar inside the editor, the caret landing
+  on the first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter`
+  saving, `Shift+Enter` opening a new line and carrying a list marker onto it, the Save
+  button, `Escape` throwing the edit away, a blank edit refused with its reason, an edit
+  surviving a reload, a mark and its edge still there when the passage survives, and no Edit
+  button at all while an answer is still running. Thirty-six cover this change: the left
+  handle widening a box, stopping at the minimum, and surviving a reload; minimising a box
+  down to its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the
+  label tracking the fold, the fold surviving a reload, the outgoing edge still drawn and
+  still starting at the box rather than the canvas origin, find no longer counting inside a
   folded box, whether it was folded before the search or during it, the fold button sitting
   last in the header and carrying no border, a folded box still showing the passage it was
   asked about, sitting above the question, clipped to one line, and absent on a folded
   document; the quoted passage on an answer, above the question, and absent on the document;
   clicking a highlight framing and flashing its answer with the header clear of the chrome
-  bar, the same for clicking the edge, and a click on the bare desk moving nothing;
-  the way back reading "the document" at depth 1 and naming the depth deeper, missing on the
-  document, landing on the passage the answer came from, flashing it, and hidden while the box
-  is being edited; and an answer opening at its parent's width, inheriting a resized parent's
-  width, and two answers off one box not overlapping.
-  Four cover how long that ring lasts, because the attribute alone says nothing about what is
-  drawn: the CSS duration read back off the box, the ring still up well past the 900ms it
-  used to last and gone of its own accord afterwards, reaching the same answer a second time
-  starting it over rather than serving out the rest of the first, and a still ring under
-  reduced motion, where no animation ends and the timer is the only thing taking it down.
-  That last one also proves the rewind cannot throw when there is no animation to rewind.
-  Ten cover the fixed vertical gap two
-  boxes at one depth keep: two long answers stacking exactly `BOX_GAP` apart once the taller
-  one lands, that stacking surviving a reload, two overlapping boxes written straight to disk
-  being stacked when the canvas is merely opened, the boxes below rising when one is
-  minimised and dropping back when it is expanded, a box at another depth and a sibling under
-  a different parent both left where they are, a box dragged onto a sibling re-stacking on
-  mouseup, and a second refresh moving nothing. Eight cover folding every box at once:
-  Collapse all folding the document along with its answers, Expand all bringing them all
-  back, every header button tracking the bulk fold, the find count dropping to nothing, the
-  fold reaching the server in one patch and surviving a reload, an open editor closing on the
-  way down, and the stack closing its gaps in one pass whether an editor was open or not.
+  bar, the same for clicking the edge, and a click on the bare desk moving nothing; the way
+  back reading "the document" at depth 1 and naming the depth deeper, missing on the
+  document, landing on the passage the answer came from, flashing it, and hidden while the
+  box is being edited; and an answer opening at its parent's width, inheriting a resized
+  parent's width, and two answers off one box not overlapping. Four cover how long that ring
+  lasts, because the attribute alone says nothing about what is drawn: the CSS duration read
+  back off the box, the ring still up well past the 900ms it used to last and gone of its
+  own accord afterwards, reaching the same answer a second time starting it over rather than
+  serving out the rest of the first, and a still ring under reduced motion, where no
+  animation ends and the timer is the only thing taking it down. That last one also proves
+  the rewind cannot throw when there is no animation to rewind. Twenty-eight cover where an
+  answer ends up. Ten hold the vertical gap: two long answers stacking exactly `BOX_GAP`
+  apart once the taller one lands, that stacking surviving a reload, two overlapping boxes
+  written straight to disk being stacked when the canvas is merely opened, the boxes below
+  rising when one is minimised and dropping back when it is expanded, a box at another depth
+  and a sibling under a different parent both left where they are, a box dragged onto a
+  sibling re-stacking on mouseup, and a second refresh moving nothing. Eighteen cover this
+  change: an answer seated `ANCHOR_LEAD` above the underline of its own passage; passages
+  far apart in the parent landing their answers further apart than `BOX_GAP`, while two tall
+  answers that would collide land at exactly `BOX_GAP`; siblings ordered by passage rather
+  than by which was asked first; a box rising back to its own passage, not by a fixed shift,
+  when the box above it is minimised; a child carried along by a dragged parent; two
+  families sharing one column kept clear of each other, and still clear after a reload. Four
+  of the eighteen are the space above a passage: two boxes that collide balanced evenly
+  around their own passages rather than hung off the upper one, two that do not collide left
+  exactly on theirs, a family taller than its passages stopping at the top of its parent
+  instead of climbing off it, and the same floor holding under a short answer box, where a
+  colliding pair wants to climb hundreds of pixels and has no document beneath it. Seven of
+  the eighteen are pinning: a vertical drag holding a box where it was dropped, the pin
+  surviving a reload, the Unpin button shown only on a pinned box, a click on it returning
+  the box to its passage, an unpinned sibling moving clear of a pinned one, a free box
+  clearing a pin that sits out of passage order rather than only the pin next to it in
+  reading order, and a sideways-only drag pinning nothing. Eight cover folding every box at
+  once: Collapse all folding the document along with its answers, Expand all bringing them
+  all back, every header button tracking the bulk fold, the find count dropping to nothing,
+  the fold reaching the server in one patch and surviving a reload, an open editor closing
+  on the way down, and the stack closing its gaps in one pass whether an editor was open or
+  not.
 - `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
   on, since a caret hit-test lands between glyphs and a press past the middle of a letter
   used to cost that letter for good. Six read the popover quote: a start inside a word, an
@@ -175,7 +193,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 219)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 237)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -190,10 +208,12 @@ directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 23)
+### 6 — Data / persistence (`tests/unit/test_storage.py`, 26)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
-above in layer 1. The equivalent of optimistic locking is `storage.edit()`, the per-canvas
+above in layer 1. Three cover the pin a reader puts on a box: an answer starting unpinned, a
+pin round-tripping through disk, and a `canvas.json` written before the field existed still
+loading. The equivalent of optimistic locking is `storage.edit()`, the per-canvas
 write lock; `test_should_leave_no_partial_file_when_a_save_fails` covers the atomic write
 that protects a canvas from a half-finished save.
 
@@ -231,7 +251,7 @@ view, a box, the camera, the box statuses, one rendered body per box, a canvas s
 `ask` result, and the set of SSE event names. `tests/fixtures/contract.py` holds the single
 copy of that shape, and the mocked-API layer builds its payloads from it.
 
-`collapsed` on a box and `w` on an ask request are both in those key sets, so a field the
+`collapsed` and `pinned` on a box, and `w` on an ask request, are all in those key sets, so a field the
 browser sends or reads cannot go missing on the server without failing here. Two more cover
 `/api/instructions`, read and written, so the one field the panel exchanges is pinned like
 every other.

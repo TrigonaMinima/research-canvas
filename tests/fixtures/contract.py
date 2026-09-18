@@ -25,6 +25,7 @@ BOX_KEYS = {
     "webSearch",
     "createdAt",
     "collapsed",
+    "pinned",
 }
 
 ANCHOR_KEYS = {"id", "box", "target", "start", "end", "quote"}
@@ -66,6 +67,7 @@ CLIENT_CONFIG_KEYS = {
     "minSelectionChars",
     "chromeHeight",
     "boxGap",
+    "anchorLead",
     "unfinished",
     "stillRunningMessage",
     "maxInstructionsChars",
@@ -89,6 +91,7 @@ def make_box(**over) -> dict:
         "webSearch": True,
         "createdAt": "2026-09-16T10:00:00Z",
         "collapsed": False,
+        "pinned": False,
     }
     box.update(over)
     return box

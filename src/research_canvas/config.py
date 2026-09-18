@@ -124,6 +124,9 @@ MIN_SELECTION_CHARS = 3
 CHROME_HEIGHT = 53
 # Two stacked answers at one depth keep this gap, so a column reads as one column.
 BOX_GAP = 40
+# An answer sits this far below the underline of the passage it came from, so a reader
+# sees at once which passage it belongs to.
+ANCHOR_LEAD = 40
 
 # --- box vocabulary -----------------------------------------------------------
 

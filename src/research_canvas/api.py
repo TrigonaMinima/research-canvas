@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from . import context, md, runner, storage
 from .anchors import Anchor
 from .config import (
+    ANCHOR_LEAD,
     BLANK_BODY_MESSAGE,
     BOX_GAP,
     CHROME_HEIGHT,
@@ -77,6 +78,7 @@ class BoxPatch(BaseModel):
     y: float | None = None
     w: float | None = Field(default=None, ge=MIN_BOX_WIDTH, le=MAX_BOX_WIDTH)
     collapsed: bool | None = None
+    pinned: bool | None = None
 
 
 class BodyBody(BaseModel):
@@ -109,6 +111,7 @@ def client_config() -> dict:
         "minSelectionChars": MIN_SELECTION_CHARS,
         "chromeHeight": CHROME_HEIGHT,
         "boxGap": BOX_GAP,
+        "anchorLead": ANCHOR_LEAD,
         "unfinished": sorted(UNFINISHED),
         "stillRunningMessage": STILL_RUNNING_MESSAGE,
         "maxInstructionsChars": MAX_INSTRUCTIONS_CHARS,
@@ -177,14 +180,13 @@ def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
             box = canvas.box(box_id)
         except KeyError:
             continue
-        for field_name in ("x", "y", "w"):
+        # Tested against None, not truthiness, which is what lets the two flags ride
+        # along: false has to travel, or a box could never be opened again, nor a
+        # pinned one handed back to the layout.
+        for field_name in ("x", "y", "w", "collapsed", "pinned"):
             value = getattr(patch, field_name)
             if value is not None:
                 setattr(box, field_name, value)
-        # Tested against None, not truthiness: false has to travel, or a collapsed box
-        # could never be opened again.
-        if patch.collapsed is not None:
-            box.collapsed = patch.collapsed
 
 
 # --- asking -------------------------------------------------------------------

@@ -82,6 +82,8 @@ class Box:
     reason: str = ""
     web_search: bool = True
     collapsed: bool = False
+    # Dragged vertically by the reader, so the layout pass leaves it alone.
+    pinned: bool = False
     created_at: str = ""
 
     def to_dict(self) -> dict:
@@ -98,6 +100,7 @@ class Box:
             "reason": self.reason,
             "webSearch": self.web_search,
             "collapsed": self.collapsed,
+            "pinned": self.pinned,
             "createdAt": self.created_at,
         }
 
@@ -116,6 +119,7 @@ class Box:
             reason=data.get("reason", ""),
             web_search=bool(data.get("webSearch", True)),
             collapsed=bool(data.get("collapsed", False)),
+            pinned=bool(data.get("pinned", False)),
             created_at=data.get("createdAt", ""),
         )
 

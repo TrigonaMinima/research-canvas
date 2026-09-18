@@ -136,6 +136,33 @@ def test_should_prefer_an_explicit_width_over_the_inherited_one(canvas_root, sam
     assert box.w == 320.0
 
 
+# --- pinning a box ------------------------------------------------------------
+
+
+def test_should_start_an_answer_unpinned(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    assert box.pinned is False
+
+
+def test_should_round_trip_a_pinned_box_through_disk(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    box.pinned = True
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(box.id).pinned is True
+
+
+def test_should_load_a_canvas_saved_before_pinning_existed(canvas_root, sample_markdown):
+    """A canvas.json written by an older build has no pinned key at all."""
+    canvas = storage.create_canvas(sample_markdown)
+    path = canvas_root / canvas.id / "canvas.json"
+    data = json.loads(path.read_text())
+    del data["boxes"][0]["pinned"]
+    path.write_text(json.dumps(data))
+    assert storage.load(canvas.id).box(canvas.root_id).pinned is False
+
+
 # --- standing instructions ----------------------------------------------------
 
 

@@ -348,6 +348,28 @@ def test_should_save_a_collapsed_box(client, canvas):
     assert next(b for b in boxes if b["id"] == "b2")["collapsed"] is True
 
 
+# --- pinning a box ------------------------------------------------------------
+
+
+def test_should_start_a_box_unpinned(client, canvas):
+    assert canvas["boxes"][0]["pinned"] is False
+
+
+def test_should_save_a_pinned_box(client, canvas):
+    client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": True}}})
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == "b2")["pinned"] is True
+
+
+def test_should_save_a_box_unpinned_again(client, canvas):
+    client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": True}}})
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": False}}})
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == "b2")["pinned"] is False
+
+
 # --- the width a new answer opens at ------------------------------------------
 
 

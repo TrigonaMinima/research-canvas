@@ -50,7 +50,10 @@ function create(box) {
       <span class="spacer"></span>
       <em data-status-label></em>
       <button type="button" class="chrome-btn" data-edit hidden>Edit</button>
-      ${child ? '<button type="button" class="chrome-btn" data-delete>Delete</button>' : ''}
+      ${child ? `
+      <button type="button" class="chrome-btn" data-unpin hidden
+              title="Let the layout place this box again">Unpin</button>
+      <button type="button" class="chrome-btn" data-delete>Delete</button>` : ''}
       <button type="button" class="box__fold" data-collapse aria-expanded="true"
               aria-label="Minimise" title="Minimise">&#8722;</button>
     </header>
@@ -127,6 +130,11 @@ export function update(el, box, {
   const stopped = el.querySelector('[data-stopped]');
   stopped.hidden = !(box.status === 'failed' || box.status === 'interrupted');
   el.querySelector('[data-reason]').textContent = box.reason;
+
+  // Said only where it can be acted on: a box is pinned by dragging it, so the way to
+  // hand it back to the layout appears on the box itself, and nowhere else.
+  const unpin = el.querySelector('[data-unpin]');
+  if (unpin) unpin.hidden = !box.pinned;
 
   // An answer that has not landed yet has no source worth editing.
   el.querySelector('[data-edit]').hidden = waiting;

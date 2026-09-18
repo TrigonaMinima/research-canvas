@@ -4,7 +4,9 @@
 import { api } from './api.js';
 import { Camera, CHROME_GAP } from './camera.js';
 import { offsetsOf } from './anchors.js';
+import { bounds } from './geom.js';
 import {
+  ANCHOR_LEAD,
   BOX_GAP,
   CHROME_HEIGHT,
   DISPLAY_NAME,
@@ -71,6 +73,11 @@ function flash(message) {
 }
 
 const boxById = (id) => state.canvas && state.canvas.boxes.find((b) => b.id === id);
+// The same two indexes both passes over the canvas need. A hundred boxes each scanning
+// a hundred anchors would be ten thousand comparisons every frame of a stream, and the
+// same goes for a pass that looks up a parent per box.
+const boxesById = () => new Map(state.canvas.boxes.map((b) => [b.id, b]));
+const anchorsByTarget = () => new Map(state.canvas.anchors.map((a) => [a.target, a]));
 const boxOf = (node) => boxById(node.closest('[data-box]').dataset.box);
 
 function saveCamera() {
@@ -96,13 +103,8 @@ function render() {
 
   const busy = running();
   const queuedAhead = busy.filter((b) => b.status === 'running').length;
-  // The anchor that opened each box, indexed once. A hundred boxes each scanning a
-  // hundred anchors would be ten thousand comparisons every frame of a stream.
-  const inbound = new Map();
-  for (const anchor of state.canvas.anchors) inbound.set(anchor.target, anchor);
-  // Its own pass: a parent does not have to sit before its child in the array.
-  const byId = new Map();
-  for (const box of state.canvas.boxes) byId.set(box.id, box);
+  const inbound = anchorsByTarget();
+  const byId = boxesById();
 
   for (const box of state.canvas.boxes) {
     const node = boxes.ensure(el.canvas, box);
@@ -411,7 +413,7 @@ const ASSUMED_HEIGHT = 420;
 
 function placement(sourceRect, anchorRect, width) {
   const x = sourceRect.x + sourceRect.w + COLUMN_GAP;
-  let y = Math.max(anchorRect.y + anchorRect.h - 40, sourceRect.y);
+  let y = Math.max(anchorRect.y + anchorRect.h - ANCHOR_LEAD, sourceRect.y);
   const taken = state.geometry.boxes;
   while (taken.some((b) =>
     x < b.x + b.w + BOX_GAP && x + width + BOX_GAP > b.x &&
@@ -421,31 +423,241 @@ function placement(sourceRect, anchorRect, width) {
   return { x, y };
 }
 
-// --- keeping a column tidy ----------------------------------------------------
+// --- seating every answer beside its passage ----------------------------------
 
-// A box is placed before its answer exists, so its height is a guess, and the heights
-// around it keep changing afterwards as answers land, boxes fold, and bodies are
-// edited. Once the real heights are on the desk, the answers off one box are stacked
-// into one column: the top one stays where the reader put it, and every box under it
-// is *assigned* its place, up or down. Assigning rather than nudging is what makes a
-// second pass move nothing.
+// An answer belongs beside the passage it came from, but it is placed before it
+// exists, so its height is a guess that real answers routinely outgrow, and the
+// heights around it keep changing afterwards as answers land, boxes fold and bodies
+// are edited. Once the real heights are on the desk every answer is seated again:
+// back beside its own passage, pushed down only as far as the sibling above it needs
+// the room, and never onto a box the reader pinned by dragging it. Each box is
+// *assigned* its place rather than nudged towards it, which is what makes a second
+// pass move nothing.
 
 // Sub-pixel measurement noise is not a reason to write to the server.
 const SETTLED = 0.5;
 
-// One column: the top box keeps its place, and each box under it is assigned
-// `previous.y + previous.h + BOX_GAP`. Returns whether anything moved.
-function stackColumn(column, rects, patch) {
-  let moved = false;
-  column.sort((a, b) => a.y - b.y);
-  let place = null; // where the next box down belongs; null for the head
-  for (const box of column) {
-    if (place !== null && Math.abs(box.y - place) > SETTLED) {
-      box.y = place;
-      patch[box.id] = { ...patch[box.id], y: box.y };
-      moved = true;
+// How far down its parent each answer's passage sits, read off the edges the last
+// measure collected: edges.js already starts an edge on the underline of its mark,
+// and already falls back to the parent's header when the mark cannot be measured, so
+// a folded or half-drawn parent needs no case of its own here. Held as an offset
+// inside the parent, so a parent that moves in this same pass carries its answers.
+function leadsInto(rects, byId) {
+  const leads = new Map();
+  for (const edge of state.geometry.edges) {
+    const child = byId.get(edge.id);
+    const parent = child && rects.get(child.parent);
+    if (parent) leads.set(edge.id, edge.y1 - parent.y);
+  }
+  return leads;
+}
+
+// Reading order in the parent, never where the boxes measure: now that the pass owns
+// y, sorting on y would let one drag reorder a column for good.
+// Decorated before the sort, so each box is looked up once rather than twice per
+// comparison. createdAt is a fixed-width UTC timestamp, so it orders on plain `<`.
+function inPassageOrder(children, anchorOf) {
+  return [...children]
+    .map((box) => ({ box, start: anchorOf(box)?.start, at: box.createdAt || '' }))
+    .sort((a, b) => {
+      const known = a.start !== undefined && b.start !== undefined;
+      if (known && a.start !== b.start) return a.start - b.start;
+      return (a.at > b.at) - (a.at < b.at);
+    })
+    .map((seen) => seen.box);
+}
+
+// The nearest nondecreasing sequence to the one wanted, in a single pass: where the
+// wanted values go backwards they are pooled into a block, and the block takes their
+// average. Pool-adjacent-violators, the standard least-squares fit.
+function balanced(wanted, from, to) {
+  const total = [];
+  const size = [];
+  for (let at = from; at < to; at += 1) {
+    total.push(wanted[at]);
+    size.push(1);
+    // Pooling one block can put it under the block before it, so this keeps going.
+    while (total.length > 1) {
+      const last = total.length - 1;
+      if (total[last - 1] / size[last - 1] <= total[last] / size[last]) break;
+      total[last - 1] += total.pop();
+      size[last - 1] += size.pop();
     }
-    place = box.y + rects.get(box.id).h + BOX_GAP;
+  }
+  return total.flatMap((sum, block) => Array(size[block]).fill(sum / size[block]));
+}
+
+// The tops for one parent's answers, from their seats, their heights and their pins.
+//
+// Each box is first shrunk to a point, by subtracting the boxes above it in the
+// column. In that space "no two boxes overlap" reads as "the points never go
+// backwards", and the whole question becomes: which nondecreasing sequence sits
+// closest to the seats the passages ask for? Boxes that have to touch come out as one
+// block sitting on the average of what its boxes wanted. The average, rather than the
+// highest of them, is what lets a crowded run rise into the space above its topmost
+// passage instead of hanging off it and leaving every pixel of the crowding to the
+// boxes below.
+//
+// A pinned box is a fixed point. The runs of free boxes between pins are bounded by
+// them, `lo` from every pin above and `hi` from every pin below, running rather than
+// adjacent because a pin can sit anywhere. `floorY` is the top of the parent, which a
+// family taller than its own passages would otherwise climb clean off. Where two pins
+// leave no room the lower one wins and whatever sits between them overlaps it: that is
+// the reader's own arrangement, and the pass is not entitled to undo it.
+function tops(items, floorY) {
+  const offset = [];
+  let column = 0;
+  for (const item of items) {
+    offset.push(column);
+    column += item.h + BOX_GAP;
+  }
+  const point = items.map((item, i) => (item.pinned ? item.y : item.seat) - offset[i]);
+
+  // `hi` has to be kept per box: it is the lowest pin anywhere below, not the one
+  // directly below, so only a backwards walk finds it. `lo` needs no array, since the
+  // walk that reads it already runs forwards.
+  const hi = new Array(items.length);
+  let below = Infinity;
+  for (let i = items.length - 1; i >= 0; i -= 1) {
+    hi[i] = below;
+    if (items[i].pinned) below = Math.min(below, point[i]);
+  }
+
+  const out = new Array(items.length);
+  let lo = floorY;
+  let start = 0;
+  while (start < items.length) {
+    if (items[start].pinned) {
+      out[start] = items[start].y;
+      lo = Math.max(lo, point[start]);
+      start += 1;
+      continue;
+    }
+    let end = start;
+    while (end < items.length && !items[end].pinned) end += 1;
+    // Every box in a run shares one pair of bounds, read here at its head, so clamping
+    // each to them keeps the run nondecreasing and clear of the pins on either side.
+    const ceiling = hi[start];
+    const floor = lo;
+    balanced(point, start, end).forEach((value, n) => {
+      const i = start + n;
+      out[i] = Math.min(ceiling, Math.max(floor, value)) + offset[i];
+    });
+    start = end;
+  }
+  return out;
+}
+
+// Two answers at one depth under different parents open at the same x, so one column
+// can hold more than one family. Families are kept whole and pushed past each other,
+// the one place this pass reads geometry rather than the tree.
+const sharesColumn = (a, b) => a.x < b.right && b.x < a.right;
+
+function clearOf(claimed, family) {
+  // Only the spans in this column can ever hit, and that does not change as the
+  // family drops, so the test is done once instead of once per round.
+  const column = claimed.filter((span) => sharesColumn(family, span));
+  let shift = 0;
+  // Each round drops the family below one span it hit, so the rounds cannot outlast
+  // the spans already on the desk.
+  for (let round = 0; round <= column.length; round += 1) {
+    let hit = false;
+    for (const span of column) {
+      if (family.top + shift < span.bottom + BOX_GAP
+          && span.top < family.bottom + shift + BOX_GAP) {
+        shift = Math.max(shift, span.bottom + BOX_GAP - family.top);
+        hit = true;
+      }
+    }
+    if (!hit) break;
+  }
+  return shift;
+}
+
+// One family: the answers off one box, grouped by parent rather than by where they
+// measure, so a left-edge resize can never split a pair and yank it back.
+function family(parentId, children, tables) {
+  const { rects, leads, anchorOf, byId } = tables;
+  const parent = byId.get(parentId);
+  const items = inPassageOrder(children, anchorOf).map((box) => {
+    const rect = rects.get(box.id);
+    return {
+      box,
+      rect,
+      h: rect.h,
+      pinned: !!box.pinned,
+      y: box.y,
+      // A box whose passage cannot be found at all, as a canvas seeded outside the app
+      // has, seats level with the top of its parent.
+      seat: leads.has(box.id) ? parent.y + leads.get(box.id) - ANCHOR_LEAD : parent.y,
+    };
+  });
+  const ys = tops(items, parent.y);
+  // Only the horizontal extent is wanted: top and bottom come from the tops just
+  // computed, not from where the boxes are measuring now.
+  const { x0, x1 } = bounds(items.map((item) => item.rect));
+  return {
+    items,
+    ys,
+    x: x0,
+    right: x1,
+    top: Math.min(...ys),
+    bottom: Math.max(...ys.map((y, i) => y + items[i].h)),
+    pinned: items.some((item) => item.pinned),
+    // An answer whose passage has an anchor but no edge yet is being measured mid-flight.
+    // Its family is still placed, so nothing sits on top of anything, but the guess is
+    // kept out of the patch: writing it would persist a tower the next pass undoes.
+    measured: children.every((box) => !anchorOf(box) || leads.has(box.id)),
+  };
+}
+
+function reseat(patch) {
+  const rects = new Map(state.geometry.boxes.map((b) => [b.id, b]));
+  const byId = boxesById();
+  const leads = leadsInto(rects, byId);
+  const anchors = anchorsByTarget();
+  const anchorOf = (box) => anchors.get(box.id);
+  const tables = { rects, leads, anchorOf, byId };
+
+  const families = new Map();
+  for (const box of state.canvas.boxes) {
+    if (!box.parent || !rects.has(box.id) || !rects.has(box.parent)) continue;
+    if (!families.has(box.parent)) families.set(box.parent, []);
+    families.get(box.parent).push(box);
+  }
+
+  const byDepth = new Map();
+  for (const parentId of families.keys()) {
+    const depth = byId.get(parentId).depth;
+    if (!byDepth.has(depth)) byDepth.set(depth, []);
+    byDepth.get(depth).push(parentId);
+  }
+
+  let moved = false;
+  const claimed = []; // the spans already taken, deepest pass included
+  // Shallowest depth first, and the seats are read inside the loop rather than up
+  // front, so a parent is standing in its final place before its own answers are
+  // seated against it.
+  for (const depth of [...byDepth.keys()].sort((a, b) => a - b)) {
+    const placed = byDepth.get(depth)
+      .map((id) => family(id, families.get(id), tables));
+    // A family holding a pin claims its span first and is never shifted, so the column
+    // is arranged around the boxes the reader placed by hand.
+    placed.sort((a, b) => (b.pinned - a.pinned) || (a.top - b.top));
+
+    for (const group of placed) {
+      const shift = group.pinned ? 0 : clearOf(claimed, group);
+      group.items.forEach((item, i) => {
+        const y = group.ys[i] + shift;
+        if (Math.abs(item.box.y - y) <= SETTLED) return;
+        item.box.y = y;
+        if (group.measured) patch[item.box.id] = { ...patch[item.box.id], y };
+        moved = true;
+      });
+      claimed.push({
+        x: group.x, right: group.right, top: group.top + shift, bottom: group.bottom + shift,
+      });
+    }
   }
   return moved;
 }
@@ -456,21 +668,7 @@ function restack(extra) {
   // Not while a drag is under the pointer or an editor is open: one is already writing
   // `top` every frame, and the other has replaced the body with a pane whose height is
   // the editor's, not the answer's. The patch still goes, so a gesture is never lost.
-  if (state.canvas && !gesture && !edit) {
-    const rects = new Map(state.geometry.boxes.map((b) => [b.id, b]));
-    // Grouped by parent rather than by where the boxes measure. The answers off one box
-    // all open at one x, so the parent *is* the column; and a left-edge resize moves x,
-    // which would let a geometric grouping split a stacked pair and yank it back.
-    const columns = new Map();
-    for (const box of state.canvas.boxes) {
-      if (!box.parent || !rects.has(box.id)) continue;
-      if (!columns.has(box.parent)) columns.set(box.parent, []);
-      columns.get(box.parent).push(box);
-    }
-    for (const column of columns.values()) {
-      moved = stackColumn(column, rects, patch) || moved;
-    }
-  }
+  if (state.canvas && !gesture && !edit) moved = reseat(patch);
   if (state.canvas && Object.keys(patch).length) {
     api.patchCanvas(state.canvas.id, { boxes: patch }).catch(() => {});
   }
@@ -819,9 +1017,20 @@ window.addEventListener('mouseup', () => {
     return;
   }
   if (!done.moved) return; // a click on a button in the header is not a drag
-  const patch = done.kind === 'move'
-    ? { x: done.box.x, y: done.box.y }
-    : { x: done.box.x, w: done.box.w }; // a left-edge drag moves the box as it widens
+  if (done.kind === 'resize') {
+    // A left-edge drag moves the box as it widens.
+    scheduleRestack({ [done.box.id]: { x: done.box.x, w: done.box.w } });
+    return;
+  }
+  const patch = { x: done.box.x, y: done.box.y };
+  // Dropping a box at a height of your own choosing pins it there: the pass seats
+  // every other answer beside its passage, and this one is where you put it. Sideways
+  // is not a choice about height, so it pins nothing.
+  if (Math.abs(done.box.y - done.by) > SETTLED) {
+    done.box.pinned = true;
+    patch.pinned = true;
+    render();
+  }
   scheduleRestack({ [done.box.id]: patch });
 });
 
@@ -876,12 +1085,22 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  const unpin = hit('[data-unpin]');
+  if (unpin) {
+    const box = boxOf(unpin);
+    box.pinned = false;
+    render();
+    scheduleRestack({ [box.id]: { pinned: false } });
+    return;
+  }
+
   const del = hit('[data-delete]');
   if (del) {
     const box = del.closest('[data-box]');
     api.deleteBox(state.canvas.id, box.dataset.box).then((view) => {
       adopt(view);
       render();
+      scheduleRestack(); // the hole it left is a gap its siblings no longer need
     }).catch((error) => flash(error.message));
     return;
   }
