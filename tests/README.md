@@ -1,13 +1,13 @@
 # Tests
 
-353 tests. 350 run on every `make test`; the 3 marked `live` spend real Claude usage and
+357 tests. 354 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          350 tests, no usage spent
+make test          unit + api + e2e          354 tests, no usage spent
 make test-unit     tests/unit                 79
 make test-api      tests/api                  67  (3 live deselected)
-make test-e2e      tests/e2e                 204
+make test-e2e      tests/e2e                 208
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 79 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 54 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 12 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 162 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 204 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 166 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 208 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 23 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -89,7 +89,7 @@ text into a new box. `GET /api/config` is left unrouted and served by the real s
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (162)
+### 4 — Frontend against the real API (166)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -98,7 +98,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (106) — the root box, selection gating (cross-box, non-`done`, under three
+- `test_canvas.py` (110) — the root box, selection gating (cross-box, non-`done`, under three
   characters), asking, streaming, the anchor mark, the edge, asking *inside* an answer,
   jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing the ask
   popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere outside,
@@ -112,15 +112,17 @@ The same browser, the real server, the real storage, the fake `claude`.
   `Shift+Enter` opening a new line and carrying a list marker onto it, the Save button,
   `Escape` throwing the edit away, a blank edit refused with its reason, an edit surviving a
   reload, a mark and its edge still there when the passage survives, and no Edit button at
-  all while an answer is still running. Thirty-two cover this change: the left handle
+  all while an answer is still running. Thirty-six cover this change: the left handle
   widening a box, stopping at the minimum, and surviving a reload; minimising a box down to
   its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the label
   tracking the fold, the fold surviving a reload, the outgoing edge still drawn and still
   starting at the box rather than the canvas origin, find no longer counting inside a
   folded box, whether it was folded before the search or during it, the fold button sitting
-  last in the header and carrying no border; the quoted passage on an answer, above the question, and absent on the
-  document; clicking a highlight framing and flashing its answer with the header clear of the
-  chrome bar, the same for clicking the edge, and a click on the bare desk moving nothing;
+  last in the header and carrying no border, a folded box still showing the passage it was
+  asked about, sitting above the question, clipped to one line, and absent on a folded
+  document; the quoted passage on an answer, above the question, and absent on the document;
+  clicking a highlight framing and flashing its answer with the header clear of the chrome
+  bar, the same for clicking the edge, and a click on the bare desk moving nothing;
   the way back reading "the document" at depth 1 and naming the depth deeper, missing on the
   document, landing on the passage the answer came from, flashing it, and hidden while the box
   is being edited; and an answer opening at its parent's width, inheriting a resized parent's
@@ -163,7 +165,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 204)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 208)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and

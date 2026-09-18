@@ -479,6 +479,13 @@ FLASH_ELAPSED = """(box) => {
   return ring ? ring.currentTime : null;
 }"""
 
+# One line, however the stylesheet says so, rather than the property that says it.
+ONE_LINE_TALL = """(el) => {
+  const line = parseFloat(getComputedStyle(el).lineHeight);
+  return el.offsetHeight < 2 * line;
+}"""
+
+
 QUOTE_BEFORE_QUESTION = """(id) => {
   const scope = document.querySelector('[data-box="' + id + '"]');
   const quote = scope.querySelector('[data-quote]');
@@ -532,9 +539,11 @@ def resize(page, box: str, edge: str, dx: float) -> None:
     page.mouse.up()
 
 
-def answer_from_root(page, question: str = "What is a residual connection?") -> None:
-    """Ask about the stock passage and wait for the answer to land."""
-    ask(page, "b1", QUOTE, question)
+def answer_from_root(
+    page, question: str = "What is a residual connection?", needle: str = QUOTE
+) -> None:
+    """Ask about a passage in the document and wait for the answer to land."""
+    ask(page, "b1", needle, question)
     page.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
 
 
@@ -688,6 +697,45 @@ def test_should_drop_the_find_count_when_a_box_is_folded_mid_search(canvas):
     expect(canvas.locator("[data-find-count]")).not_to_have_text("0/0")
     canvas.click('[data-box="b1"] [data-collapse]')
     expect(canvas.locator("[data-find-count]")).to_have_text("0/0")
+
+
+def test_should_show_the_highlighted_passage_when_a_box_is_minimised(canvas):
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")  # b2 opens beyond the right edge of the viewport
+    canvas.click('[data-box="b2"] [data-collapse]')
+    expect(canvas.locator('[data-box="b2"] [data-quote]')).to_be_visible()
+
+
+def test_should_keep_the_quote_above_the_question_when_minimised(canvas):
+    """DOM order is proved elsewhere; folded, the margins decide where each one sits."""
+    answer_from_root(canvas)
+    jump_to(canvas, "b2")
+    canvas.click('[data-box="b2"] [data-collapse]')
+    quote = canvas.locator('[data-box="b2"] [data-quote]').bounding_box()
+    question = canvas.locator('[data-box="b2"] [data-question]').bounding_box()
+    assert quote["y"] + quote["height"] <= question["y"]
+
+
+# QUOTE never fills one line at any width down to MIN_BOX_WIDTH, so clipping needs a
+# longer passage. The newline is the document's own line wrap, which find_offsets
+# matches verbatim.
+LONG_QUOTE = (
+    "Self-attention layers are faster than recurrent layers when the sequence length is\n"
+    "smaller than the representation dimensionality, which is"
+)
+
+
+def test_should_clip_a_long_minimised_quote_to_one_line(canvas):
+    answer_from_root(canvas, "Why self-attention?", needle=LONG_QUOTE)
+    jump_to(canvas, "b2")
+    canvas.click('[data-box="b2"] [data-collapse]')
+    quote = canvas.locator('[data-box="b2"] [data-quote]')
+    assert quote.evaluate(ONE_LINE_TALL)
+
+
+def test_should_not_quote_anything_on_a_minimised_document_box(canvas):
+    canvas.click('[data-box="b1"] [data-collapse]')
+    expect(canvas.locator('[data-box="b1"] [data-quote]')).to_have_count(0)
 
 
 # --- folding every box at once ---------------------------------------------
