@@ -155,7 +155,7 @@ export function update(el, box, {
   const signature = streaming
     ? `live:${liveText || ''}`
     : `done:${html || ''}|${anchors.map((a) => `${a.id}@${a.start}`).join(',')}`;
-  if (rendered.get(el) === signature) return;
+  if (rendered.get(el) === signature) return [];
   rendered.set(el, signature);
 
   if (streaming) {
@@ -166,8 +166,10 @@ export function update(el, box, {
       caret.textContent = ' ▌';
       body.append(caret);
     }
-  } else {
-    body.innerHTML = html || '';
-    materialize(body, anchors);
+    return [];
   }
+  body.innerHTML = html || '';
+  // Where each passage turned out to be. The caller stores it: this module draws, it
+  // does not own the canvas.
+  return materialize(body, anchors).moved;
 }

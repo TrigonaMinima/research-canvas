@@ -94,6 +94,27 @@ const running = () =>
 
 // --- rendering ----------------------------------------------------------------
 
+// An anchor remembers the offset its quote sat at. Editing the document around it
+// moves the text, and only the browser can say where to: offsets are measured against
+// the rendered plain text of a body. The mark is drawn at the passage either way, but
+// reading order sorts by the stored number, so it is corrected here, in the canvas and
+// on disk. Left alone it also decays: every later resolve measures its drift from a
+// position that is further and further from the truth.
+function reanchor(moved) {
+  const patch = {};
+  for (const { id, start, end } of moved) {
+    const anchor = state.canvas.anchors.find((a) => a.id === id);
+    if (!anchor) continue;
+    anchor.start = start;
+    anchor.end = end;
+    patch[id] = { start, end };
+  }
+  if (!Object.keys(patch).length) return;
+  // A correction that does not land is measured again the next time the canvas is
+  // opened, which is the same pass that made this one. Nothing to tell the reader.
+  api.patchCanvas(state.canvas.id, { anchors: patch }).catch(() => {});
+}
+
 function render() {
   if (!state.canvas) return;
   const alive = new Set(state.canvas.boxes.map((b) => b.id));
@@ -106,9 +127,12 @@ function render() {
   const inbound = anchorsByTarget();
   const byId = boxesById();
 
+  // Passages that have moved since they were measured, collected across every box and
+  // written back in one go below.
+  const drifted = [];
   for (const box of state.canvas.boxes) {
     const node = boxes.ensure(el.canvas, box);
-    boxes.update(node, box, {
+    drifted.push(...boxes.update(node, box, {
       html: state.bodies[box.id],
       anchors: anchorsIn(box.id),
       inbound: inbound.get(box.id) || null,
@@ -116,8 +140,9 @@ function render() {
       liveText: state.live.get(box.id),
       queuedAhead,
       editing: !!edit && box.id === edit.id,
-    });
+    }));
   }
+  if (drifted.length) reanchor(drifted);
 
   el.title.textContent = state.canvas.title;
   // Several canvases open at once are several browser tabs, so each one says which.

@@ -1,13 +1,13 @@
 # Tests
 
-394 tests. 391 run on every `make test`; the 3 marked `live` spend real Claude usage and
+405 tests. 402 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          391 tests, no usage spent
+make test          unit + api + e2e          402 tests, no usage spent
 make test-unit     tests/unit                 82
-make test-api      tests/api                  73  (3 live deselected)
-make test-e2e      tests/e2e                 239
+make test-api      tests/api                  77  (3 live deselected)
+make test-e2e      tests/e2e                 246
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -20,13 +20,13 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
 | 1 | API function tests | `tests/unit/` | 82 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 57 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 61 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 196 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 239 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 203 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 246 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
-| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
+| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
 | 9 | Contract / schema | `tests/api/test_contract.py` | 13 |
 
 ### 1 — API function tests (`tests/unit/`)
@@ -64,7 +64,7 @@ Each module in isolation, no HTTP, no browser.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 57)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 61)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -78,7 +78,10 @@ instructions: empty by default, saved and handed back, served again on the next 
 over the cap with its reason, and — the two that matter — the text reaching the prompt a run
 is given, and that prompt untouched when no instructions are set. Three cover pinning: a box
 starting unpinned, a `pinned` patch saved, and `pinned: false` saved too, since letting the
-layout have the box back has to travel like any other value.
+layout have the box back has to travel like any other value. Four cover a corrected anchor
+offset, which is the browser telling the server where a passage moved to in an edit: the new
+numbers saved, the quote left alone because the quote is what finds the passage next time, a
+correction for an anchor that is already gone accepted quietly, and a negative offset refused.
 
 ### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 13)
 
@@ -93,7 +96,7 @@ a snap can be shown stopping at a block boundary instead of reading `PaperEach` 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (194)
+### 4 — Frontend against the real API (203)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -167,6 +170,13 @@ The same browser, the real server, the real storage, the fake `claude`.
   the fold reaching the server in one patch and surviving a reload, an open editor closing
   on the way down, and the stack closing its gaps in one pass whether an editor was open or
   not.
+- `test_anchors.py` (7) — an offset that follows its passage through an edit. An anchor
+  stores the character offset its quote sat at, and the seating pass reads that number, so an
+  edit that moves the text has to move the number with it. The offset stored when a passage is
+  highlighted, moved when the document is edited, every passage in the document moved in the
+  one pass, the answers re-seated where their passages are now rather than where they were,
+  the same correction inside an answer body and inside a folded box, and the corrected number
+  still on disk after a reload.
 - `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
   on, since a caret hit-test lands between glyphs and a press past the middle of a letter
   used to cost that letter for good. Six read the popover quote: a start inside a word, an
@@ -198,7 +208,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 237)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 246)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -238,13 +248,14 @@ boundary the PRD actually draws, and that is tested:
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
   visible rather than merely asserted.
 
-### 8 — Validation & error paths (27)
+### 8 — Validation & error paths (28)
 
 Refused pastes under 40 characters with the exact message, an empty question, a selection
 under three characters, a zoom outside `[0.1, 2]`, 404 for an unknown canvas, 404 for a
 canvas id that escapes the root, 422 for deleting the document box, 409 for asking from
 a box that is still running, 422 for saving an empty box, 409 for editing a box whose
-answer is still streaming, and 422 for asking with a width outside the clamps, at either end, and 422 for standing
+answer is still streaming, and 422 for asking with a width outside the clamps, at either end, 422 for an anchor offset
+below zero, and 422 for standing
 instructions over the cap, with the message the panel shows. In the browser, `test_failures.py` (6) covers a usage-limit
 stop, a crashed run, the retry button, and the rule that a failed answer keeps its question
 and its anchor.

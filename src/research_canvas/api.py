@@ -81,6 +81,13 @@ class BoxPatch(BaseModel):
     pinned: bool | None = None
 
 
+# Both numbers together, never one: an offset and its end are one measurement, and a
+# half-applied pair would slice the wrong passage out of the text.
+class AnchorPatch(BaseModel):
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+
 class BodyBody(BaseModel):
     markdown: str
 
@@ -92,6 +99,7 @@ class InstructionsBody(BaseModel):
 class PatchBody(BaseModel):
     camera: CameraBody | None = None
     boxes: dict[str, BoxPatch] | None = None
+    anchors: dict[str, AnchorPatch] | None = None
     theme: str | None = None
     webSearch: bool | None = None
 
@@ -187,6 +195,14 @@ def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
             value = getattr(patch, field_name)
             if value is not None:
                 setattr(box, field_name, value)
+    # Where a passage ended up after the document around it was edited. The browser is
+    # the only place that can measure it: offsets are read off the rendered plain text
+    # of a body, which is the browser's own projection of the markdown stored here.
+    corrections = body.anchors or {}
+    for anchor in canvas.anchors:
+        patch = corrections.get(anchor.id)
+        if patch:
+            anchor.start, anchor.end = patch.start, patch.end
 
 
 # --- asking -------------------------------------------------------------------

@@ -174,12 +174,17 @@ export function endRect(mark) {
   return lines.length ? lines[lines.length - 1] : mark.getBoundingClientRect();
 }
 
+// Returns the anchors it drew, and the ones whose text has moved since it was
+// measured. An offset is not only where to draw a mark: reading order sorts by it, so
+// an edit that shifts a passage has to shift the number stored with it.
 export function materialize(bodyEl, anchors) {
   const { text } = index(bodyEl); // invariant across wrap(), so read once for all anchors
   const placed = [];
+  const moved = [];
   for (const anchor of anchors) {
     const found = resolve(text, anchor);
     if (!found) continue;
+    if (found.start !== anchor.start) moved.push({ id: anchor.id, start: found.start, end: found.end });
     const marks = wrap(bodyEl, found.start, found.end, {
       'data-anchor': anchor.id,
       'data-target': anchor.target,
@@ -190,5 +195,5 @@ export function materialize(bodyEl, anchors) {
     marks[marks.length - 1].setAttribute('data-anchor-edge', '1');
     placed.push(anchor.id);
   }
-  return placed;
+  return { placed, moved };
 }
