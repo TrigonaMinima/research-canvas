@@ -12,7 +12,13 @@ import pytest
 from playwright.sync_api import expect
 from tests.fixtures.editor import SAVE_BUTTON, edit
 from tests.fixtures.selection import SELECT, find_offsets, plain_text, send_question
-from tests.fixtures.viewport import box_rect, edge_start, rect_of, stored_anchor
+from tests.fixtures.viewport import (
+    box_rect,
+    edge_start,
+    line_rects_of,
+    rect_of,
+    stored_anchor,
+)
 
 from .conftest import FIXTURES, canvas_from
 
@@ -29,6 +35,10 @@ AFTER_FORMULA = "before the softmax"
 # The formula highlighted on its own. Its rendered text is long enough to clear
 # MIN_SELECTION_CHARS, so the ask popover opens the way prose opens it.
 FORMULA_TOKEN = "Divisor"
+
+# The display formula on its own line. A block formula inside an inline mark leaves
+# empty fragments above and below itself, which is what the edge must not measure.
+DISPLAY_TOKEN = "Attention"
 
 QUESTION = "What does this mean?"
 
@@ -73,9 +83,9 @@ def highlight_across_the_formula(page) -> None:
     page.evaluate(SELECT, ["b1", start, end])
 
 
-def highlight_the_formula(page) -> None:
-    quoted = page.evaluate(SELECT_FORMULA, ["b1", FORMULA_TOKEN])
-    assert quoted, f"no <math> element carrying {FORMULA_TOKEN!r} in box b1"
+def highlight_the_formula(page, token: str = FORMULA_TOKEN) -> None:
+    quoted = page.evaluate(SELECT_FORMULA, ["b1", token])
+    assert quoted, f"no <math> element carrying {token!r} in box b1"
 
 
 # --- formulas render ------------------------------------------------------
@@ -159,6 +169,23 @@ def test_should_leave_that_edge_from_the_formula_not_the_box_edge(math_canvas):
     box = box_rect(math_canvas, "b1")
     assert start["x"] < box["x"] + box["w"] - 1, "the edge left the box, not the formula"
     assert abs(start["x"] - (mark["x"] + mark["w"])) <= 2
+
+
+def test_should_leave_a_display_formula_edge_from_the_formula_not_its_empty_tail(math_canvas):
+    """A display formula is a block inside an inline mark, so the mark reports a slim
+    empty fragment under the formula. The edge belongs on the formula."""
+    highlight_the_formula(math_canvas, DISPLAY_TOKEN)
+    send_question(math_canvas, QUESTION)
+    math_canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+
+    formula = rect_of(math_canvas, '[data-box="b1"] mark[data-anchor-edge] > math')
+    fragments = line_rects_of(math_canvas, '[data-box="b1"] mark[data-anchor-edge]')
+    # The fragments are the reason this test exists: the last one is not the formula.
+    assert len(fragments) > 1
+
+    start = edge_start(math_canvas, "b2")
+    assert abs(start["x"] - (formula["x"] + formula["w"])) <= 2
+    assert formula["y"] - 2 <= start["y"] <= formula["y"] + formula["h"] + 2
 
 
 # --- math in an answer ----------------------------------------------------

@@ -158,6 +158,22 @@ function wrap(bodyEl, start, end, attrs) {
   });
 }
 
+// Where a passage ends on the screen, for whoever draws a line out of it. A mark is
+// an inline element, so the box around it is the union of every line it covers, and
+// the right edge of that union belongs to the widest line rather than to the line the
+// passage ends on. A formula is worse: a block <math> inside an inline mark leaves a
+// slim empty fragment under it, and that fragment is no part of what the reader sees.
+//
+// So a formula is measured as the formula, and text as the line it ends on. A mark
+// with nothing to measure keeps its empty rect, which is how a caller can tell it is
+// not on the desk at all.
+export function endRect(mark) {
+  const math = mark.querySelector('math'); // wrap() gives a formula's mark one child
+  if (math) return math.getBoundingClientRect();
+  const lines = mark.getClientRects();
+  return lines.length ? lines[lines.length - 1] : mark.getBoundingClientRect();
+}
+
 export function materialize(bodyEl, anchors) {
   const { text } = index(bodyEl); // invariant across wrap(), so read once for all anchors
   const placed = [];

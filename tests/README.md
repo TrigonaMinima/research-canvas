@@ -1,13 +1,13 @@
 # Tests
 
-392 tests. 389 run on every `make test`; the 3 marked `live` spend real Claude usage and
+394 tests. 391 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          389 tests, no usage spent
+make test          unit + api + e2e          391 tests, no usage spent
 make test-unit     tests/unit                 82
 make test-api      tests/api                  73  (3 live deselected)
-make test-e2e      tests/e2e                 237
+make test-e2e      tests/e2e                 239
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 82 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 57 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 194 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 237 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 196 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 239 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 28 |
@@ -102,14 +102,17 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (128) — the root box, selection gating (cross-box, non-`done`, under
+- `test_canvas.py` (129) — the root box, selection gating (cross-box, non-`done`, under
   three characters), asking, streaming, the anchor mark, the edge, asking *inside* an
   answer, jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing
   the ask popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere
   outside, and a click inside that must *not* close it. Two cover sending the question from
   the keyboard: `Enter` sends it, and `Shift+Enter` opens a second line instead. One reads
   the edge's `d` attribute back and asserts the lead-out leaves from the mark's underline,
-  so it can never strike through the words it runs past. Nineteen cover editing a box: the
+  so it can never strike through the words it runs past. One more follows a highlight that
+  wraps over several lines, which measures as the box around all of them: the right edge of
+  that box belongs to the widest line, so the edge used to leave beside the passage rather
+  than from the end of it. Nineteen cover editing a box: the
   Edit button on the document and on an answer, the markdown source rather than the rendered
   HTML, the whole document on screen with no scrollbar inside the editor, the caret landing
   on the first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter`
@@ -172,11 +175,13 @@ The same browser, the real server, the real storage, the fake `claude`.
   stored anchor and its offset, the marks in the source box, the quote on the answer box, and
   the space a drag brought in, dropped — that one read off the stored quote, because rendered
   text hides it.
-- `test_math.py` (10) — a canvas imported from `fixtures/math_doc.md`: inline math as
+- `test_math.py` (11) — a canvas imported from `fixtures/math_doc.md`: inline math as
   `<math>`, display math as a block, an `align` block, prices left as prose, a quote stored
   across a formula that matches its own offsets, that highlight restored after a reload, a
   formula-only selection wrapped in one mark, its edge drawn and leaving from the formula
-  rather than the box edge, and math rendered in an answer body.
+  rather than the box edge, and math rendered in an answer body. One more covers a display
+  formula, where the block `<math>` inside an inline mark leaves a slim empty fragment below
+  it: the edge belongs on the formula, not on that fragment at the left margin.
 - `test_chrome.py` (18) — find with its `N/M` counter and prev/next, the zoom group and its
   clamps, fit, the theme toggle and its persistence, the minimap and clicking it, the run
   pill, the breadcrumb home, and the new-canvas button. Two cover the Collapse all and

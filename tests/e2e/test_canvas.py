@@ -18,11 +18,19 @@ from tests.fixtures.editor import (
     open_editor,
     source_of,
 )
-from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, highlight
+from tests.fixtures.selection import (
+    QUOTE,
+    SELECT,
+    ask,
+    find_offsets,
+    highlight,
+    send_question,
+)
 from tests.fixtures.viewport import (
     box_rect,
     canvas_id_of,
     edge_start,
+    line_rects_of,
     rect_of,
     scale_of,
     to_client,
@@ -197,6 +205,26 @@ def test_the_lead_line_leaves_from_the_underline_not_through_the_words(canvas):
     start = edge_start(canvas, "b2")
     assert abs(start["y"] - (mark["y"] + mark["h"])) <= 2
     assert start["y"] > mark["y"] + mark["h"] / 2
+
+
+def test_a_wrapped_highlight_keeps_its_lead_line_attached(canvas):
+    """A wrapped mark measures as the union of all its lines, not the last one it ends on."""
+    start, _ = find_offsets(canvas, "b1", "The dominant sequence transduction models")
+    _, end = find_offsets(canvas, "b1", "an encoder and a decoder.")
+    canvas.evaluate(SELECT, ["b1", start, end])
+    send_question(canvas, "What does this passage describe?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+
+    lines = line_rects_of(canvas, "mark[data-anchor-edge]")
+    last_line = lines[-1]
+    # Preconditions: the mark really does wrap, and its widest line really does end
+    # well right of its last one, so no font or box width can make this vacuous.
+    assert len(lines) >= 2
+    widest = max(line["x"] + line["w"] for line in lines)
+    assert widest - (last_line["x"] + last_line["w"]) >= 40
+
+    start_x = edge_start(canvas, "b2")["x"]
+    assert abs(start_x - (last_line["x"] + last_line["w"])) <= 2
 
 
 def test_you_can_ask_again_inside_an_answer(canvas):

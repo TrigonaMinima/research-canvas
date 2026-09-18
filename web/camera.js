@@ -60,24 +60,24 @@ export class Camera {
   zoomIn() { this.zoomTo(this.scale * ZOOM_STEP); }
   zoomOut() { this.zoomTo(this.scale / ZOOM_STEP); }
 
-  // Screen rects in canvas coordinates. The reader form reads the origin once and
-  // is reused across a whole measure pass; rectOf is the single-shot version.
-  rectReader() {
+  // Screen rects in canvas coordinates. The origin is read once here and closed over,
+  // so a whole measure pass costs one read of the surface however many rects it maps.
+  // It takes a rect rather than an element, because what is worth measuring about an
+  // element is the caller's business: see endRect in anchors.js.
+  rectMapper() {
     const origin = this.el.getBoundingClientRect();
     const s = this.scale;
-    return (el) => {
-      const r = el.getBoundingClientRect();
-      return {
-        x: (r.left - origin.left) / s,
-        y: (r.top - origin.top) / s,
-        w: r.width / s,
-        h: r.height / s,
-      };
-    };
+    return (r) => ({
+      x: (r.left - origin.left) / s,
+      y: (r.top - origin.top) / s,
+      w: r.width / s,
+      h: r.height / s,
+    });
   }
 
+  // The single-shot version: one element, measured whole.
   rectOf(el) {
-    return this.rectReader()(el);
+    return this.rectMapper()(el.getBoundingClientRect());
   }
 
   toCanvas(clientX, clientY) {

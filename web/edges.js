@@ -1,5 +1,6 @@
 // Every edge is re-derived from the live DOM, so nothing has to be kept in sync.
 
+import { endRect } from './anchors.js';
 import { bounds, svg } from './geom.js';
 
 const LEAD_GAP = 14;
@@ -17,11 +18,11 @@ const HEADER = 34;
 const HIT_WIDTH = 14;
 
 export function collect(camera, canvasEl) {
-  const rectOf = camera.rectReader();
+  const toCanvas = camera.rectMapper(); // one read of the surface for the whole pass
   const boxes = [];
   const rects = new Map();
   canvasEl.querySelectorAll('[data-box]').forEach((el) => {
-    const r = rectOf(el);
+    const r = toCanvas(el.getBoundingClientRect());
     rects.set(el.dataset.box, r);
     boxes.push({ id: el.dataset.box, root: el.dataset.kind === 'root', ...r });
   });
@@ -32,7 +33,9 @@ export function collect(camera, canvasEl) {
     if (!target) return;
     const home = mark.closest('[data-box]');
     const source = home && rects.get(home.dataset.box);
-    const m = rectOf(mark);
+    // An edge leaves where the passage ends, which for a highlight over several
+    // lines is not the box around it. endRect owns that distinction.
+    const m = toCanvas(endRect(mark));
     // A mark that measures as nothing is not on the desk: folded away, hidden behind
     // the editor, or in a box being re-rendered. The cause does not matter, only that
     // an edge from the canvas origin would read as a line straight across the desk.

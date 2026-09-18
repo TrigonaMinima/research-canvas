@@ -22,19 +22,27 @@ def scale_of(page) -> float:
 
 # Client rects are what the browser will tell you; canvas coordinates are what the
 # app draws in. Every geometry assertion wants the second, so the conversion lives
-# here rather than inside a JS string in each test file.
-CANVAS_RECT = """(selector) => {
+# here rather than inside a JS string in each test file. Both readers below share it,
+# the way the app shares `camera.rectMapper`: origin and scale read once, then mapped.
+IN_CANVAS = """
   const surface = document.querySelector('[data-canvas]');
   const origin = surface.getBoundingClientRect();
   const scale = new DOMMatrixReadOnly(getComputedStyle(surface).transform).a;
-  const r = document.querySelector(selector).getBoundingClientRect();
-  return {
+  const toCanvas = (r) => ({
     x: (r.left - origin.left) / scale,
     y: (r.top - origin.top) / scale,
     w: r.width / scale,
     h: r.height / scale,
-  };
+  });
+"""
+
+CANVAS_RECT = (
+    "(selector) => {"
+    + IN_CANVAS
+    + """
+  return toCanvas(document.querySelector(selector).getBoundingClientRect());
 }"""
+)
 
 ORIGIN = """() => {
   const r = document.querySelector('[data-canvas]').getBoundingClientRect();
@@ -45,6 +53,23 @@ ORIGIN = """() => {
 def rect_of(page, selector: str) -> dict:
     """An element in canvas coordinates, the basis the edge paths are drawn in."""
     return page.evaluate(CANVAS_RECT, selector)
+
+
+# getBoundingClientRect() on an element spread over several lines returns the union
+# of its line boxes, not any one line. getClientRects() gives the boxes themselves,
+# and a mark around a block formula reports empty fragments among them too.
+CANVAS_LINE_RECTS = (
+    "(selector) => {"
+    + IN_CANVAS
+    + """
+  return [...document.querySelector(selector).getClientRects()].map(toCanvas);
+}"""
+)
+
+
+def line_rects_of(page, selector: str) -> list[dict]:
+    """An element's own boxes in canvas coordinates, one per line it covers."""
+    return page.evaluate(CANVAS_LINE_RECTS, selector)
 
 
 def box_rect(page, box: str) -> dict:
