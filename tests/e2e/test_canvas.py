@@ -19,14 +19,20 @@ from tests.fixtures.editor import (
 from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, highlight
 from tests.fixtures.viewport import (
     box_rect,
+    canvas_id_of,
     edge_start,
     rect_of,
+    scale_of,
     to_client,
     transform_of,
     view_centre,
+    zoom_to_fit,
 )
 
-from research_canvas.config import CHROME_HEIGHT, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
+from research_canvas.config import BOX_GAP, CHROME_HEIGHT, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
+
+# BOX_GAP is the exact fixed gap `restack()` must leave between two boxes stacked
+# under the same parent, read from the server's own copy rather than retyped.
 
 pytestmark = pytest.mark.e2e
 
@@ -238,10 +244,7 @@ def test_an_answer_box_can_be_deleted(canvas):
 def test_a_box_can_be_dragged_by_its_header(canvas):
     box = canvas.locator('[data-box="b1"]')
     before = box.bounding_box()
-    canvas.mouse.move(before["x"] + 120, before["y"] + 14)
-    canvas.mouse.down()
-    canvas.mouse.move(before["x"] + 320, before["y"] + 164, steps=8)
-    canvas.mouse.up()
+    drag_header_by(canvas, "b1", 200, 150)
     after = box.bounding_box()
     assert round(after["x"] - before["x"]) == 200
     assert round(after["y"] - before["y"]) == 150
@@ -294,10 +297,7 @@ def test_everything_survives_a_reload(canvas, server):
 def test_a_moved_box_stays_where_you_put_it(canvas):
     box = canvas.locator('[data-box="b1"]')
     before = box.bounding_box()
-    canvas.mouse.move(before["x"] + 120, before["y"] + 14)
-    canvas.mouse.down()
-    canvas.mouse.move(before["x"] + 300, before["y"] + 14, steps=6)
-    canvas.mouse.up()
+    drag_header_by(canvas, "b1", 180, 0)
     canvas.wait_for_timeout(400)
     canvas.reload()
     canvas.wait_for_selector('[data-box="b1"]')
@@ -483,6 +483,29 @@ def overlap(a: dict, b: dict) -> bool:
     )
 
 
+def gap_between(a: dict, b: dict) -> float:
+    """The vertical space between two stacked boxes, in canvas pixels."""
+    upper, lower = (a, b) if a["y"] <= b["y"] else (b, a)
+    return lower["y"] - (upper["y"] + upper["h"])
+
+
+def settled(page) -> None:
+    """Give the open-time restack pass its frames.
+
+    Opening a canvas schedules the pass behind two animation frames, and again behind
+    the font swap. `wait_for_selector` returns as soon as the box exists, which can be
+    before either has run, so a test that reads a rect right after it reads a race.
+    """
+    page.wait_for_function("() => document.fonts.status === 'loaded'")
+    page.evaluate(
+        """() => new Promise((done) => {
+            let left = 4;
+            const tick = () => (left-- ? requestAnimationFrame(tick) : done());
+            requestAnimationFrame(tick);
+        })"""
+    )
+
+
 def resize(page, box: str, edge: str, dx: float) -> None:
     """Drag one of a box's two handles sideways by dx screen pixels."""
     handle = page.locator(f'[data-box="{box}"] [data-resize="{edge}"]').bounding_box()
@@ -505,6 +528,18 @@ def jump_to(page, box: str) -> None:
     """Click the highlight that opened a box and wait for the camera to settle."""
     page.locator(f'[data-box="b1"] mark[data-target="{box}"]').first.click()
     page.wait_for_timeout(700)
+
+
+def drag_header_by(page, box: str, dx_canvas: float, dy_canvas: float) -> None:
+    """Drag a box by its header, moving it a given distance in canvas pixels."""
+    scale = scale_of(page)
+    handle = page.locator(f'[data-box="{box}"] .box__head').bounding_box()
+    x = handle["x"] + handle["width"] / 2
+    y = handle["y"] + handle["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx_canvas * scale, y + dy_canvas * scale, steps=8)
+    page.mouse.up()
 
 
 # --- resizing from either edge --------------------------------------------
@@ -774,4 +809,213 @@ def test_should_not_overlap_two_answers_asked_off_the_same_box(canvas):
     answer_from_root(canvas)
     ask(canvas, "b1", "layer normalisation", "What does it normalise?")
     canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
-    assert not overlap(box_rect(canvas, "b2"), box_rect(canvas, "b3"))
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert not overlap(b2, b3)
+    # A fixed gap is the requirement; "not overlapping" alone would also pass on the
+    # accidental spacing the old, height-guessing placement() already produces.
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+
+
+# --- restack: a fixed gap between boxes stacked under the same parent -----
+
+# Same phrase in every [[fake:long]] answer, regardless of the question asked, so a
+# test asking off an answer (rather than off the root) always has something to select.
+LONG_MARKER = "[[fake:long]]"
+LONG_ANSWER_QUOTE = "plays a specific role in the transformer architecture"
+
+
+def ask_long(page, parent: str, needle: str, question: str, box: str) -> None:
+    """Ask for a tall answer off `parent`, and wait for `box` to finish."""
+    ask(page, parent, needle, f"{question} {LONG_MARKER}")
+    page.wait_for_selector(f'[data-box="{box}"][data-status="done"]', timeout=30000)
+
+
+def three_long_answers(page) -> None:
+    """b2, b3 and b4 under the root, each tall enough to overlap the next."""
+    ask_long(page, "b1", "an encoder and a decoder", "Explain encoders", "b2")
+    ask_long(page, "b1", QUOTE, "Explain residual connections", "b3")
+    ask_long(page, "b1", "layer normalisation", "Explain layer normalisation", "b4")
+
+
+def test_should_stack_two_answers_a_fixed_gap_apart_once_a_tall_one_lands(canvas):
+    # Fired back to back, so b3 is placed while b2 is still a pending stub — the
+    # exact case placement()'s height guess gets wrong once the real content lands.
+    ask(canvas, "b1", QUOTE, f"Explain residual connections in depth {LONG_MARKER}")
+    ask(canvas, "b1", "layer normalisation", f"Explain layer normalisation in depth {LONG_MARKER}")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=30000)
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=30000)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+
+
+def test_should_keep_the_stacking_after_a_reload(canvas, server):
+    ask(canvas, "b1", QUOTE, f"Explain residual connections in depth {LONG_MARKER}")
+    ask(canvas, "b1", "layer normalisation", f"Explain layer normalisation in depth {LONG_MARKER}")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=30000)
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=30000)
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]')
+    # Read before settling on purpose. The open-time pass would re-derive the gap in the
+    # browser and hide a PATCH that never landed, so this reads the first paint.
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1), f"b2={b2} b3={b3}"
+
+    # And again from the server's own copy, which no browser pass can put right.
+    view = canvas.request.get(f"{server}/api/canvases/{canvas_id_of(canvas)}").json()
+    stored = {b["id"]: b["y"] for b in view["boxes"]}
+    assert stored["b3"] - (stored["b2"] + b2["h"]) == pytest.approx(BOX_GAP, abs=1), stored
+
+
+def test_should_stack_overlapping_boxes_when_the_canvas_is_opened(
+    page, server, fresh_home, monkeypatch
+):
+    """Two same-parent boxes written straight to disk, overlapping, bypassing
+    placement() entirely — this exercises the open-time restack pass on its own,
+    with no ask and no drag involved, the way fixtures/big_canvas.py seeds its canvas."""
+    from research_canvas import storage
+
+    monkeypatch.setattr(storage, "CANVAS_ROOT", fresh_home)
+    doc = "# A Document\n\nA paragraph long enough to pass the import minimum for a canvas.\n"
+    canvas_obj = storage.create_canvas(doc, web_search=False)
+    for box_id, question, y in (("b2", "First?", 0.0), ("b3", "Second?", 60.0)):
+        box = storage.add_answer(
+            canvas_obj, parent_id=canvas_obj.root_id, question=question, x=900.0, y=y
+        )
+        box.status = "done"
+        storage.write_body(canvas_obj.id, box.id, f"The answer for {box_id}, short and plain.\n")
+    storage.save(canvas_obj)
+
+    page.goto(f"{server}/?c={canvas_obj.id}")
+    page.wait_for_selector('[data-box="b3"]')
+    settled(page)
+    b2_rect, b3_rect = box_rect(page, "b2"), box_rect(page, "b3")
+    # b3 was seeded at y=60, so the fixture started overlapped if b2 renders taller than
+    # that. Read after the pass, which moves tops and never changes a height.
+    assert b2_rect["h"] > 60, f"fixture did not start overlapped: b2={b2_rect}"
+    assert gap_between(b2_rect, b3_rect) == pytest.approx(BOX_GAP, abs=1)
+
+
+def test_should_close_the_gap_when_a_box_above_is_minimised(canvas):
+    three_long_answers(canvas)
+
+    settled(canvas)  # record where the stack really lands, not a mid-pass y
+    before_b4_y = box_rect(canvas, "b4")["y"]
+    canvas.click('[data-box="b3"] [data-collapse]')
+    settled(canvas)
+
+    b2, b3, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b3"), box_rect(canvas, "b4")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
+    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
+    assert b4["y"] < before_b4_y
+
+
+def test_should_reopen_the_gap_when_a_minimised_box_is_expanded(canvas):
+    three_long_answers(canvas)
+
+    settled(canvas)  # record where the stack really lands, not a mid-pass y
+    settled_b4_y = box_rect(canvas, "b4")["y"]
+    collapse = canvas.locator('[data-box="b3"] [data-collapse]')
+    collapse.click()
+    settled(canvas)
+    collapse.click()
+    settled(canvas)
+
+    b2, b3, b4 = box_rect(canvas, "b2"), box_rect(canvas, "b3"), box_rect(canvas, "b4")
+    assert gap_between(b2, b3) == pytest.approx(BOX_GAP, abs=1)
+    assert gap_between(b3, b4) == pytest.approx(BOX_GAP, abs=1)
+    assert b4["y"] == pytest.approx(settled_b4_y, abs=1)
+
+
+def test_should_leave_a_box_at_another_depth_alone(canvas):
+    """A child is never stacked with its own parent, even if a drag makes them overlap."""
+    answer_from_root(canvas)  # b2, depth 1
+    ask(canvas, "b2", "carries the input", "Why add it back?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+
+    zoom_to_fit(canvas)  # both boxes on screen before the drag
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    drag_header_by(canvas, "b3", b2["x"] - b3["x"], b2["y"] - b3["y"])
+
+    dropped_b2, dropped_b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert overlap(dropped_b2, dropped_b3), (
+        f"drag did not land on the parent: {dropped_b2} {dropped_b3}"
+    )
+
+    settled(canvas)
+    settled_b2, settled_b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    assert settled_b2["y"] == pytest.approx(dropped_b2["y"], abs=1)
+    assert settled_b3["y"] == pytest.approx(dropped_b3["y"], abs=1)
+
+
+def test_should_not_move_a_sibling_under_a_different_parent(canvas):
+    """Two depth-2 boxes with different parents can land in the same column (both
+    parents are the same width, so both children sit one COLUMN_GAP further right).
+    Forcing them to overlap, the way test_should_leave_a_box_at_another_depth_alone
+    forces a child onto its own parent, is the only way this test can actually go red
+    if a restack pass ever groups by depth instead of by parent: recording "before"
+    and "after" a mere reload cannot, because a depth-grouped restack would already
+    have coupled them the first time it ran, on the earlier run finishing, and every
+    later trigger would just reproduce that same, already-wrong pair of positions."""
+    ask(canvas, "b1", QUOTE, "What is a residual connection?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+    ask(canvas, "b2", "carries the input", "Why add it back?")
+    canvas.wait_for_selector('[data-box="b4"][data-status="done"]', timeout=20000)
+    ask(canvas, "b3", "carries the input", "Why write it that way?")
+    canvas.wait_for_selector('[data-box="b5"][data-status="done"]', timeout=20000)
+
+    zoom_to_fit(canvas)  # every box on screen before the drag
+
+    b4, b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
+    assert b4["x"] == pytest.approx(b5["x"], abs=1), f"not in the same column: b4={b4} b5={b5}"
+
+    drag_header_by(canvas, "b5", b4["x"] - b5["x"], b4["y"] - b5["y"])
+    dropped_b4, dropped_b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
+    assert overlap(dropped_b4, dropped_b5), (
+        f"drag did not land on the sibling: {dropped_b4} {dropped_b5}"
+    )
+
+    settled(canvas)
+    settled_b4, settled_b5 = box_rect(canvas, "b4"), box_rect(canvas, "b5")
+    assert settled_b4["y"] == pytest.approx(dropped_b4["y"], abs=1)
+    assert settled_b5["y"] == pytest.approx(dropped_b5["y"], abs=1)
+
+
+def test_should_restack_when_a_box_is_dragged_onto_a_sibling(canvas):
+    answer_from_root(canvas)  # b2
+    ask(canvas, "b1", "layer normalisation", "What does it normalise?")
+    canvas.wait_for_selector('[data-box="b3"][data-status="done"]', timeout=20000)
+
+    b2, b3 = box_rect(canvas, "b2"), box_rect(canvas, "b3")
+    lower, lower_rect, upper_rect = ("b3", b3, b2) if b3["y"] > b2["y"] else ("b2", b2, b3)
+    drag_header_by(canvas, lower, 0, upper_rect["y"] - lower_rect["y"])
+    settled(canvas)
+
+    assert gap_between(box_rect(canvas, "b2"), box_rect(canvas, "b3")) == pytest.approx(
+        BOX_GAP, abs=1
+    )
+
+
+STACKED = ("b2", "b3", "b4")
+
+
+def test_should_move_nothing_on_a_second_refresh(canvas):
+    ask_long(canvas, "b1", QUOTE, "Explain residual connections", "b2")
+    ask_long(canvas, "b1", "layer normalisation", "Explain layer normalisation", "b3")
+    ask_long(canvas, "b2", LONG_ANSWER_QUOTE, "Go deeper", "b4")
+
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b4"][data-status="done"]')
+    settled(canvas)
+    first = {box: box_rect(canvas, box) for box in STACKED}
+
+    canvas.reload()
+    canvas.wait_for_selector('[data-box="b4"][data-status="done"]')
+    settled(canvas)
+    second = {box: box_rect(canvas, box) for box in STACKED}
+
+    for box in STACKED:
+        assert second[box]["y"] == pytest.approx(first[box]["y"], abs=1), box

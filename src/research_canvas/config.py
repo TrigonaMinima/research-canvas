@@ -122,6 +122,8 @@ MIN_SELECTION_CHARS = 3
 # The chrome bar owns the top of the window. The camera keeps a revealed box clear
 # of it, and styles.css mirrors this into --chrome-h.
 CHROME_HEIGHT = 53
+# Two stacked answers at one depth keep this gap, so a column reads as one column.
+BOX_GAP = 40
 
 # --- box vocabulary -----------------------------------------------------------
 

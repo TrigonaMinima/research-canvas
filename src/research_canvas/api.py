@@ -16,6 +16,7 @@ from . import context, md, runner, storage
 from .anchors import Anchor
 from .config import (
     BLANK_BODY_MESSAGE,
+    BOX_GAP,
     CHROME_HEIGHT,
     DISPLAY_NAME,
     EDIT_WHILE_RUNNING_MESSAGE,
@@ -107,6 +108,7 @@ def client_config() -> dict:
         "maxBoxWidth": MAX_BOX_WIDTH,
         "minSelectionChars": MIN_SELECTION_CHARS,
         "chromeHeight": CHROME_HEIGHT,
+        "boxGap": BOX_GAP,
         "unfinished": sorted(UNFINISHED),
         "stillRunningMessage": STILL_RUNNING_MESSAGE,
         "maxInstructionsChars": MAX_INSTRUCTIONS_CHARS,

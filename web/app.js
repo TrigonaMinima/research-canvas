@@ -5,6 +5,7 @@ import { api } from './api.js';
 import { Camera, CHROME_GAP } from './camera.js';
 import { offsetsOf } from './anchors.js';
 import {
+  BOX_GAP,
   CHROME_HEIGHT,
   DISPLAY_NAME,
   MAX_BOX_WIDTH,
@@ -172,6 +173,11 @@ async function open(id, { fresh = false, loaded = null } = {}) {
     camera.set({ tx: c.tx, ty: c.ty, scale: c.scale });
   }
   render();
+  scheduleRestack();
+  // A local face swapping in reflows every box, so measure again once it has. Both
+  // paths run: `fonts.ready` has already resolved on a canvas switch, and the frame
+  // path on first load would read the text the swap is about to replace.
+  document.fonts.ready.then(() => scheduleRestack());
   if (fresh) flash('Canvas created — highlight any passage to ask');
 
   for (const box of running()) listen(box.id);
@@ -243,6 +249,7 @@ function listen(boxId) {
     state.live.delete(boxId);
     stop();
     render();
+    scheduleRestack();
   });
 
   source.onerror = () => {
@@ -399,7 +406,6 @@ function clientToCanvas(rect) {
 // Free space to the right of the source box. The camera never moves for this.
 // A box now opens at its parent's width, so the collision test reads the widths it
 // is actually given rather than the 420px the answer box used to be.
-const GUTTER = 40;
 const COLUMN_GAP = 180;
 const ASSUMED_HEIGHT = 420;
 
@@ -408,11 +414,87 @@ function placement(sourceRect, anchorRect, width) {
   let y = Math.max(anchorRect.y + anchorRect.h - 40, sourceRect.y);
   const taken = state.geometry.boxes;
   while (taken.some((b) =>
-    x < b.x + b.w + GUTTER && x + width + GUTTER > b.x &&
-    y < b.y + b.h + GUTTER && y + ASSUMED_HEIGHT > b.y - GUTTER)) {
+    x < b.x + b.w + BOX_GAP && x + width + BOX_GAP > b.x &&
+    y < b.y + b.h + BOX_GAP && y + ASSUMED_HEIGHT > b.y - BOX_GAP)) {
     y += 80;
   }
   return { x, y };
+}
+
+// --- keeping a column tidy ----------------------------------------------------
+
+// A box is placed before its answer exists, so its height is a guess, and the heights
+// around it keep changing afterwards as answers land, boxes fold, and bodies are
+// edited. Once the real heights are on the desk, the answers off one box are stacked
+// into one column: the top one stays where the reader put it, and every box under it
+// is *assigned* its place, up or down. Assigning rather than nudging is what makes a
+// second pass move nothing.
+
+// Sub-pixel measurement noise is not a reason to write to the server.
+const SETTLED = 0.5;
+
+// One column: the top box keeps its place, and each box under it is assigned
+// `previous.y + previous.h + BOX_GAP`. Returns whether anything moved.
+function stackColumn(column, rects, patch) {
+  let moved = false;
+  column.sort((a, b) => a.y - b.y);
+  let place = null; // where the next box down belongs; null for the head
+  for (const box of column) {
+    if (place !== null && Math.abs(box.y - place) > SETTLED) {
+      box.y = place;
+      patch[box.id] = { ...patch[box.id], y: box.y };
+      moved = true;
+    }
+    place = box.y + rects.get(box.id).h + BOX_GAP;
+  }
+  return moved;
+}
+
+function restack(extra) {
+  const patch = { ...extra };
+  let moved = false;
+  // Not while a drag is under the pointer or an editor is open: one is already writing
+  // `top` every frame, and the other has replaced the body with a pane whose height is
+  // the editor's, not the answer's. The patch still goes, so a gesture is never lost.
+  if (state.canvas && !gesture && !edit) {
+    const rects = new Map(state.geometry.boxes.map((b) => [b.id, b]));
+    // Grouped by parent rather than by where the boxes measure. The answers off one box
+    // all open at one x, so the parent *is* the column; and a left-edge resize moves x,
+    // which would let a geometric grouping split a stacked pair and yank it back.
+    const columns = new Map();
+    for (const box of state.canvas.boxes) {
+      if (!box.parent || !rects.has(box.id)) continue;
+      if (!columns.has(box.parent)) columns.set(box.parent, []);
+      columns.get(box.parent).push(box);
+    }
+    for (const column of columns.values()) {
+      moved = stackColumn(column, rects, patch) || moved;
+    }
+  }
+  if (state.canvas && Object.keys(patch).length) {
+    api.patchCanvas(state.canvas.id, { boxes: patch }).catch(() => {});
+  }
+  // `render` is the one writer of a box's top, and it queues the re-measure the edges
+  // and the minimap need. A pass that moved nothing has nothing to redraw.
+  if (moved) render();
+}
+
+// The pass reads every height before it writes any top, so it cannot live inside
+// `measure()`, which runs on every pan, every zoom and every frame of a drag.
+let pendingRestack = null; // the patch waiting for the next pass; null when none is queued
+
+function scheduleRestack(extra) {
+  const queued = pendingRestack !== null;
+  pendingRestack = { ...pendingRestack, ...extra };
+  if (queued) return;
+  // Two frames: one for the browser to lay out what `render` just wrote, one to read
+  // the heights that came out of it.
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    const patch = pendingRestack;
+    pendingRestack = null;
+    measure();
+    restack(patch);
+  }));
 }
 
 async function submitAsk() {
@@ -556,6 +638,7 @@ function closeEditor() {
   if (edit.pane) edit.pane.remove();
   edit = null;
   render();
+  scheduleRestack();
 }
 
 function saveEdit() {
@@ -632,9 +715,9 @@ function setCollapsed(box, collapsed) {
   box.collapsed = collapsed;
   if (collapsed && edit && edit.id === box.id) closeEditor();
   render();
-  measure(); // the edges leave a folded box from its header, not from its body
   runFind(); // folding changes what is findable, and a stale range has no rect to fly to
-  api.patchCanvas(state.canvas.id, { boxes: { [box.id]: { collapsed } } }).catch(() => {});
+  // The fold and whatever it moves go in one patch, so two writes cannot race.
+  scheduleRestack({ [box.id]: { collapsed } });
 }
 
 // --- pointer behaviour --------------------------------------------------------
@@ -709,8 +792,7 @@ window.addEventListener('mouseup', () => {
   const patch = done.kind === 'move'
     ? { x: done.box.x, y: done.box.y }
     : { x: done.box.x, w: done.box.w }; // a left-edge drag moves the box as it widens
-  api.patchCanvas(state.canvas.id, { boxes: { [done.box.id]: patch } }).catch(() => {});
-  measure();
+  scheduleRestack({ [done.box.id]: patch });
 });
 
 el.viewport.addEventListener('mouseup', () => {

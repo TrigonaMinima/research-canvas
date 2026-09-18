@@ -51,6 +51,18 @@ def box_rect(page, box: str) -> dict:
     return rect_of(page, f'[data-box="{box}"]')
 
 
+def canvas_id_of(page) -> str:
+    """The open canvas's id, the way the app itself records it: in the query string."""
+    return page.evaluate("() => new URLSearchParams(location.search).get('c')")
+
+
+def zoom_to_fit(page) -> None:
+    """Fit every box on screen and wait for the camera, which flips `data-anim` to '0'
+    when its own transition has landed. No fixed sleep to outgrow."""
+    page.click("[data-zoom-fit]")
+    page.wait_for_function("() => document.querySelector('[data-canvas]').dataset.anim === '0'")
+
+
 def to_client(page, x: float, y: float) -> tuple[float, float]:
     """The inverse: a canvas-space point in client pixels, for a mouse click."""
     left, top = page.evaluate(ORIGIN)

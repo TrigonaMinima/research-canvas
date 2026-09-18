@@ -7,8 +7,9 @@ echoed back in the answer, which lets a test assert that path-only context arriv
 
 Set RESEARCH_CANVAS_CLAUDE to this file to use it.
 Failure paths are chosen per run, so one server can serve every test: put
-`[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, or `[[fake:slowerror]]` in the
-question. FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things for every run.
+`[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`,
+or `[[fake:long]]` in the question. FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things
+for every run.
 """
 
 from __future__ import annotations
@@ -18,6 +19,20 @@ import os
 import re
 import sys
 import time
+
+# Enough paragraphs, at the default 680px box width, to render an answer box well
+# past the ASSUMED_HEIGHT the client guesses before content lands (420px), landing
+# in the 1500-2500px range a restack pass actually has to deal with. The content
+# itself is filler; only the length matters here.
+LONG_PARAGRAPHS = [
+    f"Paragraph {i}: this sentence plays a specific role in the transformer architecture, "
+    "and this long-mode answer restates that role in enough sentences to push the rendered "
+    "box well past the height a stub answer would reach. The point of this paragraph is not "
+    "the content, it is the length: each one runs several lines at the box's default width, "
+    "so stacking a handful of them produces a box that towers over the fixed placement guess "
+    "baked into the client before any restacking pass runs."
+    for i in range(1, 10)
+]
 
 
 def emit(payload: dict) -> None:
@@ -55,12 +70,17 @@ def main() -> int:
     if mode == "crash":
         return 1  # Dies without a result event, the way a killed process would.
 
-    chunks = [
-        "A residual connection ",
-        "carries the input of a sublayer ",
-        "around it and adds it back to the output. ",
-        f"[prompt-bytes:{len(prompt)}]",
-    ]
+    if mode == "long":
+        # One chunk per paragraph, each followed by a blank line so the markdown
+        # renderer breaks them apart rather than folding them into one <p>.
+        chunks = [f"{paragraph}\n\n" for paragraph in LONG_PARAGRAPHS]
+    else:
+        chunks = [
+            "A residual connection ",
+            "carries the input of a sublayer ",
+            "around it and adds it back to the output. ",
+            f"[prompt-bytes:{len(prompt)}]",
+        ]
     for chunk in chunks:
         emit(
             {

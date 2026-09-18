@@ -65,6 +65,7 @@ CLIENT_CONFIG_KEYS = {
     "maxBoxWidth",
     "minSelectionChars",
     "chromeHeight",
+    "boxGap",
     "unfinished",
     "stillRunningMessage",
     "maxInstructionsChars",
