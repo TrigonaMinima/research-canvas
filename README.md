@@ -34,6 +34,7 @@ plain files in a folder you own. The only thing that leaves is the Claude reques
 - Ask from inside an answer. Depth is unlimited.
 - Drag boxes, widen them from either edge, minimise them to their header, delete them.
 - Edit any box in place, including the imported document.
+- Hold several boxes at once, by cmd-click or by sweeping a band across the desk.
 - Find in canvas, with a match counter and previous and next.
 - Read the whole canvas at a glance in the minimap, and switch between light and dark.
 - Write standing instructions once and have every answer follow them.

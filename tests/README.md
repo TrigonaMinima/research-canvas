@@ -1,13 +1,13 @@
 # Tests
 
-405 tests. 402 run on every `make test`; the 3 marked `live` spend real Claude usage and
+436 tests. 433 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          402 tests, no usage spent
+make test          unit + api + e2e          433 tests, no usage spent
 make test-unit     tests/unit                 82
 make test-api      tests/api                  77  (3 live deselected)
-make test-e2e      tests/e2e                 246
+make test-e2e      tests/e2e                 277
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 82 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 61 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 203 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 246 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 234 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 277 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
@@ -96,7 +96,7 @@ a snap can be shown stopping at a block boundary instead of reading `PaperEach` 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (203)
+### 4 — Frontend against the real API (234)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -177,6 +177,19 @@ The same browser, the real server, the real storage, the fake `claude`.
   one pass, the answers re-seated where their passages are now rather than where they were,
   the same correction inside an answer body and inside a folded box, and the corrected number
   still on disk after a reload.
+- `test_select.py` (31) — more than one box held at once. Seven cover cmd+click: a box ringed,
+  a second click letting it go, the document never selected, a second box joining the first,
+  and the three gestures a modifier must not set off underneath it, which are the camera
+  jumping to a highlight, the box moving from its header, and the ask popover opening on a
+  drag inside a body. Eight cover the band: every answer it sweeps, only the boxes it covers,
+  the camera left where it was, bare desk selecting nothing, a plain drag still panning, the
+  band removed on release, and a context menu dropping it rather than leaving it stuck to the
+  pointer. Ten cover the Select toggle, for a machine or a hand where the modifier is awkward:
+  the button pressed in and out, a band and a click with no key held, the selection surviving
+  the mode ending, panning again once it is off, the first Escape clearing the selection and
+  the second leaving the mode, and a canvas switch dropping both. Six cover letting go:
+  Escape, a click on bare desk, another canvas, a pan that keeps it, a band over boxes that
+  are all selected removing them, and a band over a mix adding the rest.
 - `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
   on, since a caret hit-test lands between glyphs and a press past the middle of a letter
   used to cost that letter for good. Six read the popover quote: a start inside a word, an
@@ -208,7 +221,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 246)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 277)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and

@@ -85,7 +85,7 @@ export function ensure(layer, box) {
 }
 
 export function update(el, box, {
-  html, anchors, inbound, parent, liveText, queuedAhead, editing,
+  html, anchors, inbound, parent, liveText, queuedAhead, editing, selected,
 }) {
   el.dataset.status = box.status;
   el.style.left = `${box.x}px`;
@@ -101,6 +101,11 @@ export function update(el, box, {
   const collapsed = !!box.collapsed;
   if (collapsed) el.dataset.collapsed = '1';
   else delete el.dataset.collapsed;
+
+  // Selection lives in app.js, not on the box: one attribute is all the stylesheet
+  // needs to read.
+  if (selected) el.dataset.selected = '1';
+  else delete el.dataset.selected;
 
   const fold = el.querySelector('[data-collapse]');
   const label = collapsed ? 'Expand' : 'Minimise';

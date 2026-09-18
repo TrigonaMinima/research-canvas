@@ -49,6 +49,7 @@ const el = {
   paste: $('[data-paste]'),
   note: $('[data-note]'),
   list: $('[data-canvas-list]'),
+  selectMode: $('[data-select-mode]'),
 };
 
 const state = {
@@ -58,6 +59,8 @@ const state = {
   streams: new Map(),  // boxId -> EventSource
   geometry: { boxes: [], edges: [] },
   find: { ranges: [], index: 0 },
+  // Which boxes a bulk command acts on. Browser-only: a selection is a thought, not a canvas.
+  selected: new Set(),
 };
 
 const camera = new Camera(el.canvas, measure);
@@ -121,6 +124,7 @@ function render() {
   el.canvas.querySelectorAll('[data-box]').forEach((node) => {
     if (!alive.has(node.dataset.box)) node.remove();
   });
+  for (const id of state.selected) if (!alive.has(id)) state.selected.delete(id);
 
   const busy = running();
   const queuedAhead = busy.filter((b) => b.status === 'running').length;
@@ -140,6 +144,7 @@ function render() {
       liveText: state.live.get(box.id),
       queuedAhead,
       editing: !!edit && box.id === edit.id,
+      selected: state.selected.has(box.id),
     }));
   }
   if (drifted.length) reanchor(drifted);
@@ -176,6 +181,8 @@ function measure() {
 
 function adopt(view) {
   state.canvas = view;
+  state.selected.clear(); // a selection belongs to the desk it was made on
+  setSelectMode(false);
   state.bodies = view.bodies || {};
   setTheme(view.theme, false);
 }
@@ -973,15 +980,114 @@ const setCollapsed = (box, collapsed) => applyCollapsed([box], collapsed);
 const setAllCollapsed = (collapsed) =>
   applyCollapsed(state.canvas ? state.canvas.boxes : [], collapsed);
 
+// --- the selection ------------------------------------------------------------
+
+// Cmd is the shortcut for a reader who knows it. The button is for the one who drags
+// and gets a pan, which is what the desk does with a plain drag everywhere else.
+let selectMode = false;
+
+function setSelectMode(on) {
+  selectMode = on;
+  el.selectMode.setAttribute('aria-pressed', String(on));
+  // A different name from the button's own, so one selector never means both.
+  if (on) el.desk.dataset.selecting = '1';
+  else delete el.desk.dataset.selecting;
+}
+
+// Both mouse handlers and the click handler ask the same question of an event.
+const selecting = (event) => selectMode || event.metaKey || event.ctrlKey;
+
+// The document is never selected. It is the desk everything else hangs off, and a
+// command aimed at a selection means the answers, never the thing they came from.
+const selectable = (id) => !!(boxById(id) || {}).parent;
+
+function toggleSelect(id) {
+  if (!selectable(id)) return;
+  if (!state.selected.delete(id)) state.selected.add(id);
+  render();
+}
+
+function clearSelection() {
+  state.selected.clear();
+  render();
+}
+
+// Client rects on both sides of the comparison. The band is drawn in client pixels and
+// the boxes are laid out in canvas pixels, and one conversion is one place to be wrong.
+function selectWithin(rect) {
+  const hits = [];
+  for (const node of el.canvas.querySelectorAll('[data-box]')) {
+    if (!selectable(node.dataset.box)) continue;
+    const r = node.getBoundingClientRect();
+    if (r.left < rect.right && r.right > rect.left &&
+        r.top < rect.bottom && r.bottom > rect.top) hits.push(node.dataset.box);
+  }
+  // Sweeping boxes that are all already in takes them back out, so the gesture that
+  // made a selection can undo it. A sweep that catches anything new adds instead: the
+  // reader is widening the selection, not asking for a swap.
+  const held = hits.every((id) => state.selected.has(id));
+  for (const id of hits) {
+    if (held) state.selected.delete(id);
+    else state.selected.add(id);
+  }
+  render();
+}
+
+function openBand() {
+  const node = document.createElement('div');
+  node.className = 'band';
+  node.dataset.band = '1';
+  node.setAttribute('aria-hidden', 'true');
+  el.desk.append(node);
+  return node;
+}
+
+function sizeBand(g, x, y) {
+  g.rect = { left: Math.min(g.x, x), top: Math.min(g.y, y),
+             right: Math.max(g.x, x), bottom: Math.max(g.y, y) };
+  g.el.style.left = `${g.rect.left}px`;
+  g.el.style.top = `${g.rect.top}px`;
+  g.el.style.width = `${g.rect.right - g.rect.left}px`;
+  g.el.style.height = `${g.rect.bottom - g.rect.top}px`;
+}
+
 // --- pointer behaviour --------------------------------------------------------
 
 let gesture = null;
 
+// Whether the press that is about to become a click moved anything. A pan and a band
+// both end over bare desk, and neither one is a click on it.
+let dragged = false;
+
+// A band outlives its drag whenever the mouseup never arrives: a macOS ctrl+click opens
+// the context menu and eats it, and so does releasing the button outside the window.
+// Left alone it is a rectangle stuck on the desk, and a `gesture` that never clears
+// stands the restack pass down for good.
+function cancelMarquee() {
+  if (gesture?.kind !== 'marquee') return;
+  gesture.el.remove();
+  gesture = null;
+}
+
+window.addEventListener('blur', cancelMarquee);
+window.addEventListener('contextmenu', cancelMarquee);
+
 el.viewport.addEventListener('mousedown', (event) => {
   if (event.button !== 0) return;
+  dragged = false;
   const resize = event.target.closest('[data-resize]');
   const drag = event.target.closest('[data-drag]');
   const box = event.target.closest('[data-box]');
+
+  // Cmd or Ctrl means selecting. On a box, swallow the press so it neither drags the
+  // box nor starts a text selection, and let the click handler do the toggling.
+  if (selecting(event)) {
+    if (!box && !event.target.closest('[data-edge]')) {
+      gesture = { kind: 'marquee', x: event.clientX, y: event.clientY, el: openBand() };
+    }
+    event.preventDefault();
+    return;
+  }
 
   if (resize && box) {
     const model = boxById(box.dataset.box);
@@ -1005,6 +1111,10 @@ el.viewport.addEventListener('mousedown', (event) => {
 window.addEventListener('mousemove', (event) => {
   if (!gesture) return;
   gesture.moved = true;
+  if (gesture.kind === 'marquee') {
+    sizeBand(gesture, event.clientX, event.clientY);
+    return;
+  }
   if (gesture.kind === 'pan') {
     camera.panBy(event.clientX - gesture.x, event.clientY - gesture.y);
     gesture.x = event.clientX;
@@ -1035,11 +1145,17 @@ window.addEventListener('mouseup', () => {
   if (!gesture) return;
   const done = gesture;
   gesture = null;
+  dragged = !!done.moved;
   delete el.desk.dataset.dragging;
 
   if (done.kind === 'pan') {
     if (done.moved) saveCamera();
     return;
+  }
+  if (done.kind === 'marquee') {
+    done.el.remove();
+    if (done.moved) selectWithin(done.rect);
+    return; // before the patch below, which reads a box this gesture never had
   }
   if (!done.moved) return; // a click on a button in the header is not a drag
   if (done.kind === 'resize') {
@@ -1090,6 +1206,19 @@ document.addEventListener('click', (event) => {
   const modified =
     event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
   if (modified && hit('a[href]')) return;
+
+  // Selecting, not jumping. Without this the mark below would fly the camera away.
+  if (selecting(event) && hit('[data-viewport]')) {
+    const picked = hit('[data-box]');
+    if (picked) { toggleSelect(picked.dataset.box); return; }
+  }
+
+  // Bare desk: the shortest way out of a selection, and the one a reader tries first.
+  // A drag that ended here panned the desk or swept a band, so it is not a click on it.
+  if (hit('[data-viewport]') && !hit('[data-box]') && !hit('[data-edge]')) {
+    if (!dragged && state.selected.size) clearSelection();
+    return;
+  }
 
   const mark = hit('mark[data-anchor]');
   if (mark) { revealBox(mark.dataset.target); return; }
@@ -1179,6 +1308,8 @@ document.addEventListener('keydown', (event) => {
   if (panel) closeInstructions();
   else if (ask) closeAsk();
   else if (edit) closeEditor();
+  else if (state.selected.size) clearSelection();
+  else if (selectMode) setSelectMode(false);
 });
 
 el.findInput.addEventListener('input', runFind);
@@ -1189,6 +1320,7 @@ $('[data-zoom-out]').addEventListener('click', () => { camera.zoomOut(); render(
 $('[data-zoom-fit]').addEventListener('click', () => camera.fit(state.geometry.boxes));
 $('[data-fold-all]').addEventListener('click', () => setAllCollapsed(true));
 $('[data-unfold-all]').addEventListener('click', () => setAllCollapsed(false));
+el.selectMode.addEventListener('click', () => setSelectMode(!selectMode));
 $('[data-theme-toggle]').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 $('[data-crumb-home]').addEventListener('click', showEmpty);

@@ -41,7 +41,11 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
   background-image:radial-gradient(var(--dot) 1px,transparent 1px);background-size:26px 26px;
 }
 .vp{position:absolute;inset:0}
+/* The drag-out selection rectangle. JS hands it client pixels, so it is placed
+   like the pointer is, not like the canvas is. Over the edges, under the minimap. */
+.band{position:fixed;pointer-events:none;border:1px solid var(--accent);background:var(--mark);z-index:10}
 .desk[data-dragging="1"] .vp{cursor:grabbing}
+.desk[data-selecting="1"] .vp{cursor:crosshair}
 .canvas{position:absolute;left:0;top:0;width:1px;height:1px;transform-origin:0 0}
 .canvas[data-anim="1"]{transition:transform .44s cubic-bezier(.22,.7,.2,1)}
 .edges{position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5}
@@ -57,6 +61,9 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box[data-status="failed"],.box[data-status="interrupted"]{
   border-color:color-mix(in oklab,var(--warn) 45%,var(--line));
 }
+/* A ring in the shadow, because outline is spoken for by :focus-visible and the
+   landing flash, and border-color by the failed state above. */
+[data-box][data-selected="1"]{box-shadow:var(--shadow),0 0 0 2px var(--accent)}
 .box--root{padding:46px 54px 52px}
 .box--answer{padding:24px 28px 26px}
 
@@ -209,6 +216,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 .zoomgroup .level{font:500 11.5px/1 var(--sans);color:var(--ink2);min-width:38px;text-align:center}
 .zoomgroup .fit{border-left:1px solid var(--line);color:var(--ink2);font:500 11.5px/1 var(--sans);padding:9px 10px;letter-spacing:.04em}
 .chrome-btn{height:31px;border:1px solid var(--line);border-radius:3px;background:var(--paper);color:var(--ink2);cursor:pointer;font:500 11.5px/1 var(--sans);padding:0 11px;letter-spacing:.04em}
+.chrome-btn[aria-pressed="true"]{border-color:var(--accent);background:var(--soft);color:var(--accent)}
 .chrome-btn--accent{border-color:var(--accent);background:var(--accent);color:var(--paper);font:500 12px/1 var(--sans);padding:0 12px}
 
 /* --- minimap -------------------------------------------------------------- */
