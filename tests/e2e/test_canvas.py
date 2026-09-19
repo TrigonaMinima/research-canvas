@@ -84,6 +84,17 @@ def test_highlighting_a_passage_opens_the_ask_popover(canvas):
     expect(canvas.locator("[data-ask-quote]")).to_contain_text(QUOTE)
 
 
+def test_the_ask_popover_keeps_its_send_button_on_screen_in_a_short_window(canvas):
+    canvas.set_viewport_size({"width": 1440, "height": 460})
+    highlight(canvas, "b1", QUOTE)
+    canvas.wait_for_selector("[data-ask]")
+    on_screen = canvas.evaluate("""() => {
+      const box = document.querySelector('[data-ask-send]').getBoundingClientRect();
+      return box.bottom <= window.innerHeight && box.top >= 0;
+    }""")
+    assert on_screen
+
+
 def test_the_ask_popover_can_be_dismissed(canvas):
     highlight(canvas, "b1", QUOTE)
     canvas.click("[data-ask-cancel]")

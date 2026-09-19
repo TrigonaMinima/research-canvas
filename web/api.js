@@ -49,4 +49,10 @@ export const api = {
 
   writeInstructions: (markdown) =>
     send('/api/instructions', { method: 'PUT', ...asJson({ markdown }) }),
+
+  // Global as well: the chips the ask popover offers, whatever canvas is open.
+  readPresets: () => send('/api/presets'),
+
+  writePresets: (presets) =>
+    send('/api/presets', { method: 'PUT', ...asJson({ presets }) }),
 };

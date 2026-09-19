@@ -14,6 +14,9 @@ export const BOX_GAP = served.boxGap;
 export const ANCHOR_LEAD = served.anchorLead;
 export const STILL_RUNNING_MESSAGE = served.stillRunningMessage;
 export const MAX_INSTRUCTIONS_CHARS = served.maxInstructionsChars;
+export const MAX_PRESETS = served.maxPresets;
+export const MAX_PRESET_LABEL_CHARS = served.maxPresetLabelChars;
+export const MAX_PRESET_QUESTION_CHARS = served.maxPresetQuestionChars;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);

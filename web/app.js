@@ -12,6 +12,9 @@ import {
   DISPLAY_NAME,
   MAX_BOX_WIDTH,
   MAX_INSTRUCTIONS_CHARS,
+  MAX_PRESET_LABEL_CHARS,
+  MAX_PRESET_QUESTION_CHARS,
+  MAX_PRESETS,
   MIN_BOX_WIDTH,
   MIN_SELECTION_CHARS,
   STILL_RUNNING_MESSAGE,
@@ -65,6 +68,8 @@ const state = {
   find: { ranges: [], index: 0 },
   // Which boxes a bulk command acts on. Browser-only: a selection is a thought, not a canvas.
   selected: new Set(),
+  // The question chips, fetched once at boot. Global, so no canvas switch clears them.
+  presets: [],
 };
 
 const camera = new Camera(el.canvas, measure);
@@ -312,6 +317,26 @@ function listen(boxId) {
 
 let ask = null; // { boxEl, offsets, rect, webSearch }
 
+// One button per chip, in the order Settings put them. Text, never markup: a chip
+// label is the reader's own words.
+function presetChips() {
+  const row = document.createElement('div');
+  row.className = 'ask__presets';
+  row.dataset.askPresets = '1';
+  row.setAttribute('role', 'group');
+  row.setAttribute('aria-label', 'Question chips');
+  state.presets.forEach((preset, index) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.dataset.askPreset = String(index);
+    chip.textContent = preset.label;
+    chip.title = preset.question;
+    row.append(chip);
+  });
+  return row;
+}
+
 function closeAsk() {
   ask = null;
   el.askLayer.replaceChildren();
@@ -351,11 +376,15 @@ function openAsk(boxEl, offsets, clientRect) {
   node.querySelector('[data-ask-web]').setAttribute(
     'aria-pressed', String(state.canvas.webSearch));
 
-  const left = Math.min(Math.max(12, clientRect.left), window.innerWidth - 404);
-  const top = Math.min(clientRect.bottom + 10, window.innerHeight - 240);
-  node.style.left = `${left}px`;
-  node.style.top = `${Math.max(CHROME_HEIGHT + CHROME_GAP, top)}px`;
+  if (state.presets.length) node.querySelector('[data-ask-quote]').after(presetChips());
+
+  // Placed once it is on screen, so its own measured height decides where it fits.
+  // The chips make that height vary, and a guessed one pushed Ask off the bottom.
   el.askLayer.append(node);
+  const left = Math.min(Math.max(12, clientRect.left), window.innerWidth - node.offsetWidth - 12);
+  const top = Math.min(clientRect.bottom + 10, window.innerHeight - node.offsetHeight - 12);
+  node.style.left = `${Math.max(12, left)}px`;
+  node.style.top = `${Math.max(CHROME_HEIGHT + CHROME_GAP, top)}px`;
 
   const input = node.querySelector('[data-ask-input]');
   input.addEventListener('keydown', (event) => {
@@ -368,53 +397,76 @@ function openAsk(boxEl, offsets, clientRect) {
   input.focus();
 }
 
-// --- standing instructions ----------------------------------------------------
-// One global block of text, applied to every answer on every canvas. It lives in a
-// layer of its own because the empty state paints over the desk.
+// --- settings -----------------------------------------------------------------
+// One page for everything the reader sets: the standing instructions that ride on every
+// answer, and the question chips the ask popover offers. Both are global, and the page
+// lives in a layer of its own because the empty state paints over the desk.
 
-let panel = null;  // the control that opened the sheet, while it is open
+let panel = null;   // the control that opened the page, while it is open
+let opened = null;  // what the page was opened with, so Save sends only what changed
 
-async function openInstructions(opener) {
+async function openSettings(opener) {
   if (panel) return;
-  panel = opener;  // claimed before the await, so two clicks open one sheet
+  panel = opener;  // claimed before the await, so two clicks open one page
 
   let saved;
   try {
-    saved = await api.readInstructions();
+    const [instructions, chips] = await Promise.all([api.readInstructions(), api.readPresets()]);
+    saved = { markdown: instructions.markdown, presets: chips.presets };
   } catch (error) {
-    // Better no panel than a blank one: saving it would wipe instructions that are there.
+    // Better no page than a blank one: saving it would wipe what is already there.
     panel = null;
     flash(error.message);
     return;
   }
   if (!panel) return;  // closed while the read was in flight
+  opened = saved;
+  state.presets = saved.presets;
 
   const node = document.createElement('div');
   node.className = 'sheet';
-  node.dataset.instructions = '1';
+  node.dataset.settings = '1';
   node.setAttribute('role', 'dialog');
-  node.setAttribute('aria-label', 'Standing instructions');
+  node.setAttribute('aria-label', 'Settings');
   node.innerHTML = `
     <div class="sheet__head">
-      <span>Instructions</span>
+      <span>Settings</span>
       <span class="spacer"></span>
-      <button type="button" class="ask__close" data-instructions-close
+      <button type="button" class="ask__close" data-settings-close
               aria-label="Close" title="Close (Esc)">×</button>
     </div>
-    <p class="sheet__lede">
-      What every answer should do, on every canvas. Sent with each question, and with the
-      research runs to come.
-    </p>
-    <label class="sr-only" for="instructions-field">Standing instructions</label>
-    <textarea id="instructions-field" data-instructions-input spellcheck="false"
-              placeholder="Answer in British English.&#10;Work an example before the theory."></textarea>
+
+    <section class="sheet__part">
+      <h2 class="sheet__title">Standing instructions</h2>
+      <p class="sheet__lede">
+        What every answer should do, on every canvas. Sent with each question, and with the
+        research runs to come.
+      </p>
+      <label class="sr-only" for="instructions-field">Standing instructions</label>
+      <textarea id="instructions-field" data-instructions-input spellcheck="false"
+                placeholder="Answer in British English.&#10;Work an example before the theory."></textarea>
+      <p class="sheet__count" data-instructions-count aria-live="polite"></p>
+    </section>
+
+    <section class="sheet__part">
+      <h2 class="sheet__title">Question chips</h2>
+      <p class="sheet__lede">
+        Offered beside every highlight. One click writes the question into the ask box, where
+        it can still be edited before it is sent.
+      </p>
+      <div class="presets" data-preset-rows></div>
+      <button type="button" class="chrome-btn" data-preset-add>+ Add chip</button>
+    </section>
+
     <div class="sheet__foot">
-      <span class="sheet__count" data-instructions-count aria-live="polite"></span>
-      <button type="button" class="chrome-btn" data-instructions-cancel>Cancel</button>
-      <button type="button" class="btn-primary" data-instructions-save>Save</button>
+      <span class="spacer"></span>
+      <button type="button" class="chrome-btn" data-settings-cancel>Cancel</button>
+      <button type="button" class="btn-primary" data-settings-save>Save</button>
     </div>`;
 
   el.panelLayer.replaceChildren(node);
+  for (const preset of saved.presets) addPresetRow(preset);
+  countPresets();
 
   const input = node.querySelector('[data-instructions-input]');
   const count = node.querySelector('[data-instructions-count]');
@@ -426,23 +478,90 @@ async function openInstructions(opener) {
   input.focus();
 }
 
-function closeInstructions() {
+// A chip is a name, a question, and a way to be rid of it. Built as nodes rather than
+// markup: the text in it is the reader's, and reader text is never spliced into HTML.
+function addPresetRow(preset = { label: '', question: '' }) {
+  const rows = el.panelLayer.querySelector('[data-preset-rows]');
+  if (!rows) return;
+
+  const row = document.createElement('div');
+  row.className = 'preset-row';
+  row.dataset.presetRow = '1';
+
+  const label = document.createElement('input');
+  label.type = 'text';
+  label.className = 'preset-row__name';
+  label.dataset.presetLabel = '1';
+  label.maxLength = MAX_PRESET_LABEL_CHARS;
+  label.placeholder = 'Explain';
+  label.setAttribute('aria-label', 'Chip name');
+  label.value = preset.label;
+
+  const question = document.createElement('input');
+  question.type = 'text';
+  question.dataset.presetQuestion = '1';
+  question.maxLength = MAX_PRESET_QUESTION_CHARS;
+  question.placeholder = 'Explain this passage in plain language.';
+  question.setAttribute('aria-label', 'Chip question');
+  question.value = preset.question;
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'ask__close';
+  remove.dataset.presetDelete = '1';
+  remove.textContent = '×';
+  // Named after the chip it removes, so a screen reader hears which row this is.
+  const name = () => {
+    const what = label.value.trim() ? `the ${label.value.trim()} chip` : 'this chip';
+    remove.setAttribute('aria-label', `Delete ${what}`);
+    remove.title = `Delete ${what}`;
+  };
+  label.addEventListener('input', name);
+  name();
+
+  row.append(label, question, remove);
+  rows.append(row);
+}
+
+// The cap belongs to the server; the button stops offering a row it would refuse.
+function countPresets() {
+  const sheet = el.panelLayer.querySelector('[data-settings]');
+  if (!sheet) return;
+  const rows = sheet.querySelectorAll('[data-preset-row]').length;
+  sheet.querySelector('[data-preset-add]').disabled = rows >= MAX_PRESETS;
+}
+
+function closeSettings() {
   if (!panel) return;
   const opener = panel;
   panel = null;
+  opened = null;
   el.panelLayer.replaceChildren();
   opener.focus();
 }
 
-async function saveInstructions() {
-  const input = el.panelLayer.querySelector('[data-instructions-input]');
-  if (!input) return;
+async function saveSettings() {
+  const sheet = el.panelLayer.querySelector('[data-settings]');
+  if (!sheet) return;
+  const input = sheet.querySelector('[data-instructions-input]');
+  const presets = [...sheet.querySelectorAll('[data-preset-row]')]
+    .map((row) => ({
+      label: row.querySelector('[data-preset-label]').value.trim(),
+      question: row.querySelector('[data-preset-question]').value.trim(),
+    }))
+    // A row added and then left alone is a change of mind, not something to refuse.
+    .filter((preset) => preset.label || preset.question);
+
   try {
-    await api.writeInstructions(input.value);
-    closeInstructions();
-    flash('Instructions saved');
+    // Chips first: they are the likelier refusal, and a refusal must change nothing.
+    if (JSON.stringify(presets) !== JSON.stringify(opened.presets)) {
+      state.presets = (await api.writePresets(presets)).presets;
+    }
+    if (input.value !== opened.markdown) await api.writeInstructions(input.value);
+    closeSettings();
+    flash('Settings saved');
   } catch (error) {
-    // The panel stays open: the text is only in this textarea until it is accepted.
+    // The page stays open: what is typed lives in these fields until it is accepted.
     flash(error.message);
   }
 }
@@ -1391,13 +1510,26 @@ document.addEventListener('click', (event) => {
 
   if (hit('[data-edit-save]')) { saveEdit(); return; }
 
-  const instructions = hit('[data-instructions-open]');
-  if (instructions) { openInstructions(instructions); return; }
-  if (hit('[data-instructions-close]') || hit('[data-instructions-cancel]')) {
-    closeInstructions();
+  const settings = hit('[data-settings-open]');
+  if (settings) { openSettings(settings); return; }
+  if (hit('[data-settings-close]') || hit('[data-settings-cancel]')) {
+    closeSettings();
     return;
   }
-  if (hit('[data-instructions-save]')) { saveInstructions(); return; }
+  if (hit('[data-settings-save]')) { saveSettings(); return; }
+  if (hit('[data-preset-add]')) { addPresetRow(); countPresets(); return; }
+  const dropRow = hit('[data-preset-delete]');
+  if (dropRow) { dropRow.closest('[data-preset-row]').remove(); countPresets(); return; }
+
+  const chip = hit('[data-ask-preset]');
+  if (chip) {
+    // Filled, not sent: the chip is a first draft of the question, still editable.
+    const field = el.askLayer.querySelector('[data-ask-input]');
+    field.value = state.presets[Number(chip.dataset.askPreset)].question;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+    return;
+  }
 
   if (hit('[data-ask-cancel]')) { closeAsk(); return; }
   if (hit('[data-ask-send]')) { submitAsk(); return; }
@@ -1419,7 +1551,7 @@ document.addEventListener('click', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   // Topmost first: the sheet, then the popover, then the editor under both.
-  if (panel) closeInstructions();
+  if (panel) closeSettings();
   else if (ask) closeAsk();
   else if (edit) closeEditor();
   else if (state.selected.size) clearSelection();
@@ -1491,6 +1623,14 @@ window.addEventListener('resize', () => { lastGeometry = ''; measure(); });
   try { saved = localStorage.getItem('deep-research-theme'); } catch { /* private mode */ }
   const system = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   setTheme(saved || system, false);
+
+  // The chips the ask popover offers. One fetch, outside any canvas: they are global.
+  // Caught here, because an unhandled rejection in boot would take the whole page down.
+  try {
+    state.presets = (await api.readPresets()).presets;
+  } catch (error) {
+    flash(error.message);
+  }
 
   const wanted = new URLSearchParams(location.search).get('c');
   if (wanted) {

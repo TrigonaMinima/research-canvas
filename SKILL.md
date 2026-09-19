@@ -45,16 +45,27 @@ are the only tools, and only when the canvas has web search on.
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
 
+## Settings
+
+The cog, in the chrome bar and on the first screen, opens one page holding the standing
+instructions and the question chips. Both are global, and both are read fresh per request.
+
 ## Standing instructions
 
-One block of text applies to everything the app generates, on every canvas. Write it in the
-app (the **Instructions** button, in the chrome bar or on the first screen) or edit
-`canvases/instructions.md` directly. It is read fresh on every run, so an edit outside the app
+One block of text applies to everything the app generates, on every canvas. Write it in
+Settings or edit `canvases/instructions.md` directly. It is read fresh on every run, so an edit outside the app
 takes effect on the next question, with no restart.
 
 It travels inside the prompt, like the question itself. The sandbox is untouched: nothing on
 this machine is read by the run. Where an instruction conflicts with the built-in rules on
 formatting and mathematics, the built-in rules win.
+
+## Question chips
+
+The ask popover offers one chip per entry in `canvases/presets.json`, and a click fills the
+question box rather than sending, so the text is still editable. Edit them in Settings, or
+edit the file directly: `{"presets": [{"label": …, "question": …}]}`, at most eight. A missing
+file means the built-in chips; a corrupt one is reported rather than silently reset.
 
 ## Mathematics
 

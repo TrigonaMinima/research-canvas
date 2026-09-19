@@ -1,4 +1,4 @@
-"""Standing instructions: one global block of text, reachable from either screen."""
+"""Standing instructions: one global block of text, written in Settings."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from research_canvas.config import INSTRUCTIONS_TOO_LONG_MESSAGE, MAX_INSTRUCTIO
 
 pytestmark = pytest.mark.e2e
 
-PANEL = "[data-instructions]"
+PANEL = "[data-settings]"
 FIELD = "[data-instructions-input]"
 
 
 def open_panel(page, within="[data-empty]"):
-    """The button lives in both screens, so a test says which one it means."""
-    page.click(f"{within} [data-instructions-open]")
+    """The instructions live in Settings now, reachable by the cog in either screen."""
+    page.click(f"{within} [data-settings-open]")
     page.wait_for_selector(PANEL)
 
 
@@ -37,14 +37,14 @@ def test_starts_empty_when_nothing_was_ever_saved(app):
 def test_saves_the_instructions(app):
     open_panel(app)
     app.fill(FIELD, "Answer in British English.")
-    app.click("[data-instructions-save]")
+    app.click("[data-settings-save]")
     expect(app.locator(PANEL)).to_have_count(0)
 
 
 def test_shows_the_saved_instructions_when_reopened(app):
     open_panel(app)
     app.fill(FIELD, "Answer in British English.")
-    app.click("[data-instructions-save]")
+    app.click("[data-settings-save]")
     open_panel(app)
     expect(app.locator(FIELD)).to_have_value("Answer in British English.")
 
@@ -52,7 +52,7 @@ def test_shows_the_saved_instructions_when_reopened(app):
 def test_the_same_instructions_reach_every_canvas(app):
     open_panel(app)
     app.fill(FIELD, "Answer in British English.")
-    app.click("[data-instructions-save]")
+    app.click("[data-settings-save]")
     app.reload()
     app.wait_for_selector("[data-empty]")
     open_panel(app)
@@ -70,7 +70,7 @@ def test_escape_discards_an_unsaved_edit(app):
 
 def test_cancel_closes_the_panel(app):
     open_panel(app)
-    app.click("[data-instructions-cancel]")
+    app.click("[data-settings-cancel]")
     expect(app.locator(PANEL)).to_have_count(0)
 
 
@@ -90,7 +90,7 @@ def test_counts_the_characters_against_the_cap(app):
 def test_refuses_instructions_over_the_cap(app):
     open_panel(app)
     app.fill(FIELD, "x" * (MAX_INSTRUCTIONS_CHARS + 1))
-    app.click("[data-instructions-save]")
+    app.click("[data-settings-save]")
     expect(app.locator("[data-toast]")).to_have_text(INSTRUCTIONS_TOO_LONG_MESSAGE)
     expect(app.locator(PANEL)).to_have_count(1)
 
@@ -98,7 +98,7 @@ def test_refuses_instructions_over_the_cap(app):
 def test_the_refusal_is_not_painted_over_by_the_empty_state(app):
     open_panel(app)
     app.fill(FIELD, "x" * (MAX_INSTRUCTIONS_CHARS + 1))
-    app.click("[data-instructions-save]")
+    app.click("[data-settings-save]")
     expect(app.locator("[data-toast]")).to_have_text(INSTRUCTIONS_TOO_LONG_MESSAGE)
     # Playwright calls an occluded element visible, so ask the browser what is actually
     # on top. The empty state used to cover the toast, and the reader saw nothing.
@@ -114,4 +114,4 @@ def test_the_refusal_is_not_painted_over_by_the_empty_state(app):
 def test_returns_focus_to_the_button_that_opened_it(app):
     open_panel(app)
     app.keyboard.press("Escape")
-    expect(app.locator("[data-empty] [data-instructions-open]")).to_be_focused()
+    expect(app.locator("[data-empty] [data-settings-open]")).to_be_focused()

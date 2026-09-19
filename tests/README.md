@@ -19,21 +19,21 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 84 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 64 |
+| 1 | API function tests | `tests/unit/` | 98 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py` | 290 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 333 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 28 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py` | 324 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 367 |
+| 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
-| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
-| 9 | Contract / schema | `tests/api/test_contract.py` | 13 |
+| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 35 |
+| 9 | Contract / schema | `tests/api/test_contract.py` | 16 |
 
 ### 1 — API function tests (`tests/unit/`)
 
 Each module in isolation, no HTTP, no browser.
 
-- `test_storage.py` (23) — titles from the first heading, the refused-paste minimum, verbatim
+- `test_storage.py` (36) — titles from the first heading, the refused-paste minimum, verbatim
   document bodies, the `formatVersion` stamp, colliding-title ids, the disk round trip,
   per-answer body files, depth under the parent, newest-first listing, unfinished boxes
   becoming `interrupted` on load, no partial file when a save fails, and a canvas id that
@@ -41,7 +41,13 @@ Each module in isolation, no HTTP, no browser.
   plain case, the clamp at either end, and an explicit width winning over the inherited one.
   Six cover the standing instructions: empty when the file was never written, the round trip,
   the plain file left on disk, a save over the cap refused, the earlier text surviving that
-  refusal, and the file beside the canvases never listed as one.
+  refusal, and the file beside the canvases never listed as one. Thirteen cover the question
+  chips in the same way: the built-in chips served when nothing was ever written, the round
+  trip, plain JSON left on disk, names and questions stored trimmed, an empty set allowed
+  because deleting the last chip is a choice, a refusal for too many chips, for a blank name,
+  for a blank question and for either field over its cap, the chips already saved surviving
+  that refusal, a corrupt `presets.json` raising rather than quietly resetting them, and the
+  file never listed as a canvas.
 - `test_anchors.py` (5) — text-offset anchors resolved against rendered plain text,
   including the nearest-occurrence fallback when the document has shifted.
 - `test_markdown.py` (17) — rendering and first-heading extraction, plus twelve on
@@ -64,7 +70,7 @@ Each module in isolation, no HTTP, no browser.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 64)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 74)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -82,6 +88,10 @@ layout have the box back has to travel like any other value. Four cover a correc
 offset, which is the browser telling the server where a passage moved to in an edit: the new
 numbers saved, the quote left alone because the quote is what finds the passage next time, a
 correction for an anchor that is already gone accepted quietly, and a negative offset refused.
+Eleven cover the question chips: the built-in set served on a fresh home, a written set saved
+and served back, the chips surviving a canvas being created and deleted, a 422 with the
+message Settings shows for each refusal the storage layer makes, and a 422 on the read as
+well when `presets.json` on disk is corrupt, so the reader is told rather than shown a 500.
 
 ### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 13)
 
@@ -229,7 +239,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   leaves them at full width with no label clipped. The bar is one flex row with no wrap, so
   something has to give; it is the title, which ellipsises. The fold itself is proved in
   `test_canvas.py`.
-- `test_instructions.py` (13) — the standing-instructions panel, opened from the first screen
+- `test_instructions.py` (13) — the standing-instructions section of Settings, opened from the first screen
   and from the chrome bar, because it is global and belongs to neither. Empty to begin with,
   saved, still there when reopened and after a reload, `Escape` and Cancel throwing an unsaved
   edit away, the character count against the cap, a save over the cap refused with its reason
@@ -255,8 +265,21 @@ The same browser, the real server, the real storage, the fake `claude`.
   the count back when it unfolds, and the boxes below rising when a section above them folds.
   Three are persistence: the fold surviving a reload, reaching the server in one patch as
   `sections`, and a stored key whose heading was renamed folding nothing.
+- `test_settings.py` (19) — the Settings page itself, opened by the cog in the chrome bar and
+  by the one on the first screen. The chips it shows to begin with, a name and a question
+  reworded and still there after a reload, `+ Add chip` appending an editable row, delete
+  removing one, every chip deleted and saved, Add refused at the cap, a half-written chip
+  refused with its reason and the page left open holding the text, a row added and left empty
+  dropped rather than refused, `Escape` and Cancel discarding, a click outside leaving the
+  page alone, focus returning to the cog, and both sections saving from one Save.
+- `test_ask_presets.py` (14) — the chips on the ask popover. One per configured chip, labelled
+  by name, filling `[data-ask-input]` on click without dismissing the popover, a second chip
+  replacing the first one's text, the filled text still editable, `Enter` sending it, the
+  edited text being what is sent, typing by hand unchanged, chips written in Settings showing
+  on the next highlight with no reload, no chip row at all once every chip is deleted, and
+  eight chips at the name cap staying inside the popover with `Ask` still on screen.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 333)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 367)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -271,7 +294,7 @@ directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 28)
+### 6 — Data / persistence (`tests/unit/test_storage.py`, 42)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
 above in layer 1. Three cover the pin a reader puts on a box: an answer starting unpinned, a
@@ -296,7 +319,7 @@ boundary the PRD actually draws, and that is tested:
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
   visible rather than merely asserted.
 
-### 8 — Validation & error paths (28)
+### 8 — Validation & error paths (35)
 
 Refused pastes under 40 characters with the exact message, an empty question, a selection
 under three characters, a zoom outside `[0.1, 2]`, 404 for an unknown canvas, 404 for a
@@ -304,11 +327,12 @@ canvas id that escapes the root, 422 for deleting the document box, 409 for aski
 a box that is still running, 422 for saving an empty box, 409 for editing a box whose
 answer is still streaming, and 422 for asking with a width outside the clamps, at either end, 422 for an anchor offset
 below zero, and 422 for standing
-instructions over the cap, with the message the panel shows. In the browser, `test_failures.py` (6) covers a usage-limit
+instructions over the cap, with the message the panel shows, and 422 for each way a question
+chip can be refused: too many, a blank name, a blank question, or either field over its cap. In the browser, `test_failures.py` (6) covers a usage-limit
 stop, a crashed run, the retry button, and the rule that a failed answer keeps its question
 and its anchor.
 
-### 9 — Contract / schema (`tests/api/test_contract.py`, 13)
+### 9 — Contract / schema (`tests/api/test_contract.py`, 16)
 
 Every field name the frontend reads, asserted against what the real API returns: the canvas
 view, a box, the camera, the box statuses, one rendered body per box, a canvas summary, the
@@ -318,10 +342,11 @@ copy of that shape, and the mocked-API layer builds its payloads from it.
 `collapsed` and `pinned` on a box, and `w` on an ask request, are all in those key sets, so a field the
 browser sends or reads cannot go missing on the server without failing here. Two more cover
 `/api/instructions`, read and written, so the one field the panel exchanges is pinned like
-every other.
+every other, and three more cover `/api/presets`, read and written, down to the `label` and
+`question` keys of a single chip.
 
 Two more cover `GET /api/config`, which is how the browser is told the clamps, the chrome-bar
-height, the unfinished-status set and the shared user-facing sentence instead of re-declaring
+height, the chip caps, the unfinished-status set and the shared user-facing sentence instead of re-declaring
 them in JavaScript: one asserts the payload carries exactly the keys `web/config.js` imports, the
 other that every value equals the one `config.py` holds. A number that drifts on either
 side now fails here rather than silently disagreeing in the browser.

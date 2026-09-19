@@ -156,16 +156,28 @@ up. A box moves through `pending`, `queued`, `running`, and then `done` or `fail
 the server is killed mid-run, reopening the canvas shows those boxes as `interrupted`
 with their anchors intact. It surfaces them, it never silently resumes them.
 
+### Settings
+
+The cog, in the chrome bar and on the first screen, opens one page for everything you set.
+Both sections are global: one set for every canvas.
+
 ### Standing instructions
 
-One block of text applies to everything the app generates, on every canvas. Write it with
-the **Instructions** button, in the chrome bar or on the first screen, or edit
-`canvases/instructions.md` directly. It is read fresh on every run, so an edit outside the
+One block of text applies to everything the app generates, on every canvas. Write it in
+**Settings**, or edit `canvases/instructions.md` directly. It is read fresh on every run, so an edit outside the
 app takes effect on your next question with no restart.
 
 It travels inside the prompt, like the question itself. The sandbox is untouched. Where an
 instruction conflicts with the built-in rules on formatting and mathematics, the built-in
 rules win. It is capped at 4,000 characters, because it rides on every single run.
+
+### Question chips
+
+Highlighting a passage offers a row of chips above the question box: *Explain*, *Define
+terms*, *Why it matters*. One click writes that chip's question into the box, where you can
+still edit it before you send. Rewrite the chips in **Settings**: rename one, reword its
+question, add your own, delete what you never use. Up to eight, stored in
+`canvases/presets.json`.
 
 ### Mathematics
 
