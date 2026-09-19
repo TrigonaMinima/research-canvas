@@ -53,6 +53,10 @@ ASK_RESULT_KEYS = {"box", "anchor"}
 # Global, not canvas state: one block of text the reader applies to everything.
 INSTRUCTIONS_KEYS = {"markdown"}
 
+# Global as well: the question chips the ask popover offers, written in Settings.
+PRESETS_KEYS = {"presets"}
+PRESET_KEYS = {"label", "question"}
+
 ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "w", "webSearch", "anchor"}
 
 STREAM_EVENTS = {"status", "init", "text", "done"}
@@ -72,6 +76,9 @@ CLIENT_CONFIG_KEYS = {
     "unfinished",
     "stillRunningMessage",
     "maxInstructionsChars",
+    "maxPresets",
+    "maxPresetLabelChars",
+    "maxPresetQuestionChars",
 }
 
 BOX_STATUSES = set(_CONFIG_STATUSES)  # one definition, in config

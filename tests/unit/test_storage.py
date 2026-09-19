@@ -8,11 +8,16 @@ import pytest
 
 from research_canvas import storage
 from research_canvas.config import (
+    DEFAULT_ASK_PRESETS,
     FORMAT_VERSION,
     INSTRUCTIONS_FILE,
     MAX_BOX_WIDTH,
     MAX_INSTRUCTIONS_CHARS,
+    MAX_PRESET_LABEL_CHARS,
+    MAX_PRESET_QUESTION_CHARS,
+    MAX_PRESETS,
     MIN_BOX_WIDTH,
+    PRESETS_FILE,
     ROOT_BOX_WIDTH,
 )
 
@@ -216,4 +221,85 @@ def test_should_keep_the_earlier_instructions_when_a_save_is_refused(canvas_root
 def test_should_not_list_the_instructions_file_as_a_canvas(canvas_root, sample_markdown):
     storage.create_canvas(sample_markdown)
     storage.write_instructions("Be brief.")
+    assert len(storage.list_canvases()) == 1
+
+
+# --- question chips -----------------------------------------------------------
+
+
+def test_should_serve_the_default_chips_when_the_file_is_missing(canvas_root):
+    assert storage.read_presets() == [dict(p) for p in DEFAULT_ASK_PRESETS]
+
+
+def test_should_round_trip_the_chips(canvas_root):
+    storage.write_presets([{"label": "Explain", "question": "Explain this."}])
+    assert storage.read_presets() == [{"label": "Explain", "question": "Explain this."}]
+
+
+def test_should_keep_the_chips_as_a_plain_json_file_on_disk(canvas_root):
+    storage.write_presets([{"label": "Explain", "question": "Explain this."}])
+    written = json.loads((canvas_root / PRESETS_FILE).read_text(encoding="utf-8"))
+    assert written == {"presets": [{"label": "Explain", "question": "Explain this."}]}
+
+
+def test_should_store_the_chips_trimmed(canvas_root):
+    storage.write_presets([{"label": "  Explain  ", "question": "  Explain this.  "}])
+    assert storage.read_presets() == [{"label": "Explain", "question": "Explain this."}]
+
+
+def test_should_accept_having_no_chips_at_all(canvas_root):
+    storage.write_presets([])
+    assert storage.read_presets() == []
+
+
+def test_should_refuse_more_chips_than_the_cap(canvas_root):
+    too_many = [{"label": f"C{n}", "question": "Explain this."} for n in range(MAX_PRESETS + 1)]
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets(too_many)
+
+
+def test_should_refuse_a_chip_with_a_blank_name(canvas_root):
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets([{"label": "   ", "question": "Explain this."}])
+
+
+def test_should_refuse_a_chip_with_a_blank_question(canvas_root):
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets([{"label": "Explain", "question": "   "}])
+
+
+def test_should_refuse_a_chip_name_over_the_cap(canvas_root):
+    long_label = "x" * (MAX_PRESET_LABEL_CHARS + 1)
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets([{"label": long_label, "question": "Explain this."}])
+
+
+def test_should_refuse_a_chip_question_over_the_cap(canvas_root):
+    long_question = "x" * (MAX_PRESET_QUESTION_CHARS + 1)
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets([{"label": "Explain", "question": long_question}])
+
+
+def test_should_keep_the_earlier_chips_when_a_save_is_refused(canvas_root):
+    storage.write_presets([{"label": "Explain", "question": "Explain this."}])
+    with pytest.raises(storage.PresetsInvalid):
+        storage.write_presets([{"label": "", "question": ""}])
+    assert storage.read_presets() == [{"label": "Explain", "question": "Explain this."}]
+
+
+def test_should_refuse_to_read_a_chips_file_that_is_not_valid_json(canvas_root):
+    (canvas_root / PRESETS_FILE).write_text("{not json", encoding="utf-8")
+    with pytest.raises(storage.PresetsInvalid):
+        storage.read_presets()
+
+
+def test_should_not_reset_to_the_defaults_when_the_chips_file_is_broken(canvas_root):
+    (canvas_root / PRESETS_FILE).write_text('{"presets": "nonsense"}', encoding="utf-8")
+    with pytest.raises(storage.PresetsInvalid):
+        storage.read_presets()
+
+
+def test_should_not_list_the_chips_file_as_a_canvas(canvas_root, sample_markdown):
+    storage.create_canvas(sample_markdown)
+    storage.write_presets([{"label": "Explain", "question": "Explain this."}])
     assert len(storage.list_canvases()) == 1

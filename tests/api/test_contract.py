@@ -11,6 +11,8 @@ from tests.fixtures.contract import (
     CAMERA_KEYS,
     CLIENT_CONFIG_KEYS,
     INSTRUCTIONS_KEYS,
+    PRESET_KEYS,
+    PRESETS_KEYS,
     STREAM_EVENTS,
     SUMMARY_KEYS,
     VIEW_KEYS,
@@ -89,6 +91,22 @@ def test_the_saved_instructions_come_back_in_the_same_shape(client):
     assert set(saved.json()) == INSTRUCTIONS_KEYS
 
 
+def test_the_chips_payload_carries_the_field_the_browser_reads(client):
+    assert set(client.get("/api/presets").json()) == PRESETS_KEYS
+
+
+def test_every_chip_carries_the_two_fields_the_popover_needs(client):
+    for chip in client.get("/api/presets").json()["presets"]:
+        assert set(chip) == PRESET_KEYS
+
+
+def test_the_saved_chips_come_back_in_the_same_shape(client):
+    chips = {"presets": [{"label": "Explain", "question": "Explain this."}]}
+    saved = client.put("/api/presets", json=chips)
+    assert set(saved.json()) == PRESETS_KEYS
+    assert set(saved.json()["presets"][0]) == PRESET_KEYS
+
+
 # --- the served config: what keeps the browser from re-declaring these ---------
 
 
@@ -108,4 +126,7 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["anchorLead"] == config.ANCHOR_LEAD
     assert served["stillRunningMessage"] == config.STILL_RUNNING_MESSAGE
     assert served["maxInstructionsChars"] == config.MAX_INSTRUCTIONS_CHARS
+    assert served["maxPresets"] == config.MAX_PRESETS
+    assert served["maxPresetLabelChars"] == config.MAX_PRESET_LABEL_CHARS
+    assert served["maxPresetQuestionChars"] == config.MAX_PRESET_QUESTION_CHARS
     assert set(served["unfinished"]) == set(config.UNFINISHED)

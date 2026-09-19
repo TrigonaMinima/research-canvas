@@ -5,12 +5,22 @@ from __future__ import annotations
 from research_canvas import storage
 from research_canvas.config import (
     BLANK_BODY_MESSAGE,
+    BLANK_PRESET_MESSAGE,
+    DEFAULT_ASK_PRESETS,
     DISPLAY_NAME,
     INSTRUCTIONS_HEADING,
     INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
     MAX_INSTRUCTIONS_CHARS,
+    MAX_PRESET_LABEL_CHARS,
+    MAX_PRESET_QUESTION_CHARS,
+    MAX_PRESETS,
     MIN_BOX_WIDTH,
+    PRESET_LABEL_TOO_LONG_MESSAGE,
+    PRESET_QUESTION_TOO_LONG_MESSAGE,
+    PRESETS_FILE,
+    PRESETS_UNREADABLE_MESSAGE,
+    TOO_MANY_PRESETS_MESSAGE,
 )
 from research_canvas.storage import REFUSED_MESSAGE
 
@@ -517,3 +527,68 @@ def test_should_leave_the_run_prompt_alone_when_there_are_no_instructions(
     client, canvas, fake_answer
 ):
     assert INSTRUCTIONS_HEADING not in _run_prompt(client, canvas, fake_answer)
+
+
+# --- question chips: one set, every canvas ------------------------------------
+
+CHIP = {"label": "Explain", "question": "Explain this passage in plain language."}
+
+
+def test_should_serve_the_default_chips_before_any_are_written(client):
+    assert client.get("/api/presets").json() == {"presets": [dict(p) for p in DEFAULT_ASK_PRESETS]}
+
+
+def test_should_save_and_return_the_chips(client):
+    response = client.put("/api/presets", json={"presets": [CHIP]})
+    assert response.json() == {"presets": [CHIP]}
+
+
+def test_should_serve_the_chips_that_were_saved(client):
+    client.put("/api/presets", json={"presets": [CHIP]})
+    assert client.get("/api/presets").json()["presets"] == [CHIP]
+
+
+def test_should_keep_the_chips_when_a_canvas_is_created(client, sample_markdown):
+    client.put("/api/presets", json={"presets": [CHIP]})
+    client.post("/api/canvases", json={"markdown": sample_markdown})
+    assert client.get("/api/presets").json()["presets"] == [CHIP]
+
+
+def test_should_keep_the_chips_when_a_canvas_is_deleted(client, canvas):
+    client.put("/api/presets", json={"presets": [CHIP]})
+    client.delete(f"/api/canvases/{canvas['id']}")
+    assert client.get("/api/presets").json()["presets"] == [CHIP]
+
+
+def test_should_reject_more_chips_than_the_cap(client):
+    over = [{"label": f"C{n}", "question": "Explain this."} for n in range(MAX_PRESETS + 1)]
+    response = client.put("/api/presets", json={"presets": over})
+    assert response.status_code == 422
+    assert response.json()["detail"] == TOO_MANY_PRESETS_MESSAGE
+
+
+def test_should_reject_a_chip_that_is_missing_half_of_itself(client):
+    response = client.put("/api/presets", json={"presets": [{"label": "Explain", "question": ""}]})
+    assert response.status_code == 422
+    assert response.json()["detail"] == BLANK_PRESET_MESSAGE
+
+
+def test_should_reject_a_chip_name_over_the_cap(client):
+    long_label = {"label": "x" * (MAX_PRESET_LABEL_CHARS + 1), "question": "Explain this."}
+    response = client.put("/api/presets", json={"presets": [long_label]})
+    assert response.status_code == 422
+    assert response.json()["detail"] == PRESET_LABEL_TOO_LONG_MESSAGE
+
+
+def test_should_reject_a_chip_question_over_the_cap(client):
+    long_question = {"label": "Explain", "question": "x" * (MAX_PRESET_QUESTION_CHARS + 1)}
+    response = client.put("/api/presets", json={"presets": [long_question]})
+    assert response.status_code == 422
+    assert response.json()["detail"] == PRESET_QUESTION_TOO_LONG_MESSAGE
+
+
+def test_should_explain_a_chips_file_that_cannot_be_read(client, canvas_root):
+    (canvas_root / PRESETS_FILE).write_text("{not json", encoding="utf-8")
+    response = client.get("/api/presets")
+    assert response.status_code == 422
+    assert response.json()["detail"] == PRESETS_UNREADABLE_MESSAGE

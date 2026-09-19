@@ -29,6 +29,9 @@ BOX_DIR = "boxes"
 # One file beside the canvases, not inside any of them: the instructions are global.
 INSTRUCTIONS_FILE = "instructions.md"
 
+# The question chips are global in the same way, and live beside them.
+PRESETS_FILE = "presets.json"
+
 # --- dev server ---------------------------------------------------------------
 
 # The port is chosen fresh at launch and written here. Nothing hardcodes a port.
@@ -110,6 +113,19 @@ INSTRUCTIONS_PRECEDENCE = (
     "rules stated above, those rules win."
 )
 
+# --- question chips -----------------------------------------------------------
+
+MAX_PRESETS = 8
+MAX_PRESET_LABEL_CHARS = 24
+MAX_PRESET_QUESTION_CHARS = 400
+
+# What a reader asks most often, offered until they write their own in Settings.
+DEFAULT_ASK_PRESETS = (
+    {"label": "Explain", "question": "Explain this passage in plain language."},
+    {"label": "Define terms", "question": "Define the terms used in this passage."},
+    {"label": "Why it matters", "question": "Why does this passage matter?"},
+)
+
 # --- canvas geometry (ported from the design) ---------------------------------
 
 ROOT_BOX_WIDTH = 680
@@ -143,4 +159,18 @@ EDIT_WHILE_RUNNING_MESSAGE = "That box is still running — edit once it is done
 BLANK_BODY_MESSAGE = "A box cannot be empty — write something or press Escape"
 INSTRUCTIONS_TOO_LONG_MESSAGE = (
     f"Instructions are capped at {MAX_INSTRUCTIONS_CHARS:,} characters — trim them and save again"
+)
+TOO_MANY_PRESETS_MESSAGE = f"Question chips are capped at {MAX_PRESETS} — delete one and save again"
+BLANK_PRESET_MESSAGE = "A chip needs a name and a question — fill both in or delete the row"
+PRESET_LABEL_TOO_LONG_MESSAGE = (
+    f"A chip name is capped at {MAX_PRESET_LABEL_CHARS} characters — shorten it and save again"
+)
+PRESET_QUESTION_TOO_LONG_MESSAGE = (
+    f"A chip question is capped at {MAX_PRESET_QUESTION_CHARS:,} characters — "
+    "shorten it and save again"
+)
+# Said out loud rather than silently restoring the defaults: chips someone wrote are
+# theirs, and a hand-edited file that will not parse is worth hearing about.
+PRESETS_UNREADABLE_MESSAGE = (
+    f"{PRESETS_FILE} could not be read — fix the file, or delete it for the default chips"
 )

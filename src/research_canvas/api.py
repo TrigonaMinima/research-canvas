@@ -24,6 +24,9 @@ from .config import (
     MAX_BOX_WIDTH,
     MAX_CONCURRENT_RUNS,
     MAX_INSTRUCTIONS_CHARS,
+    MAX_PRESET_LABEL_CHARS,
+    MAX_PRESET_QUESTION_CHARS,
+    MAX_PRESETS,
     MAX_SCALE,
     MIN_BOX_WIDTH,
     MIN_SCALE,
@@ -97,6 +100,15 @@ class InstructionsBody(BaseModel):
     markdown: str
 
 
+class PresetBody(BaseModel):
+    label: str
+    question: str
+
+
+class PresetsBody(BaseModel):
+    presets: list[PresetBody]
+
+
 class PatchBody(BaseModel):
     camera: CameraBody | None = None
     boxes: dict[str, BoxPatch] | None = None
@@ -124,6 +136,9 @@ def client_config() -> dict:
         "unfinished": sorted(UNFINISHED),
         "stillRunningMessage": STILL_RUNNING_MESSAGE,
         "maxInstructionsChars": MAX_INSTRUCTIONS_CHARS,
+        "maxPresets": MAX_PRESETS,
+        "maxPresetLabelChars": MAX_PRESET_LABEL_CHARS,
+        "maxPresetQuestionChars": MAX_PRESET_QUESTION_CHARS,
     }
 
 
@@ -142,6 +157,26 @@ def write_instructions(body: InstructionsBody) -> dict:
     except storage.InstructionsTooLong as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"markdown": body.markdown}
+
+
+# --- question chips -----------------------------------------------------------
+# The ask popover offers these; Settings writes them. Global, like the instructions.
+
+
+@app.get("/api/presets")
+def read_presets() -> dict:
+    try:
+        return {"presets": storage.read_presets()}
+    except storage.PresetsInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.put("/api/presets")
+def write_presets(body: PresetsBody) -> dict:
+    try:
+        return {"presets": storage.write_presets([p.model_dump() for p in body.presets])}
+    except storage.PresetsInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 # --- canvases -----------------------------------------------------------------

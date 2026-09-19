@@ -20,19 +20,29 @@ from itertools import count
 from . import md
 from .anchors import Anchor
 from .config import (
+    BLANK_PRESET_MESSAGE,
     BOX_DIR,
     CANVAS_FILE,
     CANVAS_ROOT,
+    DEFAULT_ASK_PRESETS,
     FORMAT_VERSION,
     INSTRUCTIONS_FILE,
     INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
     MAX_INSTRUCTIONS_CHARS,
+    MAX_PRESET_LABEL_CHARS,
+    MAX_PRESET_QUESTION_CHARS,
+    MAX_PRESETS,
     MIN_BOX_WIDTH,
     MIN_PASTE_CHARS,
+    PRESET_LABEL_TOO_LONG_MESSAGE,
+    PRESET_QUESTION_TOO_LONG_MESSAGE,
+    PRESETS_FILE,
+    PRESETS_UNREADABLE_MESSAGE,
     ROOT_BOX_ID,
     ROOT_BOX_WIDTH,
     ROOT_DOC_FILE,
+    TOO_MANY_PRESETS_MESSAGE,
     UNFINISHED,
 )
 
@@ -52,6 +62,10 @@ class CanvasNotFound(LookupError):
 
 class InstructionsTooLong(ValueError):
     """The standing instructions were longer than every run can afford to carry."""
+
+
+class PresetsInvalid(ValueError):
+    """The question chips were unusable: too many, half-written, or unreadable on disk."""
 
 
 @dataclass
@@ -400,6 +414,53 @@ def write_instructions(text: str) -> None:
     if len(text) > MAX_INSTRUCTIONS_CHARS:
         raise InstructionsTooLong(INSTRUCTIONS_TOO_LONG_MESSAGE)
     _atomic_write(CANVAS_ROOT / INSTRUCTIONS_FILE, text)
+
+
+# --- question chips -----------------------------------------------------------
+# One file for the whole app, beside the instructions. Read on every request rather
+# than cached, so editing it in a text editor takes effect without a restart.
+
+
+def read_presets() -> list[dict]:
+    # A missing file means "never written", so the defaults stand in. A file that is
+    # there but unreadable is a fault: the chips in it are someone's, not ours to drop.
+    try:
+        raw = (CANVAS_ROOT / PRESETS_FILE).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [dict(preset) for preset in DEFAULT_ASK_PRESETS]
+    try:
+        stored = json.loads(raw)["presets"]
+    except (json.JSONDecodeError, TypeError, KeyError) as exc:
+        raise PresetsInvalid(PRESETS_UNREADABLE_MESSAGE) from exc
+    return _clean_presets(stored)
+
+
+def write_presets(presets: Iterable[dict]) -> list[dict]:
+    """Store the chips trimmed, and hand back exactly what was stored."""
+    cleaned = _clean_presets(presets)
+    body = json.dumps({"presets": cleaned}, ensure_ascii=False, indent=2)
+    _atomic_write(CANVAS_ROOT / PRESETS_FILE, body + "\n")
+    return cleaned
+
+
+def _clean_presets(presets: Iterable[dict]) -> list[dict]:
+    if not isinstance(presets, list):
+        raise PresetsInvalid(PRESETS_UNREADABLE_MESSAGE)
+    if len(presets) > MAX_PRESETS:
+        raise PresetsInvalid(TOO_MANY_PRESETS_MESSAGE)
+    cleaned = []
+    for preset in presets:
+        if not isinstance(preset, dict) or set(preset) != {"label", "question"}:
+            raise PresetsInvalid(PRESETS_UNREADABLE_MESSAGE)
+        label, question = str(preset["label"]).strip(), str(preset["question"]).strip()
+        if not label or not question:
+            raise PresetsInvalid(BLANK_PRESET_MESSAGE)
+        if len(label) > MAX_PRESET_LABEL_CHARS:
+            raise PresetsInvalid(PRESET_LABEL_TOO_LONG_MESSAGE)
+        if len(question) > MAX_PRESET_QUESTION_CHARS:
+            raise PresetsInvalid(PRESET_QUESTION_TOO_LONG_MESSAGE)
+        cleaned.append({"label": label, "question": question})
+    return cleaned
 
 
 # --- internals ----------------------------------------------------------------
