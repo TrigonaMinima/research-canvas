@@ -79,6 +79,7 @@ class BoxPatch(BaseModel):
     w: float | None = Field(default=None, ge=MIN_BOX_WIDTH, le=MAX_BOX_WIDTH)
     collapsed: bool | None = None
     pinned: bool | None = None
+    sections: list[str] | None = None
 
 
 # Both numbers together, never one: an offset and its end are one measurement, and a
@@ -188,10 +189,11 @@ def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
             box = canvas.box(box_id)
         except KeyError:
             continue
-        # Tested against None, not truthiness, which is what lets the two flags ride
-        # along: false has to travel, or a box could never be opened again, nor a
-        # pinned one handed back to the layout.
-        for field_name in ("x", "y", "w", "collapsed", "pinned"):
+        # Tested against None, not truthiness, which is what lets the flags and the
+        # section list ride along: false has to travel, or a box could never be opened
+        # again, nor a pinned one handed back to the layout, and an empty list has to
+        # travel, or the last folded section could never be unfolded.
+        for field_name in ("x", "y", "w", "collapsed", "pinned", "sections"):
             value = getattr(patch, field_name)
             if value is not None:
                 setattr(box, field_name, value)

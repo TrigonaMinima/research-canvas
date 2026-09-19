@@ -401,6 +401,32 @@ def test_should_save_a_collapsed_box(client, canvas):
     assert next(b for b in boxes if b["id"] == "b2")["collapsed"] is True
 
 
+# --- collapsible sections -----------------------------------------------------
+
+
+def test_should_start_a_box_with_no_folded_sections(client, canvas):
+    assert canvas["boxes"][0]["sections"] == []
+
+
+def test_should_save_a_folded_section(client, canvas):
+    client.patch(
+        f"/api/canvases/{canvas['id']}",
+        json={"boxes": {"b1": {"sections": ["model-architecture"]}}},
+    )
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == "b1")["sections"] == ["model-architecture"]
+
+
+def test_should_unfold_every_section_with_an_empty_list(client, canvas):
+    client.patch(
+        f"/api/canvases/{canvas['id']}",
+        json={"boxes": {"b1": {"sections": ["model-architecture"]}}},
+    )
+    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b1": {"sections": []}}})
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    assert next(b for b in boxes if b["id"] == "b1")["sections"] == []
+
+
 # --- pinning a box ------------------------------------------------------------
 
 

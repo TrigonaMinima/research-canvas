@@ -163,6 +163,27 @@ def test_should_load_a_canvas_saved_before_pinning_existed(canvas_root, sample_m
     assert storage.load(canvas.id).box(canvas.root_id).pinned is False
 
 
+# --- collapsible sections -----------------------------------------------------
+
+
+def test_should_default_sections_to_empty_when_absent(canvas_root, sample_markdown):
+    """A canvas.json written by an older build has no sections key at all."""
+    canvas = storage.create_canvas(sample_markdown)
+    path = canvas_root / canvas.id / "canvas.json"
+    data = json.loads(path.read_text())
+    data["boxes"][0].pop("sections", None)
+    path.write_text(json.dumps(data))
+    assert storage.load(canvas.id).box(canvas.root_id).sections == []
+
+
+def test_should_round_trip_folded_sections(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    box.sections = ["model-architecture"]
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(box.id).sections == ["model-architecture"]
+
+
 # --- standing instructions ----------------------------------------------------
 
 

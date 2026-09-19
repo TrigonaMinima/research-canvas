@@ -1,13 +1,13 @@
 # Tests
 
-465 tests. 462 run on every `make test`; the 3 marked `live` spend real Claude usage and
+497 tests. 494 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          462 tests, no usage spent
-make test-unit     tests/unit                 82
+make test          unit + api + e2e          494 tests, no usage spent
+make test-unit     tests/unit                 84
 make test-api      tests/api                  77  (3 live deselected)
-make test-e2e      tests/e2e                 306
+make test-e2e      tests/e2e                 333
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -19,12 +19,12 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 82 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 61 |
+| 1 | API function tests | `tests/unit/` | 84 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 64 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 263 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 306 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py` | 290 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 333 |
+| 6 | Data / persistence | `tests/unit/test_storage.py` | 28 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
 | 9 | Contract / schema | `tests/api/test_contract.py` | 13 |
@@ -64,7 +64,7 @@ Each module in isolation, no HTTP, no browser.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 61)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 64)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -96,7 +96,7 @@ a snap can be shown stopping at a block boundary instead of reading `PaperEach` 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (247)
+### 4 — Frontend against the real API (290)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -237,8 +237,26 @@ The same browser, the real server, the real storage, the fake `claude`.
   the one that separates this panel from the ask popover: a click outside leaves it alone.
   One of them asks the browser what is painted on top of the refusal toast, because
   Playwright calls an occluded element visible and the first screen used to cover it.
+- `test_sections.py` (27) — a canvas imported from `fixtures/sections_doc.md`, where every
+  heading in a body is the head of a section that folds on its own. Seven hold the structure
+  and the one invariant the rest stands on: a section per heading, a deeper heading nested
+  inside the one above it, a section closed by the next heading of its level, the text before
+  the first heading left unwrapped, two headings of the same name given different keys, and the
+  rendered plain text identical before the wrap and again with a section folded. An anchor is an
+  offset into that text, so a wrap that costs a heading one character moves every stored anchor
+  in the box. Six cover the control: the chevron folds its section, unfolds it, tracks
+  `aria-expanded`, carries a name for a screen reader, leaves the box itself open, and stays
+  quiet while the heading text is being selected. Four cover anchors and edges with the passage
+  folded away: the quote on the answer still reads it, the edge starts at the box rather than the
+  canvas origin, the way back unfolds the section to land on the passage, and a mark on a
+  heading's first word is the heading and not the chevron in front of it. Two follow a selection
+  that crosses a fold: the section opens before the selection is measured, and the quote holds
+  only what is on screen. Three are find and layout: no match counted inside a folded section,
+  the count back when it unfolds, and the boxes below rising when a section above them folds.
+  Three are persistence: the fold surviving a reload, reaching the server in one patch as
+  `sections`, and a stored key whose heading was renamed folding nothing.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 290)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 333)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -253,7 +271,7 @@ directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 26)
+### 6 — Data / persistence (`tests/unit/test_storage.py`, 28)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
 above in layer 1. Three cover the pin a reader puts on a box: an answer starting unpinned, a
@@ -315,6 +333,7 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, and `[[fake:long]]` for an answer tall enough to overlap the box below it. |
 | `fixtures/sample_doc.md` | An excerpt of *Attention Is All You Need*. The word "attention" appears exactly four times; the find tests count on it. |
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
+| `fixtures/sections_doc.md` | A document with a paragraph before the first heading, one h1, two h2s reading `Background`, and an h3 and h4 nested under the first of them. The repeat is there so two sections cannot share a key, and the nesting is there so a fold can be shown inside a fold. `sample_doc.md` has only an h1 and an h2 and no repeats, so it covers neither. |
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |

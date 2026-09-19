@@ -26,6 +26,7 @@ BOX_KEYS = {
     "createdAt",
     "collapsed",
     "pinned",
+    "sections",
 }
 
 ANCHOR_KEYS = {"id", "box", "target", "start", "end", "quote"}
@@ -92,6 +93,7 @@ def make_box(**over) -> dict:
         "createdAt": "2026-09-16T10:00:00Z",
         "collapsed": False,
         "pinned": False,
+        "sections": [],
     }
     box.update(over)
     return box

@@ -3,6 +3,7 @@
 
 import { materialize } from './anchors.js';
 import { UNFINISHED } from './config.js';
+import * as sections from './sections.js';
 
 export const STATUS = {
   pending: 'Pending',
@@ -161,6 +162,10 @@ export function update(el, box, {
   }
 
   const streaming = box.status === 'running' || box.status === 'pending';
+  // The fold of a section is deliberately absent from the signature. This guards the
+  // expensive rebuild, and the body is rewritten whenever the anchor list changes, which
+  // is one of the commonest flows in the app. The fold is re-applied from `box.sections`
+  // on that path, so it survives a rebuild without having to force one.
   const signature = streaming
     ? `live:${liveText || ''}`
     : `done:${html || ''}|${anchors.map((a) => `${a.id}@${a.start}`).join(',')}`;
@@ -178,6 +183,10 @@ export function update(el, box, {
     return [];
   }
   body.innerHTML = html || '';
+  // Structure, then the fold, then the marks: `materialize` splits text nodes, so it
+  // goes last and measures its offsets against the tree the reader actually has.
+  sections.sectionize(body, box.id);
+  sections.apply(body, box.sections || []);
   // Where each passage turned out to be. The caller stores it: this module draws, it
   // does not own the canvas.
   return materialize(body, anchors).moved;

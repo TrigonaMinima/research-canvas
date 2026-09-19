@@ -84,8 +84,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 
 /* One glyph wide: the header has three buttons on it at 240px. The name a screen
    reader reads comes from the aria-label boxes.js keeps in step with the state. */
-.box__fold,.ask__close{border:0;background:0 0;color:var(--ink2);cursor:pointer;padding:0 2px;transition:color .12s}
-.box__fold:hover,.ask__close:hover{color:var(--ink)}
+.box__fold,.ask__close,.sec__fold{border:0;background:0 0;color:var(--ink2);cursor:pointer;padding:0 2px;transition:color .12s}
+.box__fold:hover,.ask__close:hover,.sec__fold:hover{color:var(--ink)}
 .box__fold{font:400 17px/1 var(--sans);margin-left:2px}
 
 .box__q{
@@ -166,6 +166,46 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .prose--root p{margin:0 0 15px}
 .prose--root h1{margin:0 0 20px;font:600 33px/1.16 var(--serif);letter-spacing:-.015em}
 .prose--root h2{margin:26px 0 12px;font:600 15px/1.3 var(--sans)}
+
+/* --- sections ------------------------------------------------------------- */
+
+/* Every heading is now the head of a section that folds. The chevron hangs in the
+   box's own left padding, so the heading text starts exactly where it did before the
+   control arrived: 22px clears the answer box's 28px gutter and the document's 54px
+   one alike. */
+.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6{position:relative}
+/* h4 to h6 had no rule of their own until they started carrying a control. */
+.prose h4,.prose h5,.prose h6{margin:16px 0 8px;font:600 13px/1.35 var(--sans);letter-spacing:.02em}
+
+/* Borderless and --ink2 from the box fold's own rule above. What is left is the
+   hang in the gutter, raised above .box__resize, which reaches 6px into an answer
+   box's gutter and would otherwise take the click. The inherited side padding is
+   dropped so the glyph below has the full 18px to sit in. */
+.sec__fold{
+  position:absolute;left:-22px;top:0;z-index:4;
+  display:flex;align-items:center;justify-content:center;width:18px;height:1.25em;
+  padding:0;font-size:inherit;line-height:1;
+}
+/* A drawn glyph and never a text node: the heading's text has to stay the text the
+   anchor offsets were measured against. 25BC and not the small 25BE: the small
+   variant fills so little of its em box that it needs about 22px to read at this
+   size, which then overflows the 18px button. One fixed size for every level, so the
+   control reads the same on an h1 as on an h6 rather than growing with the heading.
+   Static, because nothing here animates. */
+.sec__fold::before{content:"\25BC";display:block;font:400 13px/1 var(--sans)}
+.sec__fold[aria-expanded="false"]::before{transform:rotate(-90deg)}
+
+/* Folded. The attribute is on the body and not on the section, so the heading above
+   it stays on screen and stays findable. display:none leaves the words in the tree,
+   where the offsets need them, and find.js prunes the subtree off this same
+   attribute. */
+[data-sec-body][data-collapsed="1"]{display:none}
+
+/* A wrapped first or last block is no longer a direct child of .prose, so the two
+   edge margins above are said again one level in. The second matches at every depth,
+   which is how it reaches the innermost block. */
+.prose>.sec:first-child>*:first-child{margin-top:0}
+.prose .sec:last-child>[data-sec-body]>*:last-child{margin-bottom:0}
 
 mark[data-anchor]{
   background:var(--mark);box-shadow:inset 0 -1.5px 0 var(--accent);

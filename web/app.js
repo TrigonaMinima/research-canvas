@@ -21,6 +21,7 @@ import * as boxes from './boxes.js';
 import * as edges from './edges.js';
 import * as find from './find.js';
 import * as minimap from './minimap.js';
+import * as sections from './sections.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -832,6 +833,14 @@ function jumpToParent(boxId) {
   const anchor = state.canvas.anchors.find((a) => a.target === boxId);
   const mark = anchor && el.canvas.querySelector(
     `[data-box="${box.parent}"] mark[data-anchor="${anchor.id}"]`);
+  // A passage folded away has no rect, and the way back would land on the parent box
+  // instead of the passage. The fold lives on the parent, which is where the mark is.
+  if (mark) {
+    const parent = boxById(box.parent);
+    const body = mark.closest('[data-body]');
+    const held = body ? sections.holding(body, mark) : [];
+    if (parent && held.length) applySections(parent, without(parent.sections || [], held));
+  }
   if (mark && mark.getClientRects().length) {
     camera.centerOnAnchor(camera.rectOf(mark));
     pulse(mark);
@@ -940,6 +949,15 @@ function onSelection() {
   }
   if (range.toString().trim().length < MIN_SELECTION_CHARS) return;
 
+  // A selection that crosses a folded section would quote text nobody can see. Expanding
+  // is an attribute flip, not a node move, so the live range survives it; what the quote
+  // says is then what is on screen.
+  const crossed = sections.crossedBy(from, range);
+  if (crossed.length) {
+    const box = boxOf(from);
+    applySections(box, without(box.sections || [], crossed));
+  }
+
   const offsets = offsetsOf(from, range);
   if (!offsets) return;
   openAsk(boxEl, offsets, range.getBoundingClientRect());
@@ -1020,6 +1038,25 @@ const setCollapsed = (box, collapsed) => applyCollapsed([box], collapsed);
 
 const setAllCollapsed = (collapsed) =>
   applyCollapsed(state.canvas ? state.canvas.boxes : [], collapsed);
+
+// A fold adds a key and an unfold takes one away, while the selection repair takes
+// several at once. One helper, so the order of the kept keys never churns.
+const without = (keys, drop) => keys.filter((key) => !drop.includes(key));
+
+// Folding a section inside a body, rather than the whole box. The attributes are flipped
+// on the live sections instead of going through `render()`: nothing about the box itself
+// changed, and a rebuild would throw away the selection that may have asked for this.
+function applySections(box, keys) {
+  if (!box) return;
+  // `apply` hands back only the keys that found a section, so a key whose heading was
+  // edited away leaves the model here, on the reader's next fold. An edit is not a
+  // fold, so `saveEdit` has no business doing this and does not.
+  const bodyEl = el.canvas.querySelector(`[data-box="${box.id}"] [data-body]`);
+  box.sections = bodyEl ? sections.apply(bodyEl, keys) : keys;
+  runFind(); // folding changes what is findable, and a stale range has no rect to fly to
+  // The fold and the reflow it causes go in one patch, so two writes cannot race.
+  scheduleRestack({ [box.id]: { sections: box.sections } });
+}
 
 // --- the selection ------------------------------------------------------------
 
@@ -1291,6 +1328,21 @@ document.addEventListener('click', (event) => {
 
   const back = hit('[data-goparent]') || hit('[data-quote]');
   if (back) { jumpToParent(boxOf(back).id); return; }
+
+  // The box fold lives on the header button and the section fold inside the body, so
+  // the two branches cannot both match one click: `[data-collapse]` is an exact
+  // attribute name, which `data-collapsed` is not, and no ancestor of a chevron wears
+  // it. The order below is readability, not a tie-break.
+  const secToggle = hit('[data-sec-toggle]');
+  if (secToggle) {
+    // The model, not the attribute, for the same reason the box fold gives below.
+    const box = boxOf(secToggle);
+    const key = sections.keyOf(secToggle);
+    if (!key) return; // a chevron outside a section has nothing to fold
+    const folded = box.sections || [];
+    applySections(box, folded.includes(key) ? without(folded, [key]) : [...folded, key]);
+    return;
+  }
 
   const collapse = hit('[data-collapse]');
   if (collapse) {

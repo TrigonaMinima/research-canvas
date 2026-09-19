@@ -82,6 +82,8 @@ class Box:
     reason: str = ""
     web_search: bool = True
     collapsed: bool = False
+    # Slugs of the headings folded shut inside this box's document.
+    sections: list[str] = field(default_factory=list)
     # Dragged vertically by the reader, so the layout pass leaves it alone.
     pinned: bool = False
     created_at: str = ""
@@ -100,6 +102,7 @@ class Box:
             "reason": self.reason,
             "webSearch": self.web_search,
             "collapsed": self.collapsed,
+            "sections": self.sections,
             "pinned": self.pinned,
             "createdAt": self.created_at,
         }
@@ -119,6 +122,7 @@ class Box:
             reason=data.get("reason", ""),
             web_search=bool(data.get("webSearch", True)),
             collapsed=bool(data.get("collapsed", False)),
+            sections=[str(s) for s in data.get("sections", [])],
             pinned=bool(data.get("pinned", False)),
             created_at=data.get("createdAt", ""),
         )
