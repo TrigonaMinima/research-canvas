@@ -69,8 +69,11 @@ run time. `make vendor` rebuilds it from `vendor/entry.js` with `npm ci` against
 `vendor/package-lock.json`, so the bundle is reproducible. It needs Node; running the skill
 does not. The browser loads the bundle on the first Edit click, not on every canvas.
 
-Keys: `Enter` saves, `Shift+Enter` opens a new line and carries a list marker with it, `Tab`
-indents, `Esc` discards.
+Double click any body text to open the editor there, or use the Edit button in the box
+header. Save sits at each end of the editor, so a long document is savable from either.
+
+Keys: `Enter` saves, from a list and a quote as well as from prose, `Shift+Enter` opens a new
+line and carries a list marker with it, `Tab` indents, `Esc` discards.
 
 ## Do not
 

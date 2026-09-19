@@ -260,8 +260,13 @@ That runs `npm ci` against the committed `vendor/package-lock.json`, then bundle
 `vendor/entry.js` deliberately leaves out `@codemirror/language-data`, which is a megabyte
 on its own.
 
-Editor keys: `Enter` saves, `Shift+Enter` opens a new line and carries a list marker with
-it, `Tab` indents, `Esc` discards.
+Double click any body text to open the editor there; the Edit button in the box header does
+the same. Save sits above the editor and again below it, so a long document is savable from
+either end.
+
+Editor keys: `Enter` saves, from inside a list and a quote as well as from prose,
+`Shift+Enter` opens a new line and carries a list marker with it, `Tab` indents, `Esc`
+discards.
 
 ## Tests
 

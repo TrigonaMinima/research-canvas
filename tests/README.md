@@ -1,13 +1,13 @@
 # Tests
 
-449 tests. 446 run on every `make test`; the 3 marked `live` spend real Claude usage and
+465 tests. 462 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          446 tests, no usage spent
+make test          unit + api + e2e          462 tests, no usage spent
 make test-unit     tests/unit                 82
 make test-api      tests/api                  77  (3 live deselected)
-make test-e2e      tests/e2e                 290
+make test-e2e      tests/e2e                 306
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 82 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 61 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 247 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 290 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py` | 263 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 306 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 26 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py` | 29 |
@@ -105,7 +105,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (129) — the root box, selection gating (cross-box, non-`done`, under
+- `test_canvas.py` (145) — the root box, selection gating (cross-box, non-`done`, under
   three characters), asking, streaming, the anchor mark, the edge, asking *inside* an
   answer, jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing
   the ask popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere
@@ -115,14 +115,23 @@ The same browser, the real server, the real storage, the fake `claude`.
   so it can never strike through the words it runs past. One more follows a highlight that
   wraps over several lines, which measures as the box around all of them: the right edge of
   that box belongs to the widest line, so the edge used to leave beside the passage rather
-  than from the end of it. Nineteen cover editing a box: the
-  Edit button on the document and on an answer, the markdown source rather than the rendered
-  HTML, the whole document on screen with no scrollbar inside the editor, the caret landing
-  on the first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter`
-  saving, `Shift+Enter` opening a new line and carrying a list marker onto it, the Save
+  than from the end of it. Thirty-five cover editing a box: the Edit button on the document
+  and on an answer, the markdown source rather than the rendered HTML, the whole document
+  reachable by panning to it with no scrollbar inside the editor, the caret landing on the
+  first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter` saving, `Shift+Enter` opening a new line and carrying a list marker onto it, the Save
   button, `Escape` throwing the edit away, a blank edit refused with its reason, an edit
   surviving a reload, a mark and its edge still there when the passage survives, and no Edit
-  button at all while an answer is still running. Thirty-six cover this change: the left
+  button at all while an answer is still running. Sixteen of those cover this change. Four
+  pin `Enter` saving from inside a bullet list, a numbered list, a nested list and a
+  blockquote, which markdown's own keymap used to swallow. Six pin a Save button at each
+  end of the editor: one above the editing surface, one below it, the top one still on
+  screen when the source runs past the window, the top one saving, the Edit button
+  hidden while the editor is open, and the desk holding still while a long document is
+  typed, since CodeMirror scrolls its caret into view by scrolling whatever ancestor
+  will move and would otherwise carry the whole canvas away with it. Six pin double click
+  to edit: on the body it opens the editor, it never leaves the ask popover behind, inside the editor it keeps the unsaved
+  text, on a highlight it still jumps to the answer and opens nothing, on a link it follows
+  the link, and on an answer that is still running it does nothing at all. Thirty-six cover this change: the left
   handle widening a box, stopping at the minimum, and surviving a reload; minimising a box
   down to its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the
   label tracking the fold, the fold surviving a reload, the outgoing edge still drawn and
@@ -307,7 +316,7 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/sample_doc.md` | An excerpt of *Attention Is All You Need*. The word "attention" appears exactly four times; the find tests count on it. |
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
-| `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
+| `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
