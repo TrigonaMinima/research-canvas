@@ -40,7 +40,10 @@ const base = [
   drawSelection(),
   bracketMatching(),
   closeBrackets(),
-  markdown(),
+  // No keymap of its own. Its Enter binding sits at Prec.high and would outrank ours
+  // wherever a list or a quote is being continued, which is exactly where Enter used to
+  // stop saving. The cost is markdown-aware Backspace, which nothing here relied on.
+  markdown({ addKeymap: false }),
   syntaxHighlighting(highlight),
   indentUnit.of('  '),
   theme,
@@ -55,7 +58,9 @@ export function mount(host, doc, { onSave }) {
     state: EditorState.create({
       doc,
       extensions: [
-        // Ours first: a keymap earlier in the list wins the key.
+        // CodeMirror sorts keymaps by precedence bucket first and only then by order,
+        // so being early is not enough to win a key. This one wins because nothing
+        // above the default bucket claims Enter any more.
         keymap.of([
           {
             key: 'Enter',
