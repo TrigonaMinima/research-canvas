@@ -95,6 +95,9 @@ const boxesById = () => new Map(state.canvas.boxes.map((b) => [b.id, b]));
 const anchorsByTarget = () => new Map(state.canvas.anchors.map((a) => [a.target, a]));
 const boxOf = (node) => boxById(node.closest('[data-box]').dataset.box);
 
+// A modified pointer gesture belongs to the browser, not to us.
+const modified = (event) => event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+
 function saveCamera() {
   if (!state.canvas) return;
   api.patchCanvas(state.canvas.id, {
@@ -1230,6 +1233,29 @@ el.viewport.addEventListener('wheel', (event) => {
 
 // --- clicks -------------------------------------------------------------------
 
+// A shortcut into edit mode, not the only way in: the Edit button in the header stays.
+document.addEventListener('dblclick', (event) => {
+  if (modified(event)) return; // a modified double click is the browser's own selection
+  const body = event.target.closest?.('[data-body]');
+  if (!body) return;
+
+  // The pair of clicks leaves a word selected, and a selection is a question, so the ask
+  // popover would open on the next tick. Cleared above the guards below on purpose: one
+  // rule holds everywhere in a body, which is that a plain double click never opens it.
+  window.getSelection()?.removeAllRanges();
+
+  // A highlight and a link each already answer to a click, so a second one is not a
+  // request to edit. And the first click may have flown the camera, in which case the
+  // second landed on whatever slid under the pointer rather than on what was read.
+  if (event.target.closest('mark[data-anchor], a[href]')) return;
+  if (el.canvas.dataset.anim === '1') return;
+
+  const boxEl = body.closest('[data-box]');
+  const box = boxById(boxEl.dataset.box);
+  if (!box || !boxes.canEdit(box, !!edit && edit.id === box.id)) return;
+  openEditor(boxEl);
+});
+
 document.addEventListener('click', (event) => {
   const t = event.target;
   const hit = (sel) => t.closest?.(sel);
@@ -1241,9 +1267,7 @@ document.addEventListener('click', (event) => {
   // A modifier or non-primary click on any link belongs to the browser: that is how a
   // canvas opens in a second tab. Middle-click never arrives here at all, since it
   // fires auxclick rather than click.
-  const modified =
-    event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0;
-  if (modified && hit('a[href]')) return;
+  if ((modified(event) || event.button !== 0) && hit('a[href]')) return;
 
   // Selecting, not jumping. Without this the mark below would fly the camera away.
   if (selecting(event) && hit('[data-viewport]')) {

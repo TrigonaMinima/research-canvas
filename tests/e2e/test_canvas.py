@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from itertools import pairwise
 
 import pytest
@@ -42,6 +43,8 @@ from tests.fixtures.viewport import (
 )
 
 from research_canvas.config import BOX_GAP, CHROME_HEIGHT, MIN_BOX_WIDTH, ROOT_BOX_WIDTH
+
+from .conftest import canvas_from
 
 # BOX_GAP is the exact fixed gap `restack()` must leave between two boxes stacked
 # under the same parent, read from the server's own copy rather than retyped.
@@ -583,6 +586,64 @@ def test_the_edit_button_is_hidden_while_the_box_is_being_edited(canvas):
     expect(canvas.locator(EDIT_BUTTON.format(box="b1"))).to_be_hidden()
     canvas.keyboard.press("Escape")
     expect(canvas.locator(EDIT_BUTTON.format(box="b1"))).to_be_visible()
+
+
+# --- double click to edit -------------------------------------------------
+
+
+def test_double_clicking_the_body_opens_the_editor(canvas):
+    canvas.dblclick('[data-box="b1"] [data-body] h1')
+    canvas.wait_for_selector(CONTENT.format(box="b1"))
+    assert source_of(canvas, "b1").startswith("# Attention Is All You Need")
+
+
+def test_double_clicking_the_body_does_not_open_the_ask_popover(canvas):
+    """The pair of clicks leaves a word selected, and a selection is a question."""
+    canvas.dblclick('[data-box="b1"] [data-body] h1')
+    canvas.wait_for_selector(CONTENT.format(box="b1"))
+    canvas.wait_for_timeout(500)  # the selection is read back on a timeout
+    expect(canvas.locator("[data-ask]")).to_have_count(0)
+
+
+def test_double_clicking_inside_the_editor_keeps_the_unsaved_edit(canvas):
+    edit(canvas, "b1", "# Kept\n\nNot saved yet.")
+    canvas.dblclick(CONTENT.format(box="b1"))
+    canvas.wait_for_timeout(500)  # a reopened editor would have thrown the text away
+    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_visible()
+    assert "Not saved yet." in source_of(canvas, "b1")
+
+
+def test_double_clicking_a_highlight_jumps_and_opens_nothing(canvas):
+    """The first click of the pair flies the camera, so the second lands who knows
+    where. The jump still happens; no editor anywhere, and no popover either."""
+    ask(canvas, "b1", QUOTE, "What is a residual connection?")
+    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
+    before = transform_of(canvas)
+    canvas.locator('[data-box="b1"] mark[data-anchor]').first.dblclick()
+    wait_for_camera(canvas)
+    assert transform_of(canvas) != before
+    expect(canvas.locator("[data-editor]")).to_have_count(0)
+    expect(canvas.locator("[data-ask]")).to_have_count(0)
+
+
+def test_double_clicking_a_link_follows_it_and_opens_no_editor(app):
+    """A fragment, not a real address: a live link would navigate away from the app."""
+    doc = "# A document with a link\n\nSee [the note](#note) for the rest of it."
+    page = canvas_from(app, doc)
+    page.dblclick('[data-box="b1"] [data-body] a')
+    expect(page).to_have_url(re.compile(r"#note$"))
+    expect(page.locator("[data-editor]")).to_have_count(0)
+
+
+def test_double_clicking_an_unfinished_answer_does_not_open_the_editor(canvas):
+    """Same rule as the Edit button, which is hidden until the answer lands."""
+    ask(canvas, "b1", QUOTE, "Explain this [[fake:slow]]")
+    canvas.wait_for_selector('[data-box="b2"][data-status="running"]')
+    body = canvas.locator('[data-box="b2"] [data-body]')
+    expect(body).not_to_be_empty()  # the stream has started, so there is text to click
+    body.dblclick()
+    canvas.wait_for_timeout(500)  # long enough for the editor's fetch to have landed
+    expect(canvas.locator(EDITOR.format(box="b2"))).to_have_count(0)
 
 
 # --- folding, framing, and finding your way back --------------------------
