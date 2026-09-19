@@ -12,7 +12,8 @@ from tests.fixtures.editor import (
     EDIT_BUTTON,
     EDITOR,
     LINE,
-    SAVE_BUTTON,
+    SAVE_BOTTOM,
+    SAVE_TOP,
     SCROLLER,
     edit,
     open_editor,
@@ -357,8 +358,14 @@ def test_editing_shows_the_markdown_source_not_the_rendered_html(canvas):
 
 
 def test_the_editor_shows_the_whole_document(canvas):
-    """The box is as tall as its document when rendered, and edit mode matches it."""
+    """The box is as tall as its document when rendered, and edit mode matches it.
+
+    CodeMirror builds only the lines near the view and the rest as the camera reaches
+    them, so the tail of a long document is panned to rather than assumed. Asserting on
+    the first screenful alone passes or fails on a handful of pixels of box chrome."""
     open_editor(canvas, "b1")
+    zoom_to_fit(canvas)
+    wait_for_camera(canvas)
     assert "machine translation" in source_of(canvas, "b1")
 
 
@@ -422,7 +429,7 @@ def test_shift_enter_carries_a_list_marker_to_the_next_line(canvas):
 
 def test_saving_an_edit_rewrites_the_body(canvas):
     edit(canvas, "b1", EDITED)
-    canvas.click(SAVE_BUTTON.format(box="b1"))
+    canvas.click(SAVE_BOTTOM.format(box="b1"))
     expect(canvas.locator('[data-box="b1"] [data-body]')).to_contain_text(
         "carries the input forward"
     )
@@ -449,14 +456,14 @@ def test_escape_throws_the_edit_away(canvas):
 
 def test_a_blank_edit_is_refused_with_the_reason(canvas):
     edit(canvas, "b1", "   ")
-    canvas.click(SAVE_BUTTON.format(box="b1"))
+    canvas.click(SAVE_TOP.format(box="b1"))
     expect(canvas.locator("[data-toast]")).to_contain_text("cannot be empty")
     expect(canvas.locator(EDITOR.format(box="b1"))).to_be_visible()
 
 
 def test_an_edit_survives_a_reload(canvas):
     edit(canvas, "b1", EDITED)
-    canvas.click(SAVE_BUTTON.format(box="b1"))
+    canvas.click(SAVE_TOP.format(box="b1"))
     expect(canvas.locator('[data-box="b1"] [data-body]')).to_contain_text(
         "carries the input forward"
     )
@@ -471,7 +478,7 @@ def test_an_edit_that_keeps_the_passage_keeps_the_mark_and_its_edge(canvas):
     ask(canvas, "b1", QUOTE, "What is a residual connection?")
     canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
     edit(canvas, "b1", EDITED)
-    canvas.click(SAVE_BUTTON.format(box="b1"))
+    canvas.click(SAVE_TOP.format(box="b1"))
     expect(canvas.locator('[data-box="b1"] mark[data-anchor]').first).to_contain_text(QUOTE)
     expect(canvas.locator('[data-edges] [data-edge="b2"]')).to_have_count(1)
 
@@ -517,6 +524,65 @@ def test_enter_saves_from_inside_a_blockquote(canvas):
     expect(canvas.locator('[data-box="b1"] [data-body] blockquote')).to_contain_text(
         "A quoted line"
     )
+
+
+# --- a Save button at each end --------------------------------------------
+
+# The editor never scrolls inside itself, so a long document makes a tall box. One Save
+# at the foot of it is a Save nobody can see.
+LONG_EDIT = "# Long\n\n" + "\n\n".join(
+    f"Paragraph {n} of a document that runs on." for n in range(120)
+)
+
+
+def test_the_save_button_sits_above_the_editing_surface(canvas):
+    open_editor(canvas, "b1")
+    save = canvas.locator(SAVE_TOP.format(box="b1")).bounding_box()
+    editor = canvas.locator(EDITOR.format(box="b1")).bounding_box()
+    assert save["y"] + save["height"] <= editor["y"]
+
+
+def test_there_is_a_save_button_at_each_end_of_the_editor(canvas):
+    open_editor(canvas, "b1")
+    editor = canvas.locator(EDITOR.format(box="b1")).bounding_box()
+    bottom = canvas.locator(SAVE_BOTTOM.format(box="b1")).bounding_box()
+    expect(canvas.locator(SAVE_TOP.format(box="b1"))).to_be_visible()
+    assert bottom["y"] >= editor["y"] + editor["height"]
+
+
+def test_the_save_button_stays_on_screen_on_a_long_document(canvas):
+    edit(canvas, "b1", LONG_EDIT)
+    editor = canvas.locator(EDITOR.format(box="b1")).bounding_box()
+    save = canvas.locator(SAVE_TOP.format(box="b1")).bounding_box()
+    height = canvas.viewport_size["height"]
+    assert editor["y"] + editor["height"] > height  # the source runs past the window
+    assert 0 <= save["y"] < height  # and the way out of it is still in view
+
+
+def test_typing_a_long_document_does_not_scroll_the_desk(canvas):
+    """CodeMirror scrolls its caret into view by scrolling the nearest ancestor that
+    will move, and `overflow:hidden` does not refuse a programmatic scroll. A scrolled
+    desk slides the whole canvas out from under the camera."""
+    edit(canvas, "b1", LONG_EDIT)
+    desk = canvas.locator("[data-desk]")
+    assert desk.evaluate("(el) => [el.scrollTop, el.scrollLeft]") == [0, 0]
+
+
+def test_the_top_save_button_saves_the_edit(canvas):
+    edit(canvas, "b1", EDITED)
+    canvas.click(SAVE_TOP.format(box="b1"))
+    expect(canvas.locator('[data-box="b1"] [data-body]')).to_contain_text(
+        "carries the input forward"
+    )
+    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_hidden()
+
+
+def test_the_edit_button_is_hidden_while_the_box_is_being_edited(canvas):
+    """Clicking it during an edit would reopen the editor and drop what was typed."""
+    open_editor(canvas, "b1")
+    expect(canvas.locator(EDIT_BUTTON.format(box="b1"))).to_be_hidden()
+    canvas.keyboard.press("Escape")
+    expect(canvas.locator(EDIT_BUTTON.format(box="b1"))).to_be_visible()
 
 
 # --- folding, framing, and finding your way back --------------------------

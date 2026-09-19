@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 from playwright.sync_api import expect
-from tests.fixtures.editor import SAVE_BUTTON, edit
+from tests.fixtures.editor import SAVE_TOP, edit
 from tests.fixtures.selection import SELECT, find_offsets, plain_text, send_question
 from tests.fixtures.viewport import (
     box_rect,
@@ -198,7 +198,7 @@ def test_should_render_math_in_an_answer_box(math_canvas):
     math_canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
 
     edit(math_canvas, "b2", ANSWER_WITH_MATH)
-    math_canvas.click(SAVE_BUTTON.format(box="b2"))
+    math_canvas.click(SAVE_TOP.format(box="b2"))
 
     body = math_canvas.locator('[data-box="b2"] [data-body]')
     expect(body.locator('math:has-text("Bound")')).to_have_count(1)

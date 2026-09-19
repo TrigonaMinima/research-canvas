@@ -68,6 +68,15 @@ const state = {
 
 const camera = new Camera(el.canvas, measure);
 
+// The camera moves the canvas by transform, so a scrolled desk slides the whole view out
+// from under it. CodeMirror scrolls its caret into view by walking up to the nearest
+// ancestor that will move, and `overflow:hidden` refuses a reader's scroll but not a
+// script's, so the one that lands here is undone at once.
+el.desk.addEventListener('scroll', () => {
+  el.desk.scrollTop = 0;
+  el.desk.scrollLeft = 0;
+});
+
 // --- small helpers ------------------------------------------------------------
 
 let toastTimer = null;
@@ -843,11 +852,17 @@ const loadEditor = () => (editorModule ||= import('./editor.js'));
 function openPane(boxEl) {
   const pane = document.createElement('div');
   pane.dataset.editPane = '';
+  // A Save at each end. The editor never scrolls inside itself, so a long document
+  // makes a tall pane, and one Save at the foot of it is a Save nobody can reach.
+  // The hint rides with the top bar, where the caret already is when the editor opens.
   pane.innerHTML = `
+    <div class="box__edit-head">
+      <button type="button" class="btn-primary" data-edit-save="top">Save</button>
+      <span class="box__hint">Enter saves · Shift+Enter new line · Tab indents · Esc discards</span>
+    </div>
     <div class="box__editor" data-editor></div>
     <div class="box__edit-foot">
-      <span class="box__hint">Enter saves · Shift+Enter new line · Tab indents · Esc discards</span>
-      <button type="button" class="btn-primary" data-edit-save>Save</button>
+      <button type="button" class="btn-primary" data-edit-save="bottom">Save</button>
     </div>`;
   boxEl.querySelector('[data-body]').after(pane);
   return pane;

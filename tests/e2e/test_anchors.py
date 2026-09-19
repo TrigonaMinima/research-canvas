@@ -9,7 +9,7 @@ by, so it has to move too, in the document and in every answer box under it.
 from __future__ import annotations
 
 import pytest
-from tests.fixtures.editor import SAVE_BUTTON, edit
+from tests.fixtures.editor import SAVE_TOP, edit
 from tests.fixtures.selection import QUOTE, ask, plain_text
 from tests.fixtures.viewport import box_rect, canvas_id_of
 
@@ -28,7 +28,7 @@ LATER = "A preface the reader added.\n\nA residual connection carries the input 
 
 def save(page, box: str, markdown: str) -> None:
     edit(page, box, markdown)
-    page.click(SAVE_BUTTON.format(box=box))
+    page.click(SAVE_TOP.format(box=box))
     page.wait_for_selector(f'[data-box="{box}"] [data-editor]', state="hidden")
 
 

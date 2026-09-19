@@ -281,7 +281,8 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
   width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:3px;
   background:var(--paper2);color:var(--ink)}
 .ask textarea{height:62px;resize:none;padding:10px 11px;font:400 14.5px/1.5 var(--sans);outline:0}
-.ask__foot,.sheet__foot,.box__edit-foot{display:flex;align-items:center;gap:10px;margin-top:10px}
+.ask__foot,.sheet__foot,.box__edit-foot,.box__edit-head{display:flex;align-items:center;gap:10px;margin-top:10px}
+.box__edit-head{margin-top:0;margin-bottom:10px}
 .ask__hint,.box__hint{font:400 11.5px/1 var(--sans);color:var(--ink2);margin-left:auto}
 .btn-primary{border:0;border-radius:3px;background:var(--accent);color:var(--paper);cursor:pointer;font:500 12.5px/1 var(--sans);padding:9px 13px}
 

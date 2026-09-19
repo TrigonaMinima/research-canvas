@@ -9,7 +9,11 @@ from __future__ import annotations
 
 # One copy of every selector edit mode is driven by, CodeMirror's own included.
 EDIT_BUTTON = '[data-box="{box}"] [data-edit]'
-SAVE_BUTTON = '[data-box="{box}"] [data-edit-save]'
+# A Save button at each end of the editor, so a long document is savable from either.
+# Two of them answer to `[data-edit-save]`, and Playwright is strict about that, so
+# every caller names the end it means.
+SAVE_TOP = '[data-box="{box}"] [data-edit-save="top"]'
+SAVE_BOTTOM = '[data-box="{box}"] [data-edit-save="bottom"]'
 EDITOR = '[data-box="{box}"] [data-editor]'
 CONTENT = '[data-box="{box}"] .cm-content'
 SCROLLER = '[data-box="{box}"] .cm-scroller'

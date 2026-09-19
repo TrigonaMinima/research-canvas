@@ -23,6 +23,11 @@ export function waitLabel(box, queuedAhead) {
   return box.webSearch ? 'Searching the web…' : 'Thinking…';
 }
 
+// An answer that has not landed yet has no source worth editing, and neither has one
+// already open: a second Edit would rebuild the editor over the unsaved text. Said once
+// here, so the button that offers editing and the double click that starts it agree.
+export const canEdit = (box, editing) => !UNFINISHED.has(box.status) && !editing;
+
 // Depth 0 is the document, so a box reads one deeper than it is stored. One
 // off-by-one, in one place: every label in the app counts from here.
 export const depthOf = (box) => box.depth + 1;
@@ -141,8 +146,7 @@ export function update(el, box, {
   const unpin = el.querySelector('[data-unpin]');
   if (unpin) unpin.hidden = !box.pinned;
 
-  // An answer that has not landed yet has no source worth editing.
-  el.querySelector('[data-edit]').hidden = waiting;
+  el.querySelector('[data-edit]').hidden = !canEdit(box, editing);
 
   // The editing pane itself is built by whoever opened it, and sits after this.
   const body = el.querySelector('[data-body]');

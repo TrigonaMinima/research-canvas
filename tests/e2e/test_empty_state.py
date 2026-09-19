@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from playwright.sync_api import expect
-from tests.fixtures.editor import SAVE_BUTTON, edit
+from tests.fixtures.editor import SAVE_TOP, edit
 
 from research_canvas.config import DISPLAY_NAME
 from research_canvas.storage import REFUSED_MESSAGE
@@ -145,7 +145,7 @@ def test_two_canvases_can_be_edited_at_once(app, server):
     edits = ((app, "# Edited first"), (second_tab, "# Edited second"))
     for tab, line in edits:
         edit(tab, "b1", line)
-        tab.click(SAVE_BUTTON.format(box="b1"))
+        tab.click(SAVE_TOP.format(box="b1"))
         expect(tab.locator('[data-box="b1"] [data-body]')).to_contain_text(line[2:])
 
     # Neither tab wrote over the other: each canvas kept its own edit on disk.
