@@ -17,6 +17,7 @@ import {
   MAX_PRESETS,
   MIN_BOX_WIDTH,
   MIN_SELECTION_CHARS,
+  SCROLL_BLOCKS,
   STILL_RUNNING_MESSAGE,
   UNFINISHED,
 } from './config.js';
@@ -937,6 +938,28 @@ function pulse(node) {
   }, FLASH_MS);
 }
 
+// Every scrolling block around an element, innermost first: a formula in a cell sits
+// inside the table.
+function* scrollBlocksOf(node) {
+  for (let block = node.closest(SCROLL_BLOCKS); block; block = block.parentElement.closest(SCROLL_BLOCKS)) {
+    yield block;
+  }
+}
+
+// A passage in a column its table has scrolled away is brought back into the block
+// first, or the camera would land on text the block is hiding. Takes a Range or an
+// element, and centres it so there is context on both sides.
+function showInBlock(target) {
+  const node = target.startContainer || target;
+  for (const block of scrollBlocksOf(node.nodeType === 1 ? node : node.parentElement)) {
+    const hit = target.getBoundingClientRect();
+    const frame = block.getBoundingClientRect();
+    if (hit.left >= frame.left && hit.right <= frame.right) continue;
+    const off = (hit.left + hit.right) / 2 - (frame.left + frame.right) / 2;
+    block.scrollLeft += off / camera.scale;
+  }
+}
+
 function revealBox(id) {
   const target = el.canvas.querySelector(`[data-box="${id}"]`);
   if (!target) return;
@@ -961,6 +984,7 @@ function jumpToParent(boxId) {
     if (parent && held.length) applySections(parent, without(parent.sections || [], held));
   }
   if (mark && mark.getClientRects().length) {
+    showInBlock(mark);
     camera.centerOnAnchor(camera.rectOf(mark));
     pulse(mark);
     return;
@@ -1129,8 +1153,9 @@ function stepFind(delta) {
   if (!total) return;
   state.find.index = (state.find.index + delta + total) % total;
   el.findCount.textContent = find.label(state.find.index, total);
-  const rect = state.find.ranges[state.find.index].getBoundingClientRect();
-  camera.centerOnAnchor(clientToCanvas(rect));
+  const range = state.find.ranges[state.find.index];
+  showInBlock(range);
+  camera.centerOnAnchor(clientToCanvas(range.getBoundingClientRect()));
 }
 
 // --- folding boxes ------------------------------------------------------------
@@ -1378,14 +1403,40 @@ el.viewport.addEventListener('mouseup', () => {
   setTimeout(onSelection, 0);
 });
 
+// The wide block under a sideways wheel, if it still has somewhere to go that way.
+// At its end it returns nothing, so the desk pans and the reader is never stuck.
+function scrollBlockFor(target, dx) {
+  for (const block of scrollBlocksOf(target)) {
+    const room = dx < 0 ? block.scrollLeft : block.scrollWidth - block.clientWidth - block.scrollLeft;
+    if (room > 1) return block;
+  }
+  return null;
+}
+
 el.viewport.addEventListener('wheel', (event) => {
   event.preventDefault();
   if (event.ctrlKey || event.metaKey) {
     camera.zoomTo(camera.scale * (1 - event.deltaY * 0.01), event.clientX, event.clientY);
-  } else {
-    camera.panBy(-event.deltaX, -event.deltaY);
+    return;
   }
+  // Shift turns a plain mouse wheel sideways; some browsers swap the axes themselves.
+  const shifted = event.shiftKey && !event.deltaX;
+  const dx = shifted ? event.deltaY : event.deltaX;
+  const sideways = shifted || Math.abs(event.deltaX) > Math.abs(event.deltaY);
+  const block = sideways && dx ? scrollBlockFor(event.target, dx) : null;
+  if (block) {
+    // The desk is scaled by transform, so a screen pixel is 1/scale of the block's.
+    block.scrollLeft += dx / camera.scale;
+    return;
+  }
+  camera.panBy(-event.deltaX, -event.deltaY);
 }, { passive: false });
+
+// A mark inside a scrolled block moves with it, and its edge has to follow. Scroll
+// does not bubble, hence the capture. A block with no edge in it moves nothing.
+el.canvas.addEventListener('scroll', (event) => {
+  if (event.target.querySelector('mark[data-anchor-edge]')) requestAnimationFrame(measure);
+}, true);
 
 // --- clicks -------------------------------------------------------------------
 

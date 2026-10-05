@@ -21,6 +21,10 @@ export const MAX_PRESET_QUESTION_CHARS = served.maxPresetQuestionChars;
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);
 
+// The blocks in a body that scroll sideways in place: a sideways wheel over one moves
+// it, not the desk.
+export const SCROLL_BLOCKS = '.table-wrap, .prose pre, .prose .math.block, .prose .math.amsmath, .prose .math.inline';
+
 // The stylesheet needs the chrome height as well, and cannot fetch it itself.
 // Handed over here so config.py stays the one owner of the number.
 document.documentElement.style.setProperty('--chrome-h', `${CHROME_HEIGHT}px`);

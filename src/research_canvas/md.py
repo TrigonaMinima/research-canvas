@@ -78,3 +78,17 @@ def _math_rule(self: Any, tokens: Sequence[Token], idx: int, options: Any, env: 
 
 for _type in _MATH:
     _md.add_render_rule(_type, _math_rule)
+
+
+# A wide table scrolls inside its wrapper rather than spilling out of the box. As with
+# maths, no whitespace between wrapper and table: it would shift every later anchor.
+def _table_open(self: Any, tokens: Sequence[Token], idx: int, options: Any, env: Any) -> str:
+    return f'<div class="table-wrap">{self.renderToken(tokens, idx, options, env)}'
+
+
+def _table_close(self: Any, tokens: Sequence[Token], idx: int, options: Any, env: Any) -> str:
+    return "</table></div>\n"
+
+
+_md.add_render_rule("table_open", _table_open)
+_md.add_render_rule("table_close", _table_close)

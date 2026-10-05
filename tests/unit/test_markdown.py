@@ -85,3 +85,15 @@ def _math_element(html: str) -> str:
     match = re.search(r"<math\b.*?</math>", html, re.DOTALL)
     assert match, f"no <math> element in {html!r}"
     return match.group(0)
+
+
+TABLE = "| a | b |\n| - | - |\n| 1 | 2 |\n"
+
+
+def test_should_wrap_a_table_in_a_scroll_wrapper():
+    assert md.render(TABLE).startswith('<div class="table-wrap"><table>')
+
+
+def test_should_leave_no_whitespace_between_wrapper_and_table():
+    """Anchors are offsets into the rendered text, so the wrapper may add no text node."""
+    assert md.render(TABLE).endswith("</table></div>\n")
