@@ -2,7 +2,7 @@
 :root{
   --desk:#E9E5DE; --dot:#CFC9BE; --paper:#FDFCFA; --paper2:#FBFAF7;
   --ink:#16161A; --ink2:#6E6A63; --line:#DED9D0;
-  --accent:#3A3E8F; --soft:#E7E7F4; --mark:rgba(58,62,143,.16);
+  --accent:#3A3E8F; --focus:var(--accent); --soft:#E7E7F4; --mark:rgba(58,62,143,.16);
   --warn:#9A3B2C; --shadow:0 1px 2px rgba(20,18,14,.06),0 14px 34px -20px rgba(20,18,14,.3);
   --chrome:rgba(253,252,250,.86);
   --serif:'Literata',Georgia,'Times New Roman',serif;
@@ -64,6 +64,14 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 /* A ring in the shadow, because outline is spoken for by :focus-visible and the
    landing flash, and border-color by the failed state above. */
 [data-box][data-selected="1"]{box-shadow:var(--shadow),0 0 0 2px var(--accent)}
+/* Focus is a bar on the top edge: shadow, outline and border colour are all taken.
+   5px tall so the corners follow the box's radius; the gradient inks only 3px. */
+.box::before{
+  content:"";position:absolute;inset:-1px -1px auto;height:5px;border-radius:5px 5px 0 0;
+  background:linear-gradient(var(--focus) 3px,transparent 3px);
+  opacity:0;transition:opacity .14s;pointer-events:none;
+}
+.box[data-focused="1"]::before{opacity:1}
 .box--root{padding:46px 54px 52px}
 .box--answer{padding:24px 28px 26px}
 
@@ -432,6 +440,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 
 @media (prefers-reduced-motion:reduce){
   .canvas[data-anim="1"]{transition:none}
+  .box::before{transition:none}
   .dot-pulse,.runpill .dot{animation:none;opacity:1}
   /* The ring still says where you landed; it just holds still until app.js drops it. */
   [data-box][data-flash="1"],mark[data-flash="1"]{animation:none;outline-color:var(--accent)}

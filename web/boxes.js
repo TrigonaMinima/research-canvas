@@ -90,8 +90,20 @@ export function ensure(layer, box) {
   return el;
 }
 
+// The one writer of the focus mark, so app.js can move it without a full update.
+// aria-current says the same thing to a screen reader: this is not DOM focus.
+export function markFocused(el, focused) {
+  if (focused) {
+    el.dataset.focused = '1';
+    el.setAttribute('aria-current', 'true');
+  } else {
+    delete el.dataset.focused;
+    el.removeAttribute('aria-current');
+  }
+}
+
 export function update(el, box, {
-  html, anchors, inbound, parent, liveText, queuedAhead, editing, selected,
+  html, anchors, inbound, parent, liveText, queuedAhead, editing, selected, focused,
 }) {
   el.dataset.status = box.status;
   el.style.left = `${box.x}px`;
@@ -112,6 +124,8 @@ export function update(el, box, {
   // needs to read.
   if (selected) el.dataset.selected = '1';
   else delete el.dataset.selected;
+
+  markFocused(el, focused);
 
   const fold = el.querySelector('[data-collapse]');
   const label = collapsed ? 'Expand' : 'Minimise';

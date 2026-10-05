@@ -22,7 +22,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 107 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 14 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py` | 363 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py` | 363 |
 | 5 | End-to-end, every UI element | all of `tests/e2e/` | 407 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
@@ -292,6 +292,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   the same sideways wheel scrolling a wide code block, the edge from a mark in a table
   cell following the table as it scrolls, and the table scrolling itself to a find hit in a
   hidden column and back to the passage an answer came from.
+- `test_box_focus.py` (24) — the one focused box, marked `data-focused="1"`. Four cover a
+  plain click: body, header (which still folds), a button, and the move to another box,
+  with one box marked at a time. Six cover a journey: an edge and a highlight focus the
+  child, the way back (button or quote) focuses the parent. Seven cover what lets focus go
+  or keeps it: a bare-desk click clears it, a pan keeps it, a cmd+click on a box or an edge
+  never moves it, and a text selection that runs off its box keeps focus on that box. The
+  rest: a selection in the question survives the click that moves focus, `aria-current`
+  follows the mark, and focus goes with a deleted box and with a canvas switch.
 - `test_header_fold.py` (10) — a click on a box header folds the box, the same as the button
   at its end. Five cover the click itself: the label folding the box, a second click
   unfolding it, the button's `aria-expanded` following along, the fold surviving a reload,

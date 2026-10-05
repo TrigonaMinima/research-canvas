@@ -73,6 +73,8 @@ const state = {
   find: { ranges: [], index: 0 },
   // Which boxes a bulk command acts on. Browser-only: a selection is a thought, not a canvas.
   selected: new Set(),
+  // The one box the arrow keys act on, or null. Browser-only, like the selection.
+  focused: null,
   // The question chips, fetched once at boot. Global, so no canvas switch clears them.
   presets: [],
 };
@@ -160,6 +162,7 @@ function render() {
     if (!alive.has(node.dataset.box)) node.remove();
   });
   for (const id of state.selected) if (!alive.has(id)) state.selected.delete(id);
+  if (!alive.has(state.focused)) state.focused = null;
 
   const busy = running();
   const queuedAhead = busy.filter((b) => b.status === 'running').length;
@@ -180,6 +183,7 @@ function render() {
       queuedAhead,
       editing: !!edit && box.id === edit.id,
       selected: state.selected.has(box.id),
+      focused: state.focused === box.id,
     }));
   }
   if (drifted.length) reanchor(drifted);
@@ -215,6 +219,7 @@ function measure() {
 function adopt(view) {
   state.canvas = view;
   state.selected.clear(); // a selection belongs to the desk it was made on
+  state.focused = null;   // and so does the focus
   setSelectMode(false);
   state.bodies = view.bodies || {};
   setTheme(view.theme, false);
@@ -1381,6 +1386,38 @@ function clearSelection() {
   render();
 }
 
+// --- the focused box ----------------------------------------------------------
+
+// Moves the mark on the two boxes itself. A render would rewrite header text under a
+// live text selection, and a click should not cost a pass over every box.
+function setFocus(id) {
+  const next = boxById(id) ? id : null;
+  if (state.focused === next) return;
+  // Boxes are children of the canvas, so the lookup stays out of their prose.
+  const nodeOf = (box) => box && el.canvas.querySelector(`:scope > [data-box="${box}"]`);
+  const was = nodeOf(state.focused);
+  const now = nodeOf(next);
+  state.focused = next;
+  if (was) boxes.markFocused(was, false);
+  if (now) boxes.markFocused(now, true);
+}
+
+// Where a click sends the focus: to the box at the far end of a journey, and otherwise
+// to the box it landed in. Decided before any branch runs, so focus never visits a box
+// on its way. Bare desk is the one case not here: it has to know the press was no drag.
+function focusOf(hit) {
+  const mark = hit('mark[data-anchor]');
+  if (mark) return mark.dataset.target;
+  const edge = hit('[data-edge]'); // inside the viewport, but inside no box
+  if (edge) return edge.dataset.edge;
+  const within = hit('[data-box]');
+  if (!within) return null;
+  // The way back lands on the parent, so that is the box the reader is now in.
+  const back = hit('[data-goparent]') || hit('[data-quote]');
+  return (back && boxOf(back).parent) || within.dataset.box;
+}
+
+
 // Client rects on both sides of the comparison. The band is drawn in client pixels and
 // the boxes are laid out in canvas pixels, and one conversion is one place to be wrong.
 function selectWithin(rect) {
@@ -1427,6 +1464,8 @@ let gesture = null;
 // Whether the press that is about to become a click moved anything. A pan and a band
 // both end over bare desk, and neither one is a click on it.
 let dragged = false;
+// Where the last press on the viewport began: a box id, or null for the desk.
+let pressedBox = null;
 
 // A band outlives its drag whenever the mouseup never arrives: a macOS ctrl+click opens
 // the context menu and eats it, and so does releasing the button outside the window.
@@ -1447,6 +1486,7 @@ el.viewport.addEventListener('mousedown', (event) => {
   const resize = event.target.closest('[data-resize]');
   const drag = event.target.closest('[data-drag]');
   const box = event.target.closest('[data-box]');
+  pressedBox = box ? box.dataset.box : null;
 
   // Cmd or Ctrl means selecting. On a box, swallow the press so it neither drags the
   // box nor starts a text selection, and let the click handler do the toggling.
@@ -1635,10 +1675,20 @@ document.addEventListener('click', (event) => {
     if (picked) { toggleSelect(picked.dataset.box); return; }
   }
 
+  // Building a selection never moves the focus: not on a box (returned above), and
+  // not on an edge, which is inside no box and so falls through to here.
+  const aim = !selecting(event) && focusOf(hit);
+  if (aim) setFocus(aim);
+
   // Bare desk: the shortest way out of a selection, and the one a reader tries first.
   // A drag that ended here panned the desk or swept a band, so it is not a click on it.
   if (hit('[data-viewport]') && !hit('[data-box]') && !hit('[data-edge]')) {
-    if (!dragged && state.selected.size) clearSelection();
+    if (!dragged) {
+      // A text selection that ran off its box ends as a click here. It belongs to the
+      // box it began in; a press on the desk itself began in none.
+      setFocus(pressedBox);
+      if (state.selected.size) clearSelection();
+    }
     return;
   }
 
