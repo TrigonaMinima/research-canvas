@@ -8,7 +8,7 @@ from research_canvas import md
 
 
 def test_should_render_a_heading():
-    assert "<h1>" in md.render("# Title\n")
+    assert re.search(r"<h1[^>]*>Title</h1>", md.render("# Title\n"))
 
 
 def test_should_escape_raw_html_in_the_source():
@@ -61,7 +61,7 @@ def test_should_not_treat_currency_in_prose_as_math():
 
 
 def test_should_not_raise_on_an_unsupported_macro():
-    assert "<p>" in md.render("Garbage $\\notarealmacro{x}$ here.\n")
+    assert re.search(r"<p[^>]*>", md.render("Garbage $\\notarealmacro{x}$ here.\n"))
 
 
 def test_should_fall_back_to_code_when_a_formula_cannot_convert():
@@ -91,9 +91,57 @@ TABLE = "| a | b |\n| - | - |\n| 1 | 2 |\n"
 
 
 def test_should_wrap_a_table_in_a_scroll_wrapper():
-    assert md.render(TABLE).startswith('<div class="table-wrap"><table>')
+    assert re.match(r'<div class="table-wrap"><table\b', md.render(TABLE))
 
 
 def test_should_leave_no_whitespace_between_wrapper_and_table():
     """Anchors are offsets into the rendered text, so the wrapper may add no text node."""
     assert md.render(TABLE).endswith("</table></div>\n")
+
+
+# --- source line marks (data-line, data-line-end) ------------------------------
+
+
+def _tag(html: str, name: str, nth: int = 0) -> str:
+    """The nth opening tag of the given name, attributes included."""
+    tags = re.findall(rf"<{name}\b[^>]*>", html)
+    assert len(tags) > nth, f"no <{name}> #{nth} in {html!r}"
+    return tags[nth]
+
+
+def test_should_mark_a_paragraph_with_its_source_line():
+    html = md.render("# Title\n\nSome text.\n")
+    assert 'data-line="2"' in _tag(html, "p")
+
+
+def test_should_mark_a_heading_with_its_source_line():
+    html = md.render("Intro.\n\n## Section\n")
+    assert 'data-line="2"' in _tag(html, "h2")
+
+
+def test_should_mark_a_list_item_with_its_own_line():
+    html = md.render("- first\n- second\n- third\n")
+    assert 'data-line="1"' in _tag(html, "li", 1)
+
+
+def test_should_mark_a_fenced_block_with_its_source_line():
+    html = md.render("Before.\n\n```py\nprint(1)\n```\n")
+    fence = re.search(r"<pre\b.*?</pre>", html, re.DOTALL)
+    assert fence and 'data-line="2"' in fence.group(0)
+
+
+def test_should_mark_a_display_maths_block_with_its_source_line():
+    html = md.render("Before.\n\n$$\nE = mc^2\n$$\n")
+    assert re.search(r'<div class="math block"[^>]*data-line="2"', html)
+
+
+def test_should_mark_the_end_line_of_a_multi_line_paragraph():
+    html = md.render("one\ntwo\nthree\n")
+    assert 'data-line-end="3"' in _tag(html, "p")
+
+
+def test_should_add_no_text_to_the_rendered_body():
+    """Passes before the change too: the marks are attributes, never text."""
+    html = md.render("# Title\n\nSome text.\n\n- one\n- two\n")
+    text = re.sub(r"<[^>]+>", "", html)
+    assert text.split() == ["Title", "Some", "text.", "one", "two"]

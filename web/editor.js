@@ -52,11 +52,13 @@ const base = [
   keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
 ];
 
-export function mount(host, doc, { onSave }) {
+// `pos` is where the caret starts: the word the reader double clicked, or the top.
+export function mount(host, doc, { onSave, pos = 0 }) {
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
       doc,
+      selection: { anchor: pos },
       extensions: [
         // CodeMirror sorts keymaps by precedence bucket first and only then by order,
         // so being early is not enough to win a key. This one wins because nothing

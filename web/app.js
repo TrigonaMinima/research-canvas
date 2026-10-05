@@ -26,6 +26,7 @@ import * as edges from './edges.js';
 import * as find from './find.js';
 import * as minimap from './minimap.js';
 import * as sections from './sections.js';
+import * as sourcemap from './sourcemap.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -1023,9 +1024,69 @@ function openPane(boxEl) {
   return pane;
 }
 
-async function openEditor(boxEl) {
+// Wherever the camera is, as one comparable value.
+const cameraKey = () => `${camera.tx},${camera.ty},${camera.scale}`;
+
+// How many passes the caret gets to settle on the reader's line. CodeMirror builds
+// only the lines near the screen and guesses the height of the rest, so the first pan
+// goes by its estimate and the next ones by what it then measured.
+const HOLD_PASSES = 4;
+
+// A source line's box in client pixels; lineBlockAt answers in document space.
+function lineBox(view, pos) {
+  const block = view.lineBlockAt(pos);
+  return { top: view.documentTop + block.top * view.scaleY, height: block.height * view.scaleY };
+}
+
+// Slide the desk so the caret sits at the height the reader was reading at. Vertical
+// only: the box stays where it stood, and only the line comes back to the eye. All in
+// one task, so no half-way frame is painted: each pan queues a CodeMirror measure
+// (camera -> measure -> requestMeasure), and the next coordsAtPos runs it.
+function holdCaretAt(view, pos, y) {
+  for (let pass = 0; pass < HOLD_PASSES; pass += 1) {
+    const caret = view.coordsAtPos(pos);
+    let now;
+    if (caret) {
+      now = (caret.top + caret.bottom) / 2;
+      if (Math.abs(y - now) < 1) return;
+    } else {
+      const line = lineBox(view, pos);
+      now = line.top + line.height / 2;
+    }
+    camera.panBy(0, y - now);
+  }
+}
+
+// Where the caret is as the editor closes: its source line, how far down that line
+// it sits once wrapped, and its height on screen. Null when the reader has panned the
+// caret out of sight, because then there is no place of theirs to keep.
+function caretPlace(view) {
+  const pos = view.state.selection.main.head;
+  const caret = view.coordsAtPos(pos);
+  if (!caret) return null;
+  const y = (caret.top + caret.bottom) / 2;
+  if (y < 0 || y > window.innerHeight) return null;
+  const line = lineBox(view, pos);
+  return {
+    line: view.state.doc.lineAt(pos).number - 1,
+    within: (y - line.top) / (line.height || 1),
+    y,
+  };
+}
+
+// The way back: the line the caret was on returns to the height the caret was at.
+function restorePlace(id, { line, within, y }) {
+  const body = el.canvas.querySelector(`[data-box="${id}"] [data-body]`);
+  const at = body && sourcemap.yOf(body, line, within);
+  if (at != null) camera.panBy(0, y - at);
+}
+
+// `place` is what the reader double clicked, from sourcemap.capture; the Edit button
+// has none, and opens at the top.
+async function openEditor(boxEl, place = null) {
   const id = boxEl.dataset.box;
   if (edit) closeEditor();
+  const stood = cameraKey();
   setCollapsed(boxById(id), false); // there is nothing to edit inside a folded box
   // Claimed before the fetch, so an Escape while the source is in flight still
   // cancels. Nothing is built yet, so the box keeps showing its rendered body.
@@ -1045,19 +1106,27 @@ async function openEditor(boxEl) {
   const [{ markdown: source }, editor] = loaded;
   edit.pane = openPane(boxEl);
   render(); // the body has to be hidden before CodeMirror measures what is left
+  const pos = sourcemap.offsetIn(source, place);
   edit.view = editor.mount(edit.pane.querySelector('[data-editor]'), source,
-    { onSave: saveEdit });
+    { onSave: saveEdit, pos });
+  // A reader who moved the desk while the source was on its way has chosen their view.
+  if (place && stood === cameraKey()) holdCaretAt(edit.view, pos, place.y);
   // `render` has already queued the one geometry pass, which now also reaches the view.
 }
 
-function closeEditor() {
+// `keepPlace` is for the reader leaving the editor on purpose, by Save or Escape. A
+// fold or another box's editor closing this one must not move the desk.
+function closeEditor({ keepPlace = false } = {}) {
   if (!edit) return;
+  const { id } = edit;
+  const place = keepPlace && edit.view ? caretPlace(edit.view) : null;
   // One view at a time, living exactly as long as the edit does. A hundred boxes each
   // holding an editor would cost the canvas its frame rate.
   if (edit.view) edit.view.destroy();
   if (edit.pane) edit.pane.remove();
   edit = null;
   render();
+  if (place) restorePlace(id, place);
   scheduleRestack();
 }
 
@@ -1068,7 +1137,7 @@ function saveEdit() {
     .then(({ html }) => {
       // One body changed, so one body is replaced. The rest of the view still holds.
       state.bodies[id] = html;
-      if (edit && edit.id === id) closeEditor();
+      if (edit && edit.id === id) closeEditor({ keepPlace: true });
       else render(); // the reader walked away from the edit before it landed
     })
     .catch((error) => flash(error.message));
@@ -1449,6 +1518,8 @@ document.addEventListener('dblclick', (event) => {
   // The pair of clicks leaves a word selected, and a selection is a question, so the ask
   // popover would open on the next tick. Cleared above the guards below on purpose: one
   // rule holds everywhere in a body, which is that a plain double click never opens it.
+  // Read first, though: the selected word is the only record of where the reader was.
+  const place = sourcemap.capture(event, body);
   window.getSelection()?.removeAllRanges();
 
   // A highlight and a link each already answer to a click, so a second one is not a
@@ -1460,7 +1531,7 @@ document.addEventListener('dblclick', (event) => {
   const boxEl = body.closest('[data-box]');
   const box = boxById(boxEl.dataset.box);
   if (!box || !boxes.canEdit(box, !!edit && edit.id === box.id)) return;
-  openEditor(boxEl);
+  openEditor(boxEl, place);
 });
 
 document.addEventListener('click', (event) => {
@@ -1604,7 +1675,7 @@ document.addEventListener('keydown', (event) => {
   // Topmost first: the sheet, then the popover, then the editor under both.
   if (panel) closeSettings();
   else if (ask) closeAsk();
-  else if (edit) closeEditor();
+  else if (edit) closeEditor({ keepPlace: true });
   else if (state.selected.size) clearSelection();
   else if (selectMode) setSelectMode(false);
 });

@@ -12,6 +12,8 @@ import json
 import pytest
 from playwright.sync_api import expect
 from tests.fixtures.contract import make_box, make_view
+from tests.fixtures.editor import CONTENT, CURSOR
+from tests.fixtures.place import caret_in_line
 from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, send_question
 
 pytestmark = pytest.mark.e2e
@@ -89,9 +91,14 @@ def mocked(page, server: str):
             ),
         )
 
+    def source(route):
+        record(route)
+        route.fulfill(json={"markdown": "# A Mocked Paper\n\nEach sub-layer is wrapped."})
+
     page.route("**/api/canvases", canvases)
     page.route("**/api/canvases/demo", canvas)
     page.route("**/api/canvases/demo/ask", asking)
+    page.route("**/api/canvases/demo/boxes/b1/body", source)
     page.route("**/api/canvases/demo/boxes/*/stream", stream)
 
     page.goto(f"{server}/?c=demo")
@@ -190,3 +197,17 @@ def test_the_canvas_list_renders_from_the_payload(page, server: str):
     )
     page.goto(server + "/")
     expect(page.locator("[data-canvas-list] a")).to_contain_text("A Mocked Paper")
+
+
+def test_should_open_at_the_top_when_the_body_has_no_source_lines(mocked):
+    """The canned body carries no `data-line`, so there is no place to keep: the editor
+    opens the way it always did, with the caret on the first line, and says nothing."""
+    errors = []
+    mocked.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+    mocked.on("pageerror", lambda e: errors.append(str(e)))
+    # The heading: the paragraph's middle is a highlight, and a click there jumps instead.
+    mocked.dblclick('[data-box="b1"] [data-body] h1')
+    mocked.wait_for_selector(CONTENT.format(box="b1"))
+    mocked.wait_for_selector(CURSOR.format(box="b1"))
+    assert caret_in_line(mocked, "b1")["text"] == "# A Mocked Paper"
+    assert not errors

@@ -83,6 +83,10 @@ does not. The browser loads the bundle on the first Edit click, not on every can
 Double click any body text to open the editor there, or use the Edit button in the box
 header. Save sits at each end of the editor, so a long document is savable from either.
 
+A double click puts the caret on the clicked word and keeps that line at the same height on
+screen; Save and Escape bring the passage back to it. The server marks each rendered block
+with its source lines (`data-line`, `data-line-end`), and `web/sourcemap.js` does the mapping.
+
 Keys: `Enter` saves, from a list and a quote as well as from prose, `Shift+Enter` opens a new
 line and carries a list marker with it, `Tab` indents, `Esc` discards.
 

@@ -276,6 +276,10 @@ Double click any body text to open the editor there; the Edit button in the box 
 the same. Save sits above the editor and again below it, so a long document is savable from
 either end.
 
+The caret opens on the word you double clicked, and the desk slides so that line stays at the
+height you were reading at. Save and Escape put the passage back at the same height. The Edit
+button opens at the top and moves nothing.
+
 Editor keys: `Enter` saves, from inside a list and a quote as well as from prose,
 `Shift+Enter` opens a new line and carries a list marker with it, `Tab` indents, `Esc`
 discards.

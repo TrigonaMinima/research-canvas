@@ -19,11 +19,11 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 100 |
+| 1 | API function tests | `tests/unit/` | 107 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
-| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 13 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py` | 337 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 380 |
+| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 14 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py` | 345 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 389 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 35 |
@@ -50,14 +50,17 @@ Each module in isolation, no HTTP, no browser.
   file never listed as a canvas.
 - `test_anchors.py` (5) — text-offset anchors resolved against rendered plain text,
   including the nearest-occurrence fallback when the document has shifted.
-- `test_markdown.py` (19) — rendering and first-heading extraction, two on tables (a
+- `test_markdown.py` (26) — rendering and first-heading extraction, two on tables (a
   table wrapped in `.table-wrap`, and no whitespace between table and wrapper, which
   would shift every later anchor), plus twelve on
   mathematics: inline `$…$` as `display="inline"`, `$$…$$` as `display="block"`, the
   single-line `$$…$$` and `\begin{align}` token types the plugins emit separately, a
   subscript and an operator macro surviving conversion, no whitespace between the MathML
   tags, and the `<code>` fallback for a formula that will not convert. One holds the line
-  that matters most in prose: `It costs $5 and $10 to run.` is not mathematics.
+  that matters most in prose: `It costs $5 and $10 to run.` is not mathematics. Seven cover
+  the source lines edit mode opens by: `data-line` on a paragraph, a heading, a list item,
+  a fenced block and a display maths block, `data-line-end` on a paragraph of several
+  lines, and no text added to the body, so anchor offsets stay where they were.
 - `test_context.py` (14) — path-only prompt assembly (US-3): root + ancestors + the highlight
   + the question, and never a sibling branch. Two assert the preamble names the maths
   delimiters, so an answer can carry formulas the same way the document does. Six cover the
@@ -95,7 +98,7 @@ and served back, the chips surviving a canvas being created and deleted, a 422 w
 message Settings shows for each refusal the storage layer makes, and a 422 on the read as
 well when `presets.json` on disk is corrupt, so the reader is told rather than shown a 500.
 
-### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 13)
+### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 14)
 
 Playwright with `page.route` answering the canvas, ask, and stream calls from canned
 payloads. No storage, no runner. Covers rendering (title, boxes, questions, status, anchors,
@@ -103,7 +106,9 @@ edges, body HTML), the request the app sends when you ask, and a mocked SSE stre
 text into a new box. One more belongs to the highlight snap: this body puts the heading
 straight against the paragraph, which rendered markdown never does, so it is the only place
 a snap can be shown stopping at a block boundary instead of reading `PaperEach` as one word. `GET /api/config` is left unrouted and served by the real server, like
-`index.html` and the modules: `web/config.js` awaits it before any app code runs.
+`index.html` and the modules: `web/config.js` awaits it before any app code runs. One opens
+the editor from a double click on a body with no `data-line` at all, which is what these
+canned payloads carry: the caret goes to the top and the camera stays put.
 
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
@@ -117,7 +122,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   canvas in its own browser tab: the entry is a real relative `?c=` link, a modifier click
   opens a second tab, a middle click leaves the first tab where it was, the tab is named
   after the canvas, and two canvases edited in two tabs each keep their own edit.
-- `test_canvas.py` (145) — the root box, selection gating (cross-box, non-`done`, under
+- `test_canvas.py` (154) — the root box, selection gating (cross-box, non-`done`, under
   three characters), asking, streaming, the anchor mark, the edge, asking *inside* an
   answer, jump-to-anchor, drag, resize, delete, and reload fidelity. Five cover dismissing
   the ask popover: the borderless cross and its `aria-label`, `Escape`, a click anywhere
@@ -127,7 +132,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   so it can never strike through the words it runs past. One more follows a highlight that
   wraps over several lines, which measures as the box around all of them: the right edge of
   that box belongs to the widest line, so the edge used to leave beside the passage rather
-  than from the end of it. Thirty-five cover editing a box: the Edit button on the document
+  than from the end of it. Forty-three cover editing a box: the Edit button on the document
   and on an answer, the markdown source rather than the rendered HTML, the whole document
   reachable by panning to it with no scrollbar inside the editor, the caret landing on the
   first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter` saving, `Shift+Enter` opening a new line and carrying a list marker onto it, the Save
@@ -140,10 +145,10 @@ The same browser, the real server, the real storage, the fake `claude`.
   screen when the source runs past the window, the top one saving, the Edit button
   hidden while the editor is open, and the desk holding still while a long document is
   typed, since CodeMirror scrolls its caret into view by scrolling whatever ancestor
-  will move and would otherwise carry the whole canvas away with it. Six pin double click
+  will move and would otherwise carry the whole canvas away with it. Fourteen pin double click
   to edit: on the body it opens the editor, it never leaves the ask popover behind, inside the editor it keeps the unsaved
   text, on a highlight it still jumps to the answer and opens nothing, on a link it follows
-  the link, and on an answer that is still running it does nothing at all. Thirty-six cover this change: the left
+  the link, and on an answer that is still running it does nothing at all. Eight of those keep the reader's place: the caret lands on the line of the double clicked word and inside the word, that line stays at the height of the pointer, the right twin is picked when the word repeats in a block, a click on a list item lands on that item, the block is back where it was after `Escape` and after Save, and the Edit button moves nothing. Thirty-six cover this change: the left
   handle widening a box, stopping at the minimum, and surviving a reload; minimising a box
   down to its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the
   label tracking the fold, the fold surviving a reload, the outgoing edge still drawn and
@@ -288,7 +293,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   cell following the table as it scrolls, and the table scrolling itself to a find hit in a
   hidden column and back to the passage an answer came from.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 380)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 389)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -371,6 +376,7 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/sections_doc.md` | A document with a paragraph before the first heading, one h1, two h2s reading `Background`, and an h3 and h4 nested under the first of them. The repeat is there so two sections cannot share a key, and the nesting is there so a fold can be shown inside a fold. `sample_doc.md` has only an h1 and an h2 and no repeats, so it covers neither. |
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
+| `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |

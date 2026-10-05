@@ -9,6 +9,7 @@ from typing import Any
 from latex2mathml.converter import convert as latex_to_mathml
 from markdown_it import MarkdownIt
 from markdown_it.common.utils import escapeHtml
+from markdown_it.rules_core import StateCore
 from markdown_it.token import Token
 from mdit_py_plugins.amsmath import amsmath_plugin
 from mdit_py_plugins.dollarmath import dollarmath_plugin
@@ -23,6 +24,20 @@ _md.enable(["table", "strikethrough", "linkify"])
 # on. Labels are off because nothing on a canvas links to a numbered equation.
 _md.use(dollarmath_plugin, double_inline=True, allow_labels=False, allow_space=False)
 _md.use(amsmath_plugin)
+
+
+def _source_lines(state: StateCore) -> None:
+    # Edit mode opens at the block the reader was on, so each block element says which
+    # source lines it came from. Inline tokens share their block's map and are skipped.
+    for token in state.tokens:
+        if token.map and token.type != "inline":
+            first, end = token.map
+            token.attrSet("data-line", str(first))
+            # A one-line \begin{equation} maps to no lines at all; it still has one.
+            token.attrSet("data-line-end", str(max(end, first + 1)))
+
+
+_md.core.ruler.push("source_lines", _source_lines)
 
 _HEADING = re.compile(r"^\s*#{1,6}\s*(.+?)\s*#*\s*$")
 
@@ -72,8 +87,11 @@ _MATH = {
 def _math_rule(self: Any, tokens: Sequence[Token], idx: int, options: Any, env: Any) -> str:
     # No whitespace inside the wrapper. Whitespace there is a text node, and an anchor
     # is an offset into that text, so it would shift every later one.
-    open_, close, block = _MATH[tokens[idx].type]
-    return f"{open_}{_mathml(str(tokens[idx].content).strip(), block=block)}{close}"
+    token = tokens[idx]
+    open_, close, block = _MATH[token.type]
+    # Only display maths is given source lines; they go inside the opening tag.
+    open_ = f"{open_[:-1]}{self.renderAttrs(token)}>"
+    return f"{open_}{_mathml(str(token.content).strip(), block=block)}{close}"
 
 
 for _type in _MATH:

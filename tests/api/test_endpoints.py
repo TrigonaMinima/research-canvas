@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from research_canvas import storage
 from research_canvas.config import (
     BLANK_BODY_MESSAGE,
@@ -23,6 +25,11 @@ from research_canvas.config import (
     TOO_MANY_PRESETS_MESSAGE,
 )
 from research_canvas.storage import REFUSED_MESSAGE
+
+
+def _without_line_marks(html: str) -> str:
+    """Drop data-line / data-line-end so a test pins the markup, not the source positions."""
+    return re.sub(r' data-line(?:-end)?="\d+"', "", html)
 
 
 def test_should_create_a_canvas_from_pasted_markdown(client, sample_markdown):
@@ -51,7 +58,7 @@ def test_should_list_a_created_canvas(client, canvas):
 
 def test_should_return_rendered_html_for_the_root_box(client, canvas):
     body = client.get(f"/api/canvases/{canvas['id']}").json()
-    assert "<h1>" in body["bodies"][body["rootId"]]
+    assert "<h1" in body["bodies"][body["rootId"]]
 
 
 def test_should_404_an_unknown_canvas(client):
@@ -160,7 +167,7 @@ def test_should_persist_the_answer_body_after_streaming(client, canvas, fake_ans
     asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
     client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream")
     body = client.get(f"/api/canvases/{canvas['id']}").json()
-    assert body["bodies"][asked["id"]].strip().startswith("<p>Because it is parallel.")
+    assert re.match(r"<p[^>]*>Because it is parallel\.", body["bodies"][asked["id"]].strip())
 
 
 def test_should_mark_the_box_done_after_streaming(client, canvas, fake_answer):
@@ -255,7 +262,7 @@ def test_should_render_an_edited_body_into_the_canvas_view(client, canvas):
         json={"markdown": "# Kept\n\nEdited by the reader."},
     )
     view = client.get(f"/api/canvases/{canvas['id']}").json()
-    assert "<p>Edited by the reader.</p>" in view["bodies"]["b1"]
+    assert "Edited by the reader.</p>" in _without_line_marks(view["bodies"]["b1"])
 
 
 def test_should_return_only_the_edited_body(client, canvas):
@@ -264,7 +271,9 @@ def test_should_return_only_the_edited_body(client, canvas):
         f"/api/canvases/{canvas['id']}/boxes/b1/body",
         json={"markdown": "# Kept\n\nEdited by the reader."},
     )
-    assert response.json() == {
+    payload = response.json()
+    payload["html"] = _without_line_marks(payload["html"])
+    assert payload == {
         "boxId": "b1",
         "html": "<h1>Kept</h1>\n<p>Edited by the reader.</p>\n",
     }
