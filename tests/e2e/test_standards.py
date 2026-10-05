@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from playwright.sync_api import expect
+from tests.fixtures.rename import FIELD, start_rename
 
 pytestmark = pytest.mark.e2e
 
@@ -116,6 +117,25 @@ def test_every_visible_button_has_a_name_on_a_canvas(canvas):
 
 def test_every_visible_field_has_a_label_on_a_canvas(canvas):
     assert canvas.evaluate(UNLABELLED_INPUTS) == []
+
+
+def test_every_visible_field_has_a_label_while_the_title_is_being_renamed(canvas):
+    start_rename(canvas)
+    assert canvas.evaluate(UNLABELLED_INPUTS) == []
+
+
+def test_every_visible_button_has_a_name_while_the_title_is_being_renamed(canvas):
+    start_rename(canvas)
+    assert canvas.evaluate(NAMES) == []
+
+
+def test_the_title_button_is_named_rename_canvas(canvas):
+    expect(canvas.locator("button[data-title]")).to_have_attribute("aria-label", "Rename canvas")
+
+
+def test_the_rename_input_is_named_canvas_title(canvas):
+    start_rename(canvas)
+    expect(canvas.locator(FIELD)).to_have_attribute("aria-label", "Canvas title")
 
 
 def test_nothing_is_fetched_from_the_network(canvas, server):

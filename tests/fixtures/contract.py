@@ -79,6 +79,7 @@ CLIENT_CONFIG_KEYS = {
     "maxPresets",
     "maxPresetLabelChars",
     "maxPresetQuestionChars",
+    "maxTitleChars",
 }
 
 BOX_STATUSES = set(_CONFIG_STATUSES)  # one definition, in config

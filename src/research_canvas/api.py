@@ -28,6 +28,7 @@ from .config import (
     MAX_PRESET_QUESTION_CHARS,
     MAX_PRESETS,
     MAX_SCALE,
+    MAX_TITLE_CHARS,
     MIN_BOX_WIDTH,
     MIN_SCALE,
     MIN_SELECTION_CHARS,
@@ -115,6 +116,7 @@ class PatchBody(BaseModel):
     anchors: dict[str, AnchorPatch] | None = None
     theme: str | None = None
     webSearch: bool | None = None
+    title: str | None = None
 
 
 # --- the values the browser must agree with -----------------------------------
@@ -139,6 +141,7 @@ def client_config() -> dict:
         "maxPresets": MAX_PRESETS,
         "maxPresetLabelChars": MAX_PRESET_LABEL_CHARS,
         "maxPresetQuestionChars": MAX_PRESET_QUESTION_CHARS,
+        "maxTitleChars": MAX_TITLE_CHARS,
     }
 
 
@@ -210,6 +213,11 @@ def patch_canvas(canvas_id: str, body: PatchBody) -> dict:
 
 
 def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
+    if body.title is not None:
+        try:
+            canvas.title = storage.clean_title(body.title)
+        except storage.TitleInvalid as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if body.camera:
         for field_name in ("tx", "ty", "scale"):
             value = getattr(body.camera, field_name)

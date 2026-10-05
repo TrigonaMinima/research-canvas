@@ -15,6 +15,7 @@ import {
   MAX_PRESET_LABEL_CHARS,
   MAX_PRESET_QUESTION_CHARS,
   MAX_PRESETS,
+  MAX_TITLE_CHARS,
   MIN_BOX_WIDTH,
   MIN_SELECTION_CHARS,
   SCROLL_BLOCKS,
@@ -40,6 +41,7 @@ const el = {
   canvas: $('[data-canvas]'),
   edges: $('[data-edges]'),
   title: $('[data-title]'),
+  titleInput: $('[data-title-input]'),
   runpill: $('[data-runpill]'),
   runLabel: $('[data-run-label]'),
   findInput: $('[data-find]'),
@@ -141,6 +143,15 @@ function reanchor(moved) {
   api.patchCanvas(state.canvas.id, { anchors: patch }).catch(() => {});
 }
 
+function showTitle() {
+  el.title.textContent = state.canvas.title;
+  // The button's label names the action, so the name itself rides along as its
+  // description, and as the tooltip for a title the bar had to clip.
+  el.title.title = state.canvas.title;
+  // Several canvases open at once are several browser tabs, so each one says which.
+  document.title = `${state.canvas.title} · ${DISPLAY_NAME}`;
+}
+
 function render() {
   if (!state.canvas) return;
   const alive = new Set(state.canvas.boxes.map((b) => b.id));
@@ -172,9 +183,7 @@ function render() {
   }
   if (drifted.length) reanchor(drifted);
 
-  el.title.textContent = state.canvas.title;
-  // Several canvases open at once are several browser tabs, so each one says which.
-  document.title = `${state.canvas.title} · ${DISPLAY_NAME}`;
+  showTitle();
   el.runpill.hidden = busy.length === 0;
   if (busy.length) {
     el.runLabel.textContent = `${busy.length} answer${busy.length === 1 ? '' : 's'} running`;
@@ -213,6 +222,7 @@ function adopt(view) {
 // `loaded` lets the create path reuse the view it already has instead of re-fetching.
 async function open(id, { fresh = false, loaded = null } = {}) {
   const view = loaded || (await api.readCanvas(id));
+  closeRename(); // a half-typed title belongs to the canvas being left
   adopt(view);
   el.empty.hidden = true;
   el.desk.hidden = false;
@@ -241,6 +251,7 @@ async function open(id, { fresh = false, loaded = null } = {}) {
 }
 
 async function showEmpty() {
+  closeRename();
   for (const stream of state.streams.values()) stream.close();
   state.streams.clear();
   state.live.clear();
@@ -271,6 +282,72 @@ async function showEmpty() {
     el.list.append(li);
   }
 }
+
+// --- renaming -----------------------------------------------------------------
+// The title in the bar is a button, and its input takes its place while a rename is open.
+
+let rename = null;  // { saving } while the input is showing
+
+function startRename() {
+  if (rename || !state.canvas) return;
+  rename = { saving: false };
+  el.titleInput.value = state.canvas.title;
+  el.title.hidden = true;
+  el.titleInput.hidden = false;
+  el.titleInput.focus();
+  el.titleInput.select();
+}
+
+function closeRename({ refocus = false } = {}) {
+  if (!rename) return;
+  // Cleared first: focusing the button and hiding the input each blur the input, and
+  // that blur must find nothing left to close.
+  rename = null;
+  el.title.hidden = false;
+  if (refocus) el.title.focus();
+  el.titleInput.hidden = true;
+}
+
+function saveRename() {
+  if (!rename || rename.saving) return;
+  const session = rename;
+  const { id } = state.canvas;
+  const title = el.titleInput.value.trim();
+  if (title === state.canvas.title) { closeRename({ refocus: true }); return; }
+
+  // A blank title goes to the server like any other: the refusal is its to word.
+  session.saving = true;
+  api.patchCanvas(id, { title })
+    .then((saved) => {
+      // The reader may have left for another canvas, or the list, while this was out.
+      if (!state.canvas || state.canvas.id !== id) return;
+      // Only the title is taken: the reply carries no bodies, so it is not a view to adopt.
+      state.canvas.title = saved.title;
+      showTitle();
+      // Focus goes back to the button only if the reader is still in the field.
+      if (rename === session) closeRename({ refocus: document.activeElement === el.titleInput });
+    })
+    .catch((error) => {
+      flash(error.message);
+      if (rename !== session) return;
+      session.saving = false;
+      el.titleInput.focus();
+    });
+}
+
+el.titleInput.maxLength = MAX_TITLE_CHARS;
+
+el.titleInput.addEventListener('keydown', (event) => {
+  // isComposing keeps Enter free to commit an IME candidate. Esc is the document's.
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  saveRename();
+});
+
+// Clicking away discards, as Esc does. A save in flight is left to land.
+el.titleInput.addEventListener('blur', () => {
+  if (!rename?.saving) closeRename();
+});
 
 // --- answers ------------------------------------------------------------------
 
@@ -1632,6 +1709,8 @@ document.addEventListener('click', (event) => {
 
   if (hit('[data-edit-save]')) { saveEdit(); return; }
 
+  if (hit('[data-title]')) { startRename(); return; }
+
   const settings = hit('[data-settings-open]');
   if (settings) { openSettings(settings); return; }
   if (hit('[data-settings-close]') || hit('[data-settings-cancel]')) {
@@ -1672,8 +1751,10 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  // Topmost first: the sheet, then the popover, then the editor under both.
+  // Topmost first: the sheet, then the popover, then the editor under both. The title
+  // field holds focus while it is open, so it answers before anything on the desk.
   if (panel) closeSettings();
+  else if (rename) closeRename({ refocus: true });
   else if (ask) closeAsk();
   else if (edit) closeEditor({ keepPlace: true });
   else if (state.selected.size) clearSelection();

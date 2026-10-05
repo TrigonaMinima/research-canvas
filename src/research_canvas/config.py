@@ -126,6 +126,13 @@ DEFAULT_ASK_PRESETS = (
     {"label": "Why it matters", "question": "Why does this passage matter?"},
 )
 
+# --- canvas names -------------------------------------------------------------
+
+# The slug is cut from the title once, at import, to name the folder. It is the id.
+MAX_SLUG_CHARS = 48
+# A title is one line in the chrome bar and the canvas list, so it is bounded.
+MAX_TITLE_CHARS = 200
+
 # --- canvas geometry (ported from the design) ---------------------------------
 
 ROOT_BOX_WIDTH = 680
@@ -168,6 +175,10 @@ PRESET_LABEL_TOO_LONG_MESSAGE = (
 PRESET_QUESTION_TOO_LONG_MESSAGE = (
     f"A chip question is capped at {MAX_PRESET_QUESTION_CHARS:,} characters — "
     "shorten it and save again"
+)
+BLANK_TITLE_MESSAGE = "A canvas needs a name — type one or press Escape"
+TITLE_TOO_LONG_MESSAGE = (
+    f"A canvas name is capped at {MAX_TITLE_CHARS} characters — shorten it and try again"
 )
 # Said out loud rather than silently restoring the defaults: chips someone wrote are
 # theirs, and a hand-edited file that will not parse is worth hearing about.

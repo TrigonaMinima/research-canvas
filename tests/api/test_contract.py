@@ -129,4 +129,5 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["maxPresets"] == config.MAX_PRESETS
     assert served["maxPresetLabelChars"] == config.MAX_PRESET_LABEL_CHARS
     assert served["maxPresetQuestionChars"] == config.MAX_PRESET_QUESTION_CHARS
+    assert served["maxTitleChars"] == config.MAX_TITLE_CHARS
     assert set(served["unfinished"]) == set(config.UNFINISHED)

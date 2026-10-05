@@ -365,6 +365,34 @@ them in JavaScript: one asserts the payload carries exactly the keys `web/config
 other that every value equals the one `config.py` holds. A number that drifts on either
 side now fails here rather than silently disagreeing in the browser.
 
+## Renaming a canvas (57 tests, across the layers above)
+
+Added with the rename feature. The counts in the sections above were not re-totalled for it.
+
+- `tests/unit/test_storage.py` (11) — `clean_title` trims, turns a line break into a space,
+  refuses a blank or whitespace-only title and one over the cap, and accepts exactly the cap.
+  The id is today's date plus the slug: whole when it fits, cut at `MAX_SLUG_CHARS` when it
+  does not, with no dash left at the cut, and the cut follows the configured size.
+- `tests/api/test_endpoints.py` (14) — a `PATCH` with `title` is stored, returned and listed,
+  trimmed, and never changes the id. A blank title and one over the cap give 422 with the
+  sentence from `config.py` and keep the old title. An unknown canvas gives 404, and a patch
+  without a title leaves it alone. Each success test reads the stored title back, because a
+  200 alone proved nothing before the field existed.
+- `tests/api/test_contract.py` and `tests/fixtures/contract.py` — `maxTitleChars` is one of the
+  keys the browser imports, and equals `MAX_TITLE_CHARS` (asserted inside the two existing
+  `/api/config` tests).
+- `tests/e2e/test_rename.py` (24) — the title in the bar is a button that opens a field
+  holding the current title, focused. Enter renames the header and the tab, keeps the URL and
+  the id, survives a reload, and shows in the canvas list. An unchanged title sends nothing.
+  Escape and blur discard. A blank title shows the toast and keeps the field open. The
+  keyboard alone can do all of it, and the field carries the cap.
+- `tests/e2e/test_mocked_api.py` (3) — the rename sends `{"title": …}`, and a refused one
+  shows the server's sentence and keeps the field open.
+- `tests/e2e/test_standards.py` (4) — the button and the field have their accessible names,
+  and every visible button and field is still named while the rename is open.
+- `tests/e2e/test_chrome.py` (1) — the rename field does not push the view controls off a
+  narrow bar.
+
 ## Fixtures
 
 | File | What it is |
@@ -377,6 +405,7 @@ side now fails here rather than silently disagreeing in the browser.
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
+| `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |

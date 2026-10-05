@@ -21,6 +21,7 @@ from . import md
 from .anchors import Anchor
 from .config import (
     BLANK_PRESET_MESSAGE,
+    BLANK_TITLE_MESSAGE,
     BOX_DIR,
     CANVAS_FILE,
     CANVAS_ROOT,
@@ -33,6 +34,8 @@ from .config import (
     MAX_PRESET_LABEL_CHARS,
     MAX_PRESET_QUESTION_CHARS,
     MAX_PRESETS,
+    MAX_SLUG_CHARS,
+    MAX_TITLE_CHARS,
     MIN_BOX_WIDTH,
     MIN_PASTE_CHARS,
     PRESET_LABEL_TOO_LONG_MESSAGE,
@@ -42,6 +45,7 @@ from .config import (
     ROOT_BOX_ID,
     ROOT_BOX_WIDTH,
     ROOT_DOC_FILE,
+    TITLE_TOO_LONG_MESSAGE,
     TOO_MANY_PRESETS_MESSAGE,
     UNFINISHED,
 )
@@ -66,6 +70,10 @@ class InstructionsTooLong(ValueError):
 
 class PresetsInvalid(ValueError):
     """The question chips were unusable: too many, half-written, or unreadable on disk."""
+
+
+class TitleInvalid(ValueError):
+    """The new name for a canvas was blank, or too long to show on one line."""
 
 
 @dataclass
@@ -396,6 +404,27 @@ def delete_body(canvas_id: str, box_id: str) -> None:
     _body_path(canvas_id, box_id).unlink(missing_ok=True)
 
 
+# --- renaming -----------------------------------------------------------------
+# Only the title changes. The id is the folder name, cut from the first title, and it
+# stays put so open tabs and saved links keep working.
+
+
+_LINE_BREAK = re.compile(r"[\r\n]")
+
+
+def clean_title(raw: str) -> str:
+    """The title as it is stored: one trimmed line, never blank, never over the cap."""
+    # A pasted title can carry a line break, and the chrome bar shows one line.
+    # One pass over each run of whitespace: a pattern anchored on the line break
+    # backtracks badly on a long run that has none.
+    title = re.sub(r"\s+", lambda run: " " if _LINE_BREAK.search(run[0]) else run[0], raw).strip()
+    if not title:
+        raise TitleInvalid(BLANK_TITLE_MESSAGE)
+    if len(title) > MAX_TITLE_CHARS:
+        raise TitleInvalid(TITLE_TOO_LONG_MESSAGE)
+    return title
+
+
 # --- standing instructions ----------------------------------------------------
 # One file for the whole app. Read on every prompt build rather than cached, so
 # editing it in a text editor takes effect without restarting the server.
@@ -534,7 +563,7 @@ _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 def _slug(title: str) -> str:
     ascii_title = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
     slug = re.sub(r"[^a-z0-9]+", "-", ascii_title.lower()).strip("-")
-    return (slug[:48].rstrip("-")) or "untitled"
+    return (slug[:MAX_SLUG_CHARS].rstrip("-")) or "untitled"
 
 
 def _now() -> str:

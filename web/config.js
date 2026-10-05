@@ -17,6 +17,7 @@ export const MAX_INSTRUCTIONS_CHARS = served.maxInstructionsChars;
 export const MAX_PRESETS = served.maxPresets;
 export const MAX_PRESET_LABEL_CHARS = served.maxPresetLabelChars;
 export const MAX_PRESET_QUESTION_CHARS = served.maxPresetQuestionChars;
+export const MAX_TITLE_CHARS = served.maxTitleChars;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);

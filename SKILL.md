@@ -45,6 +45,13 @@ are the only tools, and only when the canvas has web search on.
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
 
+## Renaming a canvas
+
+A canvas is named after the first heading of its document. Click the title in the chrome bar
+to change it: `Enter` saves, `Esc` or a click elsewhere discards. Only `title` in
+`canvas.json` changes. The folder name, which is the id and the `?c=` link, is the date plus
+a slug of the first title, cut at 48 characters, and it never changes.
+
 ## Settings
 
 The cog, in the chrome bar and on the first screen, opens one page holding the standing

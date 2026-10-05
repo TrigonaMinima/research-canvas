@@ -14,6 +14,7 @@ from playwright.sync_api import expect
 from tests.fixtures.contract import make_box, make_view
 from tests.fixtures.editor import CONTENT, CURSOR
 from tests.fixtures.place import caret_in_line
+from tests.fixtures.rename import FIELD, TITLE, start_rename
 from tests.fixtures.selection import QUOTE, SELECT, ask, find_offsets, send_question
 
 pytestmark = pytest.mark.e2e
@@ -211,3 +212,46 @@ def test_should_open_at_the_top_when_the_body_has_no_source_lines(mocked):
     mocked.wait_for_selector(CURSOR.format(box="b1"))
     assert caret_in_line(mocked, "b1")["text"] == "# A Mocked Paper"
     assert not errors
+
+
+# --- renaming -------------------------------------------------------------
+
+
+def answer_patch(page, status: int, body: dict) -> None:
+    """Answer only the PATCH on the demo canvas; every other call falls to the mock above."""
+
+    def patching(route):
+        if route.request.method != "PATCH":
+            return route.fallback()
+        page.sent.append((route.request.method, route.request.url, route.request.post_data_json))
+        return route.fulfill(status=status, json=body)
+
+    page.route("**/api/canvases/demo", patching)
+
+
+def test_a_rename_patches_the_documented_payload(mocked):
+    answer_patch(mocked, 200, make_view(title="Renamed Paper"))
+    start_rename(mocked)
+    mocked.fill(FIELD, "Renamed Paper")
+    mocked.press(FIELD, "Enter")
+    expect(mocked.locator(TITLE)).to_have_text("Renamed Paper")
+    # Opening the canvas saves the camera through the same route, so pick the rename out.
+    bodies = [b for m, u, b in mocked.sent if m == "PATCH" and u.endswith("/api/canvases/demo")]
+    assert {"title": "Renamed Paper"} in bodies
+
+
+def test_a_refused_rename_shows_the_server_message(mocked):
+    answer_patch(mocked, 422, {"detail": "A canvas needs a title."})
+    start_rename(mocked)
+    mocked.fill(FIELD, "   ")
+    mocked.press(FIELD, "Enter")
+    expect(mocked.locator("[data-toast]")).to_have_text("A canvas needs a title.")
+
+
+def test_a_refused_rename_keeps_the_input_open(mocked):
+    answer_patch(mocked, 422, {"detail": "A canvas needs a title."})
+    start_rename(mocked)
+    mocked.fill(FIELD, "   ")
+    mocked.press(FIELD, "Enter")
+    expect(mocked.locator("[data-toast]")).to_have_text("A canvas needs a title.")
+    expect(mocked.locator(FIELD)).to_be_visible()

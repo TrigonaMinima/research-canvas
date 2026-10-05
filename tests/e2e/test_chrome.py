@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from playwright.sync_api import expect
+from tests.fixtures.rename import FIELD, start_rename
 from tests.fixtures.viewport import scale_of
 
 pytestmark = pytest.mark.e2e
@@ -131,3 +132,15 @@ def test_the_view_controls_keep_their_width_when_the_bar_is_tight(canvas):
 
     assert tight["clipped"] == []
     assert tight["tools"] == roomy["tools"], "the view controls gave up width to the title"
+
+
+def test_the_rename_input_keeps_the_view_controls_on_screen(canvas):
+    """The input takes the title's place in the bar. A long title in it must not push the
+    controls past the window edge, so the last one is measured against the viewport."""
+    canvas.set_viewport_size({"width": 1100, "height": 900})
+    start_rename(canvas)
+    canvas.fill(FIELD, "A Canvas With A Very Long Title Indeed " * 5)
+    right_edge = canvas.evaluate(
+        "() => Math.round(document.querySelector('.tools').getBoundingClientRect().right)"
+    )
+    assert right_edge <= 1100

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import pytest
 
-from research_canvas import storage
+from research_canvas import config, storage
 from research_canvas.config import (
     DEFAULT_ASK_PRESETS,
     FORMAT_VERSION,
@@ -303,3 +304,59 @@ def test_should_not_list_the_chips_file_as_a_canvas(canvas_root, sample_markdown
     storage.create_canvas(sample_markdown)
     storage.write_presets([{"label": "Explain", "question": "Explain this."}])
     assert len(storage.list_canvases()) == 1
+
+
+# --- renaming: the title rule and the id it must not disturb --------------------
+
+
+def test_should_trim_a_title(canvas_root):
+    assert storage.clean_title("  Attention  \n") == "Attention"
+
+
+def test_should_turn_a_newline_inside_a_title_into_a_space(canvas_root):
+    assert storage.clean_title("Attention\nIs All") == "Attention Is All"
+
+
+def test_should_refuse_a_blank_title(canvas_root):
+    with pytest.raises(storage.TitleInvalid):
+        storage.clean_title("")
+
+
+def test_should_refuse_a_title_of_only_whitespace(canvas_root):
+    with pytest.raises(storage.TitleInvalid):
+        storage.clean_title(" \n\t ")
+
+
+def test_should_refuse_a_title_over_the_cap(canvas_root):
+    with pytest.raises(storage.TitleInvalid):
+        storage.clean_title("x" * (config.MAX_TITLE_CHARS + 1))
+
+
+def test_should_accept_a_title_of_exactly_the_cap(canvas_root):
+    title = "x" * config.MAX_TITLE_CHARS
+    assert storage.clean_title(title) == title
+
+
+def test_should_make_the_title_error_a_value_error(canvas_root):
+    assert issubclass(storage.TitleInvalid, ValueError)
+
+
+def test_should_build_the_id_from_today_and_the_whole_short_slug(canvas_root):
+    today = f"{datetime.now(UTC):%Y-%m-%d}"
+    assert storage._reserve_id("Attention Is All") == f"{today}-attention-is-all"
+
+
+def test_should_cut_a_long_slug_at_the_slug_cap(canvas_root):
+    slug = storage._reserve_id("word " * 40).removeprefix(f"{datetime.now(UTC):%Y-%m-%d}-")
+    assert len(slug) <= config.MAX_SLUG_CHARS
+
+
+def test_should_drop_the_dash_a_cut_leaves_behind(canvas_root):
+    # The cut lands right after the dash between the two words.
+    title = "a" * (config.MAX_SLUG_CHARS - 1) + " bbbb"
+    assert storage._slug(title) == "a" * (config.MAX_SLUG_CHARS - 1)
+
+
+def test_should_follow_the_configured_slug_cap(canvas_root, monkeypatch):
+    monkeypatch.setattr(storage, "MAX_SLUG_CHARS", 10)
+    assert storage._slug("abcdefghijklmnopqrstuvwxyz") == "abcdefghij"

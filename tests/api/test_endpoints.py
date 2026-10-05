@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from research_canvas import storage
+from research_canvas import config, storage
 from research_canvas.config import (
     BLANK_BODY_MESSAGE,
     BLANK_PRESET_MESSAGE,
@@ -601,3 +601,85 @@ def test_should_explain_a_chips_file_that_cannot_be_read(client, canvas_root):
     response = client.get("/api/presets")
     assert response.status_code == 422
     assert response.json()["detail"] == PRESETS_UNREADABLE_MESSAGE
+
+
+# --- renaming a canvas ----------------------------------------------------------
+# A PATCH with an unknown "title" field returns 200 and changes nothing, so every
+# success test reads the stored title back instead of trusting the status.
+
+
+def _rename(client, canvas, title):
+    return client.patch(f"/api/canvases/{canvas['id']}", json={"title": title})
+
+
+def _stored_title(client, canvas):
+    return client.get(f"/api/canvases/{canvas['id']}").json()["title"]
+
+
+def test_should_save_a_new_title(client, canvas):
+    _rename(client, canvas, "Transformers, Revisited")
+    assert _stored_title(client, canvas) == "Transformers, Revisited"
+
+
+def test_should_return_the_new_title_from_the_rename(client, canvas):
+    response = _rename(client, canvas, "Transformers, Revisited")
+    assert response.json()["title"] == "Transformers, Revisited"
+
+
+def test_should_list_the_new_title(client, canvas):
+    _rename(client, canvas, "Transformers, Revisited")
+    assert client.get("/api/canvases").json()[0]["title"] == "Transformers, Revisited"
+
+
+def test_should_keep_the_id_when_renamed(client, canvas):
+    response = _rename(client, canvas, "Transformers, Revisited")
+    assert response.json()["id"] == canvas["id"]
+
+
+def test_should_trim_a_new_title(client, canvas):
+    _rename(client, canvas, "   Spaced Out  ")
+    assert _stored_title(client, canvas) == "Spaced Out"
+
+
+def test_should_reject_a_blank_title(client, canvas):
+    assert _rename(client, canvas, "   ").status_code == 422
+
+
+def test_should_keep_the_old_title_when_the_new_one_is_blank(client, canvas):
+    _rename(client, canvas, "   ")
+    assert _stored_title(client, canvas) == canvas["title"]
+
+
+def test_should_reject_a_title_over_the_cap(client, canvas):
+    response = _rename(client, canvas, "x" * (config.MAX_TITLE_CHARS + 1))
+    assert response.status_code == 422
+
+
+def test_should_keep_the_old_title_when_the_new_one_is_too_long(client, canvas):
+    _rename(client, canvas, "x" * (config.MAX_TITLE_CHARS + 1))
+    assert _stored_title(client, canvas) == canvas["title"]
+
+
+def test_should_explain_a_blank_title(client, canvas):
+    assert _rename(client, canvas, "").json()["detail"] == config.BLANK_TITLE_MESSAGE
+
+
+def test_should_explain_a_title_over_the_cap(client, canvas):
+    response = _rename(client, canvas, "x" * (config.MAX_TITLE_CHARS + 1))
+    assert response.json()["detail"] == config.TITLE_TOO_LONG_MESSAGE
+
+
+def test_should_accept_a_title_of_exactly_the_cap(client, canvas):
+    title = "x" * config.MAX_TITLE_CHARS
+    _rename(client, canvas, title)
+    assert _stored_title(client, canvas) == title
+
+
+def test_should_404_a_rename_of_an_unknown_canvas(client):
+    response = client.patch("/api/canvases/nope", json={"title": "Anything"})
+    assert response.status_code == 404
+
+
+def test_should_leave_the_title_alone_when_a_patch_has_none(client, canvas):
+    client.patch(f"/api/canvases/{canvas['id']}", json={"camera": {"tx": 5, "ty": 6, "scale": 0.5}})
+    assert _stored_title(client, canvas) == canvas["title"]

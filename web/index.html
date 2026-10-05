@@ -21,7 +21,11 @@
     <nav class="crumbs" aria-label="Breadcrumb">
       <button type="button" data-crumb-home>Canvases</button>
       <span class="sep" aria-hidden="true">/</span>
-      <span class="title" data-title></span>
+      <!-- The label names the action, so the script also sets `title` to the canvas
+           name: that is where assistive tech and a clipped title can still read it. -->
+      <button type="button" class="title" data-title aria-label="Rename canvas"></button>
+      <input type="text" class="title-input" data-title-input aria-label="Canvas title"
+             autocomplete="off" spellcheck="false" hidden>
     </nav>
 
     <div class="runpill" data-runpill hidden>
