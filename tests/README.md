@@ -1,13 +1,13 @@
 # Tests
 
-591 tests. 588 run on every `make test`; the 3 marked `live` spend real Claude usage and
+717 tests. 714 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          588 tests, no usage spent
-make test-unit     tests/unit                100
-make test-api      tests/api                  90  (3 live deselected)
-make test-e2e      tests/e2e                 398
+make test          unit + api + e2e          714 tests, no usage spent
+make test-unit     tests/unit                118
+make test-api      tests/api                 104  (3 live deselected)
+make test-e2e      tests/e2e                 492
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 107 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 14 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py` | 363 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 407 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py` | 416 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 492 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 35 |
@@ -113,7 +113,7 @@ canned payloads carry: the caret goes to the top and the camera stays put.
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (321)
+### 4 — Frontend against the real API (374)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -216,7 +216,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   the second leaving the mode, and a canvas switch dropping both. Six cover letting go:
   Escape, a click on bare desk, another canvas, a pan that keeps it, a band over boxes that
   are all selected removing them, and a band over a mix adding the rest.
-- `test_help.py` (13) — the shortcuts card in the top-right corner. It rests as a chip, so
+- `test_help.py` (17) — the shortcuts card in the top-right corner. It rests as a chip, so
   the reader gets the desk and not a panel: folded when a canvas opens, opened from the chip,
   folded again from its header, and left whichever way it was on the next visit, open or shut.
   The rest read what is on it: the toggle saying what it will do in either state, the modifier
@@ -285,13 +285,14 @@ The same browser, the real server, the real storage, the fake `claude`.
   edited text being what is sent, typing by hand unchanged, chips written in Settings showing
   on the next highlight with no reload, no chip row at all once every chip is deleted, and
   eight chips at the name cap staying inside the popover with `Ask` still on screen.
-- `test_tables.py` (13) — a canvas imported from `fixtures/tables_doc.md`. A wide table
+- `test_tables.py` (14) — a canvas imported from `fixtures/tables_doc.md`. A wide table
   scrolling inside its wrapper, the body no wider than its box, a narrow table still filling
   the column, a sideways wheel scrolling the table and not the canvas, the same over a formula in a cell, the canvas panning
   once the table is at its end, a vertical wheel panning and leaving the table unscrolled,
   the same sideways wheel scrolling a wide code block, the edge from a mark in a table
   cell following the table as it scrolls, and the table scrolling itself to a find hit in a
-  hidden column and back to the passage an answer came from.
+  hidden column and back to the passage an answer came from. One more for the arrow keys:
+  an arrow pressed inside a wide table does not fold the focused box, since there it scrolls.
 - `test_box_focus.py` (24) — the one focused box, marked `data-focused="1"`. Four cover a
   plain click: body, header (which still folds), a button, and the move to another box,
   with one box marked at a time. Six cover a journey: an edge and a highlight focus the
@@ -300,6 +301,11 @@ The same browser, the real server, the real storage, the fake `claude`.
   never moves it, and a text selection that runs off its box keeps focus on that box. The
   rest: a selection in the question survives the click that moves focus, `aria-current`
   follows the mark, and focus goes with a deleted box and with a canvas switch.
+- `test_box_keys.py` (24) — the keys of the focused box. `←` folds and `→` unfolds, on the
+  document and on an answer, a repeat is a no-op, and nothing folds with no focus. The
+  arrows stay out of the find field, the title field, the ask field, and an open editor,
+  and do nothing with a modifier held. The camera does not move. `Esc` takes one step at a
+  time: the editor, then the selection, then the focus, then Select mode.
 - `test_header_fold.py` (10) — a click on a box header folds the box, the same as the button
   at its end. Five cover the click itself: the label folding the box, a second click
   unfolding it, the button's `aria-expanded` following along, the fold surviving a reload,
@@ -312,7 +318,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   `config.DRAG_SLOP`: a press one pixel short of it folds, and a press that reaches it moves
   the box and does not fold it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 407)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 492)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and

@@ -1417,6 +1417,10 @@ function focusOf(hit) {
   return (back && boxOf(back).parent) || within.dataset.box;
 }
 
+// An arrow key in a field moves the caret there, and in a sideways scroller it
+// scrolls. Either way it is not the desk's key.
+const typing = (event) =>
+  !!event.target.closest?.(`input, textarea, [contenteditable], ${SCROLL_BLOCKS}`);
 
 // Client rects on both sides of the comparison. The band is drawn in client pixels and
 // the boxes are laid out in canvas pixels, and one conversion is one place to be wrong.
@@ -1812,6 +1816,16 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    // A fold closes an open editor without saving, and every other open layer owns
+    // its keys, so the arrows fold only when the desk is all there is.
+    if (!state.focused || edit || ask || rename || panel || modified(event) || typing(event)) return;
+    const box = boxById(state.focused);
+    if (!box) return;
+    event.preventDefault(); // the fold is the whole answer: the page must not scroll
+    setCollapsed(box, event.key === 'ArrowLeft');
+    return;
+  }
   if (event.key !== 'Escape') return;
   // Topmost first: the sheet, then the popover, then the editor under both. The title
   // field holds focus while it is open, so it answers before anything on the desk.
@@ -1820,6 +1834,7 @@ document.addEventListener('keydown', (event) => {
   else if (ask) closeAsk();
   else if (edit) closeEditor({ keepPlace: true });
   else if (state.selected.size) clearSelection();
+  else if (state.focused) setFocus(null);
   else if (selectMode) setSelectMode(false);
 });
 

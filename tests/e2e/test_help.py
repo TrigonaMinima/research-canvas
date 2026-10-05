@@ -141,3 +141,31 @@ def test_should_keep_the_card_off_the_first_screen(app):
     }"""
     )
     assert not on_top
+
+
+# --- the Focus group ----------------------------------------------------------
+
+
+def test_should_show_the_arrow_keys_in_the_focus_group(canvas):
+    open_card(canvas)
+    text = canvas.locator(CARD).inner_text()
+    assert "←" in text
+    assert "→" in text
+
+
+def test_should_say_what_the_arrows_do_to_the_focused_box(canvas):
+    open_card(canvas)
+    # Whole cells: "unfold it" contains "fold it", so a substring check hides a lost row.
+    rows = canvas.locator(f"{CARD} dd").all_inner_texts()
+    assert "fold it" in rows
+    assert "unfold it" in rows
+
+
+def test_should_say_how_to_let_the_focus_go(canvas):
+    open_card(canvas)
+    assert "let the focus go" in canvas.locator(CARD).inner_text()
+
+
+def test_should_name_the_focus_in_the_escape_order_on_the_foot_line(canvas):
+    open_card(canvas)
+    expect(canvas.locator(f"{CARD} .help__foot")).to_contain_text("then the focus")

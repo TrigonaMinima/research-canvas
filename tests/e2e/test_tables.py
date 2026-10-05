@@ -9,6 +9,7 @@ inside a scrolled table follows the mark.
 from __future__ import annotations
 
 import pytest
+from playwright.sync_api import expect
 from tests.fixtures.selection import ask
 from tests.fixtures.viewport import edge_start, transform_of
 
@@ -149,3 +150,18 @@ def test_should_scroll_the_table_back_to_the_passage_an_answer_came_from(tables_
     tables_canvas.click('[data-box="b2"] [data-goparent]')
 
     assert scroll_left(tables_canvas, WIDE_WRAP) < end
+
+
+# --- the arrow keys ------------------------------------------------------------
+
+ARROW_LEFT_IN = """(el) => el.dispatchEvent(
+  new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true, cancelable: true }))"""
+
+
+def test_should_not_fold_the_focused_box_on_an_arrow_key_inside_a_wide_table(tables_canvas):
+    tables_canvas.locator(BOX).click(position={"x": 10, "y": 100})  # the margin: no text
+    expect(tables_canvas.locator(BOX)).to_have_attribute("data-focused", "1")
+    # A scroller holds keyboard focus in Chrome, and there the arrows scroll it.
+    tables_canvas.locator(WIDE_WRAP).first.evaluate(ARROW_LEFT_IN)
+    tables_canvas.evaluate(TWO_FRAMES)
+    expect(tables_canvas.locator(BOX)).not_to_have_attribute("data-collapsed", "1")
