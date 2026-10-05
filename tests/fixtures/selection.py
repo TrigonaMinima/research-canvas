@@ -64,3 +64,11 @@ def send_question(page, question: str) -> None:
 def ask(page, box: str, needle: str, question: str) -> None:
     highlight(page, box, needle)
     send_question(page, question)
+
+
+def answer_from_root(
+    page, question: str = "What is a residual connection?", needle: str = QUOTE
+) -> None:
+    """Ask about a passage in the document and wait for the answer to land."""
+    ask(page, "b1", needle, question)
+    page.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)

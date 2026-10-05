@@ -73,6 +73,7 @@ CLIENT_CONFIG_KEYS = {
     "chromeHeight",
     "boxGap",
     "anchorLead",
+    "dragSlop",
     "unfinished",
     "stillRunningMessage",
     "maxInstructionsChars",

@@ -10,6 +10,7 @@ import {
   BOX_GAP,
   CHROME_HEIGHT,
   DISPLAY_NAME,
+  DRAG_SLOP,
   MAX_BOX_WIDTH,
   MAX_INSTRUCTIONS_CHARS,
   MAX_PRESET_LABEL_CHARS,
@@ -1478,6 +1479,10 @@ el.viewport.addEventListener('mousedown', (event) => {
 
 window.addEventListener('mousemove', (event) => {
   if (!gesture) return;
+  // A press on a header is a click until it has travelled: a hand wobbles by a pixel,
+  // and that should fold the box, not nudge it and pin it.
+  if (gesture.kind === 'move' && !gesture.moved
+      && Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) < DRAG_SLOP) return;
   gesture.moved = true;
   if (gesture.kind === 'marquee') {
     sizeBand(gesture, event.clientX, event.clientY);
@@ -1647,7 +1652,7 @@ document.addEventListener('click', (event) => {
   const back = hit('[data-goparent]') || hit('[data-quote]');
   if (back) { jumpToParent(boxOf(back).id); return; }
 
-  // The box fold lives on the header button and the section fold inside the body, so
+  // The box fold lives on the header and the section fold inside the body, so
   // the two branches cannot both match one click: `[data-collapse]` is an exact
   // attribute name, which `data-collapsed` is not, and no ancestor of a chevron wears
   // it. The order below is readability, not a tie-break.
@@ -1662,11 +1667,18 @@ document.addEventListener('click', (event) => {
     return;
   }
 
+  // The whole header folds the box, not only the button at its end. The header's other
+  // buttons keep their own work.
   const collapse = hit('[data-collapse]');
-  if (collapse) {
+  const head = !hit('button') && hit('.box__head');
+  if (collapse || head) {
     // The model, not the attribute it was projected onto: the button must toggle
     // correctly even on a path that changed the fold without rendering yet.
-    const box = boxOf(collapse);
+    const box = boxOf(collapse || head);
+    // A drag ends in a click as well, and a fold closes the editor without saving: the
+    // button is a small target and the header a large one, so a stray click on the
+    // header must not cost an edit.
+    if (head && (dragged || (edit && edit.id === box.id))) return;
     setCollapsed(box, !box.collapsed);
     return;
   }

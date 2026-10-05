@@ -124,6 +124,7 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["chromeHeight"] == config.CHROME_HEIGHT
     assert served["boxGap"] == config.BOX_GAP
     assert served["anchorLead"] == config.ANCHOR_LEAD
+    assert served["dragSlop"] == config.DRAG_SLOP
     assert served["stillRunningMessage"] == config.STILL_RUNNING_MESSAGE
     assert served["maxInstructionsChars"] == config.MAX_INSTRUCTIONS_CHARS
     assert served["maxPresets"] == config.MAX_PRESETS

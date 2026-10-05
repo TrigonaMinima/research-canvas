@@ -5,6 +5,8 @@ One definition, because nine call sites used to re-type the selector and the par
 
 from __future__ import annotations
 
+from tests.fixtures.selection import answer_from_root
+
 TRANSFORM = "() => getComputedStyle(document.querySelector('[data-canvas]')).transform"
 
 
@@ -87,6 +89,23 @@ def stored_anchor(page, server: str) -> dict:
     return view["anchors"][0]
 
 
+def settled(page) -> None:
+    """Give the open-time restack pass its frames.
+
+    Opening a canvas schedules the pass behind two animation frames, and again behind
+    the font swap. `wait_for_selector` returns as soon as the box exists, which can be
+    before either has run, so a test that reads a rect right after it reads a race.
+    """
+    page.wait_for_function("() => document.fonts.status === 'loaded'")
+    page.evaluate(
+        """() => new Promise((done) => {
+            let left = 4;
+            const tick = () => (left-- ? requestAnimationFrame(tick) : done());
+            requestAnimationFrame(tick);
+        })"""
+    )
+
+
 def fold_help(page) -> None:
     """Fold the shortcuts card away. It sits over the top-right corner of the desk, and
     a press that lands on it is not a press on whatever is underneath."""
@@ -95,17 +114,30 @@ def fold_help(page) -> None:
         page.click("[data-help-toggle]")
 
 
-def drag_header_by(page, box: str, dx_canvas: float, dy_canvas: float) -> None:
-    """Drag a box by its header, moving it a given distance in canvas pixels."""
+def _press_and_move(page, selector: str, dx: float, dy: float, steps: int) -> None:
+    """Press the centre of an element, move by (dx, dy) screen pixels, and let go."""
     fold_help(page)  # a header can sit under the card, and the card takes the press
-    scale = scale_of(page)
-    handle = page.locator(f'[data-box="{box}"] .box__head').bounding_box()
-    x = handle["x"] + handle["width"] / 2
-    y = handle["y"] + handle["height"] / 2
+    target = page.locator(selector).bounding_box()
+    x = target["x"] + target["width"] / 2
+    y = target["y"] + target["height"] / 2
     page.mouse.move(x, y)
     page.mouse.down()
-    page.mouse.move(x + dx_canvas * scale, y + dy_canvas * scale, steps=8)
+    page.mouse.move(x + dx, y + dy, steps=steps)
     page.mouse.up()
+
+
+def drag_header_by(page, box: str, dx_canvas: float, dy_canvas: float) -> None:
+    """Drag a box by its header, moving it a given distance in canvas pixels."""
+    scale = scale_of(page)
+    _press_and_move(
+        page, f'[data-box="{box}"] .box__head', dx_canvas * scale, dy_canvas * scale, steps=8
+    )
+
+
+def press_header(page, box: str, dx: int = 0, dy: int = 0) -> None:
+    """Press a box's header on its label, move by (dx, dy) screen pixels in one step,
+    and let go. A click and a drag differ only in how far this travels."""
+    _press_and_move(page, f'[data-box="{box}"] .box__head [data-label]', dx, dy, steps=1)
 
 
 # The camera flips `data-anim` to '0' when its own transition has landed, so no test
@@ -147,3 +179,13 @@ EDGE_START = r"""(target) => {
 def edge_start(page, target: str) -> dict:
     """Where the edge to a box leaves the passage it came from."""
     return page.evaluate(EDGE_START, target)
+
+
+def answer_in_reach(page) -> None:
+    """Ask about a passage and bring the answer's header on screen, clear of the card.
+
+    b2 opens past the right edge of the window, where a press cannot reach it."""
+    answer_from_root(page)
+    zoom_to_fit(page)
+    settled(page)
+    fold_help(page)

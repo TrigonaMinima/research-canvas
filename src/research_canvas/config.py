@@ -147,6 +147,9 @@ MIN_SELECTION_CHARS = 3
 CHROME_HEIGHT = 53
 # Two stacked answers at one depth keep this gap, so a column reads as one column.
 BOX_GAP = 40
+# A press on a box header may travel less than this many screen pixels and still be a
+# click, which folds the box. From here up it is a drag.
+DRAG_SLOP = 4
 # An answer sits this far below the underline of the passage it came from, so a reader
 # sees at once which passage it belongs to.
 ANCHOR_LEAD = 40

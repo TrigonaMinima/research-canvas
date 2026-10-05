@@ -12,6 +12,7 @@ export const MIN_SELECTION_CHARS = served.minSelectionChars;
 export const CHROME_HEIGHT = served.chromeHeight;
 export const BOX_GAP = served.boxGap;
 export const ANCHOR_LEAD = served.anchorLead;
+export const DRAG_SLOP = served.dragSlop;
 export const STILL_RUNNING_MESSAGE = served.stillRunningMessage;
 export const MAX_INSTRUCTIONS_CHARS = served.maxInstructionsChars;
 export const MAX_PRESETS = served.maxPresets;

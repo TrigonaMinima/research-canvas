@@ -1,13 +1,13 @@
 # Tests
 
-573 tests. 570 run on every `make test`; the 3 marked `live` spend real Claude usage and
+591 tests. 588 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          570 tests, no usage spent
+make test          unit + api + e2e          588 tests, no usage spent
 make test-unit     tests/unit                100
 make test-api      tests/api                  90  (3 live deselected)
-make test-e2e      tests/e2e                 380
+make test-e2e      tests/e2e                 398
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -22,8 +22,8 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 107 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 14 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py` | 345 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 389 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py` | 363 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 407 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
 | 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 35 |
@@ -113,7 +113,7 @@ canned payloads carry: the caret goes to the top and the camera stays put.
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (303)
+### 4 — Frontend against the real API (321)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -292,8 +292,19 @@ The same browser, the real server, the real storage, the fake `claude`.
   the same sideways wheel scrolling a wide code block, the edge from a mark in a table
   cell following the table as it scrolls, and the table scrolling itself to a find hit in a
   hidden column and back to the passage an answer came from.
+- `test_header_fold.py` (10) — a click on a box header folds the box, the same as the button
+  at its end. Five cover the click itself: the label folding the box, a second click
+  unfolding it, the button's `aria-expanded` following along, the fold surviving a reload,
+  and the grip folding as well. Five cover what a header click must leave alone: Edit and
+  Unpin doing only their own work, a cmd+click selecting the box and not folding it, and a
+  header click doing nothing while that box's editor is open, since a fold would drop the edit.
+- `test_header_press.py` (8) — a click against a drag on the same header. A drag moves the
+  box and leaves its fold alone, open or folded. A press that wobbles by a pixel folds the
+  box, and neither moves it nor pins it. Three pin the threshold itself, read from
+  `config.DRAG_SLOP`: a press one pixel short of it folds, and a press that reaches it moves
+  the box and does not fold it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 389)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 407)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -406,7 +417,7 @@ Added with the rename feature. The counts in the sections above were not re-tota
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
 | `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
-| `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. |
-| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. |
+| `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. `answer_from_root()` asks about a passage in the document and waits for the answer to land. |
+| `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. `press_header()` presses a header on its label, moves a few screen pixels and lets go, for the tests that tell a click from a drag. `settled()` gives the restack pass its frames before a rect is read, and `answer_in_reach()` asks for the first answer and brings its header on screen. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
 | `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. |

@@ -31,6 +31,7 @@ from tests.fixtures.place import (
 from tests.fixtures.selection import (
     QUOTE,
     SELECT,
+    answer_from_root,
     ask,
     find_offsets,
     highlight,
@@ -43,6 +44,7 @@ from tests.fixtures.viewport import (
     edge_start,
     line_rects_of,
     rect_of,
+    settled,
     to_client,
     transform_of,
     view_centre,
@@ -804,23 +806,6 @@ def gap_between(a: dict, b: dict) -> float:
     return lower["y"] - (upper["y"] + upper["h"])
 
 
-def settled(page) -> None:
-    """Give the open-time restack pass its frames.
-
-    Opening a canvas schedules the pass behind two animation frames, and again behind
-    the font swap. `wait_for_selector` returns as soon as the box exists, which can be
-    before either has run, so a test that reads a rect right after it reads a race.
-    """
-    page.wait_for_function("() => document.fonts.status === 'loaded'")
-    page.evaluate(
-        """() => new Promise((done) => {
-            let left = 4;
-            const tick = () => (left-- ? requestAnimationFrame(tick) : done());
-            requestAnimationFrame(tick);
-        })"""
-    )
-
-
 def resize(page, box: str, edge: str, dx: float) -> None:
     """Drag one of a box's two handles sideways by dx screen pixels."""
     handle = page.locator(f'[data-box="{box}"] [data-resize="{edge}"]').bounding_box()
@@ -831,14 +816,6 @@ def resize(page, box: str, edge: str, dx: float) -> None:
     page.mouse.down()
     page.mouse.move(x + dx, y, steps=8)
     page.mouse.up()
-
-
-def answer_from_root(
-    page, question: str = "What is a residual connection?", needle: str = QUOTE
-) -> None:
-    """Ask about a passage in the document and wait for the answer to land."""
-    ask(page, "b1", needle, question)
-    page.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
 
 
 def jump_to(page, box: str) -> None:
