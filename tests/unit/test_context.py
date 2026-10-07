@@ -114,3 +114,87 @@ def test_should_offer_the_instructions_block_to_any_generator(canvas_root):
     assert context.instructions_block() == []
     (canvas_root / INSTRUCTIONS_FILE).write_text("Be brief.", encoding="utf-8")
     assert any("Be brief." in part for part in context.instructions_block())
+
+
+# --- merging an answer back into its parent -----------------------------------
+# The same path-only rule, pointed the other way: the run sees the parent it is about to
+# change, the answer being folded in, and nothing from a sibling branch.
+
+
+@pytest.fixture
+def merging(tree):
+    canvas, left, right, _deep = tree
+    left.status = "done"
+    canvas.anchors.append(
+        storage.Anchor(
+            id="a1",
+            box=canvas.root_id,
+            target=left.id,
+            start=0,
+            end=9,
+            quote="Attention",
+        )
+    )
+    storage.save(canvas)
+    return canvas, left, right
+
+
+def test_should_give_the_merge_run_the_whole_parent_document(merging, sample_markdown):
+    canvas, left, _right = merging
+    assert "Attention Is All You Need" in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_give_the_merge_run_the_answer_being_folded_in(merging):
+    canvas, left, _right = merging
+    prompt = context.build_merge_prompt(canvas, left, "")
+    assert "every token see every other token" in prompt
+
+
+def test_should_give_the_merge_run_the_question_that_produced_the_answer(merging):
+    canvas, left, _right = merging
+    assert "Why attention?" in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_give_the_merge_run_the_highlighted_passage(merging):
+    canvas, left, _right = merging
+    assert "Attention" in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_give_the_merge_run_the_readers_guidance(merging):
+    canvas, left, _right = merging
+    assert "Keep it to one sentence." in context.build_merge_prompt(
+        canvas, left, "Keep it to one sentence."
+    )
+
+
+def test_should_never_give_the_merge_run_a_sibling_branch(merging):
+    canvas, left, _right = merging
+    assert "SECRET SIBLING TEXT" not in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_include_the_standing_instructions_in_a_merge(merging, canvas_root):
+    canvas, left, _right = merging
+    (canvas_root / INSTRUCTIONS_FILE).write_text("Answer in British English.", encoding="utf-8")
+    assert "Answer in British English." in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_ask_the_merge_run_for_one_edit_per_line(merging):
+    canvas, left, _right = merging
+    assert "one JSON object per line" in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_name_every_field_a_merge_edit_needs(merging):
+    canvas, left, _right = merging
+    prompt = context.build_merge_prompt(canvas, left, "")
+    assert all(f'"{key}"' in prompt for key in ("find", "replace", "why"))
+
+
+def test_should_tell_the_merge_run_to_quote_enough_to_be_unique(merging):
+    canvas, left, _right = merging
+    assert "unique" in context.build_merge_prompt(canvas, left, "")
+
+
+def test_should_not_merge_a_box_that_has_no_parent(merging):
+    canvas, _left, _right = merging
+    with pytest.raises(ValueError):
+        context.build_merge_prompt(canvas, canvas.box(canvas.root_id), "")

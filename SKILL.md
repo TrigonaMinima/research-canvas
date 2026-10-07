@@ -31,6 +31,7 @@ Print the URL to the user and stop. Do not open a browser for them.
 canvases/<slug>/canvas.json   boxes, anchors, camera, theme, formatVersion
 canvases/<slug>/root.md       the imported document, verbatim
 canvases/<slug>/boxes/<id>.md one file per answer
+canvases/<slug>/merges/<id>.json a merge waiting to be reviewed
 ```
 
 To resume earlier research, open the app and pick the canvas from the "Canvases" list.
@@ -96,6 +97,35 @@ with its source lines (`data-line`, `data-line-end`), and `web/sourcemap.js` doe
 
 Keys: `Enter` saves, from a list and a quote as well as from prose, `Shift+Enter` opens a new
 line and carries a list marker with it, `Tab` indents, `Esc` discards.
+
+## Merging an answer back in
+
+An answer is not stuck beside the document forever. Press **Merge** on any finished answer
+box and give it a line of guidance, and a run folds what it says into the box it was asked
+from. The merge is not limited to the highlighted passage: one answer can correct a claim in
+the intro and fix a table row further down.
+
+Nothing is written on trust. The parent box widens and turns into a diff of the whole
+document, numbered on both sides: the document as it stands on the left, the document the
+merge proposes on the right. The right side is a real editor, so rewording a change is
+typing, and a merge is partly accepted as easily as wholly. Stretches no change touches are
+folded away, and a click opens any of them. A change naming text the document no longer has
+is listed above the diff, said to be unplaceable, and never guessed at.
+
+A change is taken or left in two places. Every change that landed carries **Keep** and
+**Skip** beside its line above the diff, and every chunk of the diff carries two controls
+of its own: `⇝` drops everything in that chunk, `◎` keeps that chunk and puts the rest of
+the document back. The per-change buttons are the finer of the two, because neighbouring
+changed lines are one chunk and two changes can land inside it. Both read the reviewed
+document rather than a list of ticks, so they never disagree: drop a chunk and the changes
+it covers say they are skipped.
+
+Accept rewrites the parent and marks the answer merged, folded but kept: the working is
+still there to read, and so are the answers asked from inside it. Accept and delete writes
+the same document and takes the answer box off the canvas with it, for an answer with
+nothing left to show. Reject all discards the proposal. `Esc` closes the pane and keeps it,
+and the review comes back on the next reload, drops and rewordings included, because it is
+written to `canvases/<slug>/merges/<childId>.json`.
 
 ## Do not
 

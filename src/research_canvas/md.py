@@ -40,6 +40,7 @@ def _source_lines(state: StateCore) -> None:
 _md.core.ruler.push("source_lines", _source_lines)
 
 _HEADING = re.compile(r"^\s*#{1,6}\s*(.+?)\s*#*\s*$")
+_CODE_FENCE = re.compile(r"^\s*(```|~~~)")
 
 
 def render(markdown: str) -> str:
@@ -53,6 +54,26 @@ def first_heading(markdown: str) -> str | None:
         if match and match.group(1).strip():
             return match.group(1).strip()
     return None
+
+
+def heading_before(markdown: str, offset: int) -> str | None:
+    """The section a character offset sits in, or None above the first heading.
+
+    Used to label a merge change with where in the document it lands, which is half of
+    what the reader is asking when they read a review.
+    """
+    seen, at, fenced = None, 0, False
+    for line in markdown.splitlines(keepends=True):
+        if at >= offset:
+            break
+        if _CODE_FENCE.match(line):
+            fenced = not fenced
+        elif not fenced:
+            match = _HEADING.match(line)
+            if match and match.group(1).strip():
+                seen = match.group(1).strip()
+        at += len(line)
+    return seen
 
 
 # --- mathematics --------------------------------------------------------------

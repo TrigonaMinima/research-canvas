@@ -36,6 +36,7 @@ from .config import (
     MAX_PRESETS,
     MAX_SLUG_CHARS,
     MAX_TITLE_CHARS,
+    MERGE_DIR,
     MIN_BOX_WIDTH,
     MIN_PASTE_CHARS,
     PRESET_LABEL_TOO_LONG_MESSAGE,
@@ -49,9 +50,13 @@ from .config import (
     TOO_MANY_PRESETS_MESSAGE,
     UNFINISHED,
 )
+from .merge import Edit
 
 INTERRUPTED_REASON = (
     "The app closed while this answer was running. Nothing else on the canvas changed."
+)
+INTERRUPTED_MERGE_REASON = (
+    "The app closed while this merge was running. Nothing on the canvas was changed."
 )
 REFUSED_MESSAGE = "Import refused: paste at least a few sentences of text. No canvas was created."
 
@@ -108,6 +113,9 @@ class Box:
     sections: list[str] = field(default_factory=list)
     # Dragged vertically by the reader, so the layout pass leaves it alone.
     pinned: bool = False
+    # Its answer has been folded into its parent. The box stays, so the question that
+    # produced it and anything asked below it survive the merge.
+    merged: bool = False
     created_at: str = ""
 
     def to_dict(self) -> dict:
@@ -126,6 +134,7 @@ class Box:
             "collapsed": self.collapsed,
             "sections": self.sections,
             "pinned": self.pinned,
+            "merged": self.merged,
             "createdAt": self.created_at,
         }
 
@@ -146,7 +155,52 @@ class Box:
             collapsed=bool(data.get("collapsed", False)),
             sections=[str(s) for s in data.get("sections", [])],
             pinned=bool(data.get("pinned", False)),
+            merged=bool(data.get("merged", False)),
             created_at=data.get("createdAt", ""),
+        )
+
+
+@dataclass
+class Proposal:
+    """A merge waiting for the reader to decide on it.
+
+    Kept on disk rather than in memory so closing the tab mid-review does not throw away
+    the toggles and rewordings the reader has already made.
+    """
+
+    child: str
+    prompt: str = ""
+    status: str = "pending"
+    reason: str = ""
+    created_at: str = ""
+    edits: list[Edit] = field(default_factory=list)
+
+    # The parent's markdown as the review has it. Written when the run ends, rewritten
+    # as the reader works, and the exact text an accept writes into the document.
+    proposed: str = ""
+
+    def to_dict(self) -> dict:
+        return {
+            "childId": self.child,
+            "prompt": self.prompt,
+            "status": self.status,
+            "reason": self.reason,
+            "createdAt": self.created_at,
+            "edits": [edit.to_dict() for edit in self.edits],
+            "proposed": self.proposed,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> Proposal:
+        return cls(
+            child=data["childId"],
+            prompt=data.get("prompt", ""),
+            status=data.get("status", "pending"),
+            reason=data.get("reason", ""),
+            created_at=data.get("createdAt", ""),
+            edits=[Edit.from_dict(item) for item in data.get("edits", [])],
+            # "" for a proposal written before the whole document was the review.
+            proposed=data.get("proposed", ""),
         )
 
 
@@ -311,10 +365,21 @@ def _lock_for(canvas_id: str) -> threading.RLock:
 
 
 @contextmanager
+def holding(canvas_id: str):
+    """Load and hand over, with nobody else writing meanwhile, but write nothing back.
+
+    For work that lives beside a canvas rather than in it. A merge proposal is its own
+    file, and saving the canvas for it would bump `updatedAt` on every Keep toggle,
+    reordering the reader's canvas list because a checkbox moved.
+    """
+    with _lock_for(canvas_id):
+        yield load(canvas_id)
+
+
+@contextmanager
 def edit(canvas_id: str):
     """Load, hand over, and save again, with nobody else writing in between."""
-    with _lock_for(canvas_id):
-        canvas = load(canvas_id)
+    with holding(canvas_id) as canvas:
         yield canvas
         save(canvas)
 
@@ -425,6 +490,43 @@ def clean_title(raw: str) -> str:
     return title
 
 
+# --- merge proposals ----------------------------------------------------------
+
+
+def read_merge(canvas_id: str, box_id: str) -> Proposal | None:
+    path = _merge_path(canvas_id, box_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    proposal = Proposal.from_dict(data)
+    # Same rule as a box: a run cannot outlive the process that started it, so a merge
+    # still marked pending by a process that is gone is an orphan, not work in progress.
+    if proposal.status == "pending" and not is_live(canvas_id, box_id):
+        proposal.status = "interrupted"
+        proposal.reason = INTERRUPTED_MERGE_REASON
+    return proposal
+
+
+def write_merge(canvas_id: str, proposal: Proposal) -> None:
+    if not proposal.created_at:
+        proposal.created_at = _now()
+    payload = json.dumps(proposal.to_dict(), indent=2, ensure_ascii=False) + "\n"
+    _atomic_write(_merge_path(canvas_id, proposal.child), payload)
+
+
+def delete_merge(canvas_id: str, box_id: str) -> None:
+    _merge_path(canvas_id, box_id).unlink(missing_ok=True)
+
+
+def list_merges(canvas_id: str) -> list[str]:
+    """The boxes holding a proposal, so a reload knows which reviews to reopen."""
+    folder = _dir(canvas_id) / MERGE_DIR
+    if not folder.is_dir():
+        return []
+    return sorted(entry.stem for entry in folder.iterdir() if entry.suffix == ".json")
+
+
 # --- standing instructions ----------------------------------------------------
 # One file for the whole app. Read on every prompt build rather than cached, so
 # editing it in a text editor takes effect without restarting the server.
@@ -508,6 +610,13 @@ def _body_path(canvas_id: str, box_id: str):
     if not _SAFE_ID.fullmatch(box_id or ""):
         raise CanvasNotFound(box_id)
     return base / BOX_DIR / f"{box_id}.md"
+
+
+def _merge_path(canvas_id: str, box_id: str):
+    base = _dir(canvas_id)
+    if not _SAFE_ID.fullmatch(box_id or ""):
+        raise CanvasNotFound(box_id)
+    return base / MERGE_DIR / f"{box_id}.json"
 
 
 _TMP_SEQ = count()

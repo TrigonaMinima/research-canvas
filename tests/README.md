@@ -1,13 +1,13 @@
 # Tests
 
-717 tests. 714 run on every `make test`; the 3 marked `live` spend real Claude usage and
+887 tests. 884 run on every `make test`; the 3 marked `live` spend real Claude usage and
 run only on `make test-sandbox`.
 
 ```
-make test          unit + api + e2e          714 tests, no usage spent
-make test-unit     tests/unit                118
-make test-api      tests/api                 104  (3 live deselected)
-make test-e2e      tests/e2e                 492
+make test          unit + api + e2e          884 tests, no usage spent
+make test-unit     tests/unit                173
+make test-api      tests/api                 182  (3 live deselected)
+make test-e2e      tests/e2e                 532
 make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
 ```
 
@@ -19,21 +19,21 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 107 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py` | 74 |
-| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 14 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py` | 416 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 492 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 42 |
+| 1 | API function tests | `tests/unit/` | 173 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 155 |
+| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py` | 457 |
+| 5 | End-to-end, every UI element | all of `tests/e2e/` | 532 |
+| 6 | Data / persistence | `tests/unit/test_storage.py` | 68 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
-| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 35 |
-| 9 | Contract / schema | `tests/api/test_contract.py` | 16 |
+| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `test_merge_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 52 |
+| 9 | Contract / schema | `tests/api/test_contract.py` | 24 |
 
 ### 1 — API function tests (`tests/unit/`)
 
 Each module in isolation, no HTTP, no browser.
 
-- `test_storage.py` (36) — titles from the first heading, the refused-paste minimum, verbatim
+- `test_storage.py` (57) — titles from the first heading, the refused-paste minimum, verbatim
   document bodies, the `formatVersion` stamp, colliding-title ids, the disk round trip,
   per-answer body files, depth under the parent, newest-first listing, unfinished boxes
   becoming `interrupted` on load, no partial file when a save fails, and a canvas id that
@@ -50,7 +50,7 @@ Each module in isolation, no HTTP, no browser.
   file never listed as a canvas.
 - `test_anchors.py` (5) — text-offset anchors resolved against rendered plain text,
   including the nearest-occurrence fallback when the document has shifted.
-- `test_markdown.py` (26) — rendering and first-heading extraction, two on tables (a
+- `test_markdown.py` (30) — rendering and first-heading extraction, two on tables (a
   table wrapped in `.table-wrap`, and no whitespace between table and wrapper, which
   would shift every later anchor), plus twelve on
   mathematics: inline `$…$` as `display="inline"`, `$$…$$` as `display="block"`, the
@@ -61,7 +61,7 @@ Each module in isolation, no HTTP, no browser.
   the source lines edit mode opens by: `data-line` on a paragraph, a heading, a list item,
   a fenced block and a display maths block, `data-line-end` on a paragraph of several
   lines, and no text added to the body, so anchor offsets stay where they were.
-- `test_context.py` (14) — path-only prompt assembly (US-3): root + ancestors + the highlight
+- `test_context.py` (25) — path-only prompt assembly (US-3): root + ancestors + the highlight
   + the question, and never a sibling branch. Two assert the preamble names the maths
   delimiters, so an answer can carry formulas the same way the document does. Six cover the
   standing instructions: the prompt unchanged when the file is missing, the same prompt
@@ -74,8 +74,18 @@ Each module in isolation, no HTTP, no browser.
   error subtypes, and non-JSON noise.
 - `test_server.py` (7) — a freshly picked free port, a different one each time, never a
   framework default, bound to `127.0.0.1` only.
+- `test_merge.py` (25) — the edit list a merge run returns, and what is done with it. One
+  JSON object per line, so a change renders the moment its line parses: a fenced block, a
+  partial trailing line held back until it completes, and a line that will not parse skipped
+  rather than failing the run. Then applying them: exact matching first and
+  whitespace-tolerant matching second, since a document soft-wraps where a run will not;
+  edits applied in descending position order so one cannot shift the next; and `missing` and
+  `ambiguous` reported and never guessed at. The rest is `heading_before`, which labels a
+  change with the section it lands in and steps over fenced code on the way. There is no
+  word-level diff here any more: the review is a diff of the whole document, drawn in the
+  browser by the merge view.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 74)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 74; `test_merge_endpoints.py`, 67)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
@@ -98,7 +108,31 @@ and served back, the chips surviving a canvas being created and deleted, a 422 w
 message Settings shows for each refusal the storage layer makes, and a 422 on the read as
 well when `presets.json` on disk is corrupt, so the reader is told rather than shown a 500.
 
-### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 14)
+`test_merge_endpoints.py` (67) covers folding an answer into its parent, keyed throughout by
+the child box even though the review renders in the parent. The guards first: the document
+has no parent to merge into, an answer that is not finished, a parent that is not finished,
+a child already merged, and a second proposal for a parent that is already under review, plus
+a `PUT …/body` refused underneath one, because an edit there would leave every change in the
+review pointing at text that has moved. Then the run: the `edit` event per parsed line, a
+proposal written on the terminal event, a run whose output never parses becoming `failed`
+with its reason, and a run cut short keeping the edits it managed. Then the review, which is the whole
+proposed document rather than a list of fragments: the document proposed with every placeable
+change written into it and the unplaceable one left out, each change carrying the text it
+looks for and the text it writes, so the browser can take one change and leave the next even
+where both land in one chunk of the diff, a `PATCH` of the reviewed document
+saved and read back, a `PATCH` on a run that has not finished refused, the canvas left
+untouched by one because a proposal is a file beside it, and the whole thing read back after a
+reload. Then accepting: exactly the document the reader reviewed written, changes landing in
+more than one part of it, text outside them byte-identical, a review that reads exactly like
+the document refused, the child folded and marked merged with its deeper answers untouched,
+the proposal dropped afterwards, and the anchor re-pointed only when the passage it named is
+genuinely gone. Seven more cover the other ending, where the accept asks for the answer to go
+as well: the child removed with its anchor, its own deeper answers and its proposal, the
+document still written, the child kept when the accept does not ask, and the whole thing
+still refused while the run is going. Reject drops the proposal and leaves the document alone; deleting a box takes its
+proposal with it; and `view.merges` carries the ids a reload reopens the reviews from.
+
+### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 17)
 
 Playwright with `page.route` answering the canvas, ask, and stream calls from canned
 payloads. No storage, no runner. Covers rendering (title, boxes, questions, status, anchors,
@@ -113,7 +147,7 @@ canned payloads carry: the caret goes to the top and the camera stays put.
 The payloads are built by `tests/fixtures/contract.py`, the same module layer 9 checks the
 real API against, so a mock cannot drift away from the server and hide a break.
 
-### 4 — Frontend against the real API (374)
+### 4 — Frontend against the real API (457)
 
 The same browser, the real server, the real storage, the fake `claude`.
 
@@ -246,6 +280,31 @@ The same browser, the real server, the real storage, the fake `claude`.
   leaves them at full width with no label clipped. The bar is one flex row with no wrap, so
   something has to give; it is the title, which ellipsises. The fold itself is proved in
   `test_canvas.py`.
+- `test_merge.py` (40) — folding an answer back into the document, from the button to the
+  markdown on disk. The Merge button on an answer and never on the document; the guidance
+  prompt; a line per change saying what it does and which section it lands in; a change that
+  could not be placed named as such. Then the diff itself, which is the review: the document
+  as it stands beside the document proposed, both numbered, the words a change touches marked
+  inside the line, the stretches no change touches folded away and opened again by a click,
+  and the box widened for as long as the review is up and narrowed again when it closes. Then
+  the writing: every kept change in the source afterwards, a dropped one absent with its
+  original wrapping intact, a rewording landing exactly as it was typed, the accept button
+  asleep once every chunk is dropped, the child folded and marked merged, a deeper answer
+  untouched, and a rejected merge leaving the document byte for byte as it was. Eleven cover
+  taking one change and leaving the next: Keep and Skip on each change that landed and on no
+  other, a skipped change out of the proposal with the document's own wrapping back in its
+  place, kept again by the other button, the state of a row following the arrow on its chunk,
+  the `◎` control leaving one chunk standing and the rest of the document as it was, the same
+  on the last chunk of the document, where a revert has a line break to think about, and the
+  case the buttons exist for: a run whose two changes land on neighbouring lines, so the diff
+  holds both in one chunk with one arrow, and one of them is skipped anyway. One more puts
+  both buttons of a change to sleep once the reader has written over the passage. Four cover
+  accepting and clearing the answer away: the answer gone on that button, the document still
+  written, the answer kept on the plain Accept, and both buttons asleep together. Two cover
+  what Escape means here: it closes the pane and keeps the proposal, so a reload brings the
+  review back, with its drops and its rewordings. Two more pin the keyboard and the
+  teardown: Enter in the guidance field sends the merge, as it does in an ask, and deleting
+  the answer under review takes the pane with it and gives the parent its body back.
 - `test_instructions.py` (13) — the standing-instructions section of Settings, opened from the first screen
   and from the chrome bar, because it is global and belongs to neither. Empty to begin with,
   saved, still there when reopened and after a reload, `Escape` and Cancel throwing an unsaved
@@ -318,7 +377,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   `config.DRAG_SLOP`: a press one pixel short of it folds, and a press that reaches it moves
   the box and does not fold it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 492)
+### 5 — End-to-end over every UI element (all of `tests/e2e/`, 532)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
@@ -333,7 +392,7 @@ directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 42)
+### 6 — Data / persistence (`tests/unit/test_storage.py`, 57)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
 above in layer 1. Three cover the pin a reader puts on a box: an answer starting unpinned, a
@@ -358,7 +417,7 @@ boundary the PRD actually draws, and that is tested:
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
   visible rather than merely asserted.
 
-### 8 — Validation & error paths (35)
+### 8 — Validation & error paths (51)
 
 Refused pastes under 40 characters with the exact message, an empty question, a selection
 under three characters, a zoom outside `[0.1, 2]`, 404 for an unknown canvas, 404 for a
@@ -367,11 +426,18 @@ a box that is still running, 422 for saving an empty box, 409 for editing a box 
 answer is still streaming, and 422 for asking with a width outside the clamps, at either end, 422 for an anchor offset
 below zero, and 422 for standing
 instructions over the cap, with the message the panel shows, and 422 for each way a question
-chip can be refused: too many, a blank name, a blank question, or either field over its cap. In the browser, `test_failures.py` (6) covers a usage-limit
-stop, a crashed run, the retry button, and the rule that a failed answer keeps its question
-and its anchor.
+chip can be refused: too many, a blank name, a blank question, or either field over its cap.
+A merge adds its own: the
+document box refused because it was asked from nothing, an unfinished answer, a second merge
+into a parent already under review, an edit of a parent with a merge waiting, an answer merged
+twice, a review saved while its run is still going, a review carrying no document, an accept
+that would change nothing, a run whose output holds no change at all, and a 404 for a merge
+that was never started. Every refusal is paired with a test of the sentence it refuses with,
+because the reader reads the sentence, not the status code. In the browser,
+`test_failures.py` (6) covers a usage-limit stop, a crashed run, the retry button, and the
+rule that a failed answer keeps its question and its anchor.
 
-### 9 — Contract / schema (`tests/api/test_contract.py`, 16)
+### 9 — Contract / schema (`tests/api/test_contract.py`, 24)
 
 Every field name the frontend reads, asserted against what the real API returns: the canvas
 view, a box, the camera, the box statuses, one rendered body per box, a canvas summary, the
@@ -383,6 +449,13 @@ browser sends or reads cannot go missing on the server without failing here. Two
 `/api/instructions`, read and written, so the one field the panel exchanges is pinned like
 every other, and three more cover `/api/presets`, read and written, down to the `label` and
 `question` keys of a single chip.
+
+Eight more cover the merge: the proposal payload, one change inside it, the status set, the
+three request bodies the pane sends, the stream's event names, and the shape a `PATCH`
+answers with. The proposal carries the whole proposed document, because that document is what
+the reader reviews and what an accept writes; a change carries its label, its section,
+whether it could be placed, and the two pieces of text it swaps, which is what lets the
+browser move one change without touching the one beside it.
 
 Two more cover `GET /api/config`, which is how the browser is told the clamps, the chrome-bar
 height, the chip caps, the unfinished-status set and the shared user-facing sentence instead of re-declaring
@@ -422,7 +495,7 @@ Added with the rename feature. The counts in the sections above were not re-tota
 
 | File | What it is |
 |------|-----------|
-| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, and `[[fake:long]]` for an answer tall enough to overlap the box below it. |
+| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, and `[[fake:long]]` for an answer tall enough to overlap the box below it. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
 | `fixtures/sample_doc.md` | An excerpt of *Attention Is All You Need*. The word "attention" appears exactly four times; the find tests count on it. |
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
 | `fixtures/tables_doc.md` | A 12-column table of unbreakable names that cannot fit the column, a 2-column table that can, a formula in one cell of the wide table, and a code block of one very long line. |
@@ -433,5 +506,6 @@ Added with the rename feature. The counts in the sections above were not re-tota
 | `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. `answer_from_root()` asks about a passage in the document and waits for the answer to land. |
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. `press_header()` presses a header on its label, moves a few screen pixels and lets go, for the tests that tell a click from a drag. `settled()` gives the restack pass its frames before a rect is read, and `answer_in_reach()` asks for the first answer and brings its header on screen. |
+| `fixtures/merging.py` | The edit list a merge run returns, deliberately mixed: two changes that land in different paragraphs of the document, far enough apart that the diff reads them as separate chunks and one can be dropped without the other, and a third naming text the document has never contained. A second list holds two changes on adjacent lines of one paragraph, which the diff cannot separate: one chunk, one arrow, two changes. Shared by the API tests, the fake binary and the browser tests, so all three move together. Also the selectors a review is driven by, which name the **parent** box, since that is where the review renders. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
 | `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. |

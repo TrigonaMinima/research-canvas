@@ -38,3 +38,13 @@ def fake_answer(monkeypatch):
     make.Event = runner.Event
     make.prompts = []
     return make
+
+
+@pytest.fixture
+def reviewed(client, canvas, fake_answer):
+    """One finished merge, waiting for review, as the API hands it back."""
+    from tests.fixtures.merging import answer, run_merge
+
+    child = answer(client, canvas, fake_answer)
+    run_merge(client, canvas, child, fake_answer)
+    return client.get(f"/api/canvases/{canvas['id']}/boxes/{child}/merge").json()

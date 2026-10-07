@@ -69,6 +69,7 @@ const state = {
   bodies: {},
   live: new Map(),     // boxId -> text streamed so far
   streams: new Map(),  // boxId -> EventSource
+  merging: new Map(),  // childId -> EventSource, keyed apart: a box can run both at once
   geometry: { boxes: [], edges: [] },
   find: { ranges: [], index: 0 },
   // Which boxes a bulk command acts on. Browser-only: a selection is a thought, not a canvas.
@@ -172,6 +173,8 @@ function render() {
   // Passages that have moved since they were measured, collected across every box and
   // written back in one go below.
   const drifted = [];
+  const folding = new Set([...reviews.values()].map((review) => review.child));
+  const merged = new Set(state.canvas.boxes.filter((b) => b.merged).map((b) => b.id));
   for (const box of state.canvas.boxes) {
     const node = boxes.ensure(el.canvas, box);
     drifted.push(...boxes.update(node, box, {
@@ -184,6 +187,9 @@ function render() {
       editing: !!edit && box.id === edit.id,
       selected: state.selected.has(box.id),
       focused: state.focused === box.id,
+      merging: folding.has(box.id),
+      reviewing: reviews.has(box.id),
+      mergedTargets: merged,
     }));
   }
   if (drifted.length) reanchor(drifted);
@@ -223,6 +229,9 @@ function adopt(view) {
   setSelectMode(false);
   state.bodies = view.bodies || {};
   setTheme(view.theme, false);
+  // Every path that takes a new view reconciles reviews with it, including deleting the
+  // box under review. Idempotent, so `open` calling it again once the boxes exist is free.
+  syncReviews();
 }
 
 // `loaded` lets the create path reuse the view it already has instead of re-fetching.
@@ -247,6 +256,7 @@ async function open(id, { fresh = false, loaded = null } = {}) {
   }
   render();
   scheduleRestack();
+  syncReviews(); // now that the boxes are on the canvas, a review can mount in one
   // A local face swapping in reflows every box, so measure again once it has. Both
   // paths run: `fonts.ready` has already resolved on a canvas switch, and the frame
   // path on first load would read the text the swap is about to replace.
@@ -261,6 +271,9 @@ async function showEmpty() {
   for (const stream of state.streams.values()) stream.close();
   state.streams.clear();
   state.live.clear();
+  for (const parentId of [...reviews.keys()]) closeReview(parentId);
+  for (const source of state.merging.values()) source.close();
+  state.merging.clear();
   state.canvas = null;
   lastGeometry = '';
   el.canvas.querySelectorAll('[data-box]').forEach((n) => n.remove());
@@ -422,6 +435,28 @@ function presetChips() {
   return row;
 }
 
+// One popover layer, so one set of edges: never off the viewport, never under the chrome
+// bar. Said here so moving a popover by a pixel is one edit, not two. Called once the
+// node is on screen, so its own measured height decides where it fits: the chips make
+// that height vary, and a guessed one pushed Ask off the bottom.
+function placePopover(node, left, top) {
+  const x = Math.min(Math.max(12, left), window.innerWidth - node.offsetWidth - 12);
+  const y = Math.min(top, window.innerHeight - node.offsetHeight - 12);
+  node.style.left = `${Math.max(12, x)}px`;
+  node.style.top = `${Math.max(CHROME_HEIGHT + CHROME_GAP, y)}px`;
+}
+
+// A popover asks for one thought, so Enter sends it. Shift+Enter is the escape hatch for
+// a second line, and isComposing keeps Enter free to commit an IME candidate.
+function sendOnEnter(input, send) {
+  input.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    send();
+  });
+  input.focus();
+}
+
 function closeAsk() {
   ask = null;
   el.askLayer.replaceChildren();
@@ -429,6 +464,7 @@ function closeAsk() {
 
 function openAsk(boxEl, offsets, clientRect) {
   closeAsk();
+  closeMergeAsk();
   ask = { boxEl, offsets, rect: camera.rectOf(boxEl), webSearch: state.canvas.webSearch,
           anchorRect: clientToCanvas(clientRect) };
 
@@ -455,31 +491,16 @@ function openAsk(boxEl, offsets, clientRect) {
     </div>`;
 
   const box = boxById(boxEl.dataset.box);
-  node.querySelector('[data-ask-depth]').textContent =
-    box.kind === 'root' ? 'the document' : `depth ${boxes.depthOf(box)}`;
+  node.querySelector('[data-ask-depth]').textContent = boxes.nameOf(box);
   node.querySelector('[data-ask-quote]').textContent = offsets.quote;
   node.querySelector('[data-ask-web]').setAttribute(
     'aria-pressed', String(state.canvas.webSearch));
 
   if (state.presets.length) node.querySelector('[data-ask-quote]').after(presetChips());
 
-  // Placed once it is on screen, so its own measured height decides where it fits.
-  // The chips make that height vary, and a guessed one pushed Ask off the bottom.
   el.askLayer.append(node);
-  const left = Math.min(Math.max(12, clientRect.left), window.innerWidth - node.offsetWidth - 12);
-  const top = Math.min(clientRect.bottom + 10, window.innerHeight - node.offsetHeight - 12);
-  node.style.left = `${Math.max(12, left)}px`;
-  node.style.top = `${Math.max(CHROME_HEIGHT + CHROME_GAP, top)}px`;
-
-  const input = node.querySelector('[data-ask-input]');
-  input.addEventListener('keydown', (event) => {
-    // A question is one thought, so Enter sends it. Shift+Enter is the escape hatch
-    // for a second line, and isComposing keeps Enter free to commit an IME candidate.
-    if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
-    event.preventDefault();
-    submitAsk();
-  });
-  input.focus();
+  placePopover(node, clientRect.left, clientRect.bottom + 10);
+  sendOnEnter(node.querySelector('[data-ask-input]'), submitAsk);
 }
 
 // --- settings -----------------------------------------------------------------
@@ -917,10 +938,12 @@ function reseat(patch) {
 function restack(extra) {
   const patch = { ...extra };
   let moved = false;
-  // Not while a drag is under the pointer or an editor is open: one is already writing
-  // `top` every frame, and the other has replaced the body with a pane whose height is
-  // the editor's, not the answer's. The patch still goes, so a gesture is never lost.
-  if (state.canvas && !gesture && !edit) moved = reseat(patch);
+  // Not while a drag is under the pointer, and not while an editor or a review is open:
+  // the first is already writing `top` every frame, and the other two have replaced a
+  // body with a pane of their own height, and the review has borrowed a width as well.
+  // Seating against either would write a layout the reader never asked for. The patch
+  // still goes, so a gesture is never lost.
+  if (state.canvas && !gesture && !edit && !reviews.size) moved = reseat(patch);
   if (state.canvas && Object.keys(patch).length) {
     api.patchCanvas(state.canvas.id, { boxes: patch }).catch(() => {});
   }
@@ -1074,6 +1097,226 @@ function jumpToParent(boxId) {
     return;
   }
   revealBox(box.parent);
+}
+
+// --- merging an answer into its parent ----------------------------------------
+//
+// The review renders in the parent, because the parent is what changes. Everything is
+// keyed by the child, because the child is what is being folded in.
+
+let mergeModule = null;
+const loadMerge = () => (mergeModule ||= import('./merge.js'));
+
+// parentId -> { child, payload, pane }. One review per parent: two panes in one box
+// would be two readings of the same text.
+const reviews = new Map();
+
+let mergeAsk = null; // the box whose Merge was clicked, while the guidance popover is up
+
+function closeMergeAsk() {
+  mergeAsk = null;
+  el.askLayer.replaceChildren();
+}
+
+// The same popover the ask flow uses, asking for guidance instead of a question. A
+// merge needs no passage: it may change anything in the document.
+function openMergeAsk(boxEl) {
+  closeAsk();
+  closeMergeAsk();
+  mergeAsk = boxEl.dataset.box;
+
+  const node = document.createElement('div');
+  node.className = 'ask';
+  node.dataset.mergeAsk = '1';
+  node.innerHTML = `
+    <div class="ask__head">
+      <span>Merge into</span><em data-merge-into></em>
+      <span class="spacer"></span>
+      <button type="button" class="ask__close" data-merge-cancel
+              aria-label="Close" title="Close (Esc)">×</button>
+    </div>
+    <label class="sr-only" for="merge-field">How to merge this answer</label>
+    <textarea id="merge-field" data-merge-input
+              placeholder="How should this be folded in? (optional)"></textarea>
+    <div class="ask__foot">
+      <span class="ask__hint">Every change is yours to keep, skip, or reword</span>
+      <button type="button" class="btn-primary" data-merge-send>Merge</button>
+    </div>`;
+
+  const box = boxById(mergeAsk);
+  const parent = boxById(box.parent);
+  node.querySelector('[data-merge-into]').textContent = boxes.nameOf(parent);
+
+  const rect = boxEl.getBoundingClientRect();
+  el.askLayer.append(node);
+  placePopover(node, rect.left, rect.top + 40);
+  sendOnEnter(node.querySelector('[data-merge-input]'), submitMerge);
+}
+
+async function submitMerge() {
+  if (!mergeAsk) return;
+  const child = mergeAsk;
+  const guidance = $('[data-merge-input]').value.trim();
+  closeMergeAsk();
+  try {
+    const payload = await api.openMerge(state.canvas.id, child, guidance);
+    state.canvas.merges = [...(state.canvas.merges || []), child];
+    await openReview(child, payload);
+    listenMerge(child);
+  } catch (error) {
+    flash(error.message);
+  }
+}
+
+async function openReview(child, loaded = null) {
+  const box = boxById(child);
+  if (!box || !box.parent || reviews.has(box.parent)) return;
+
+  let payload = loaded;
+  let module;
+  let current;
+  try {
+    // The diff's left side is the parent as it stands. Read through the route the app
+    // already has for a body, so the document is not sent twice on the merge payload.
+    [payload, module, current] = await Promise.all([
+      payload || api.readMerge(state.canvas.id, child),
+      loadMerge(),
+      api.readBody(state.canvas.id, box.parent).then((body) => body.markdown),
+    ]);
+  } catch (error) {
+    flash(error.message);
+    return;
+  }
+  if (reviews.has(box.parent)) return; // opened twice while the payload was in flight
+  // Looked up after the wait, not before: a canvas switch replaces the boxes meanwhile,
+  // and a pane mounted in the node that left is a review nobody can see.
+  const parentEl = el.canvas.querySelector(`[data-box="${box.parent}"]`);
+  if (!parentEl || !boxById(child)) return;
+
+  setCollapsed(boxById(box.parent), false); // nothing to review inside a folded box
+  const review = { child, payload, pane: null };
+  review.pane = module.mount(parentEl.querySelector('[data-body]'), {
+    current,
+    onPatch: (proposed) => reviewPatch(child, proposed).catch((error) => flash(error.message)),
+    onAccept: (proposed, options) => acceptMerge(child, proposed, options),
+    onReject: () => rejectMerge(child),
+  });
+  reviews.set(box.parent, review);
+  module.render(review.pane, payload);
+  // The box takes review width from this pass, and gives it back on the pass after the
+  // review closes: `boxes.update` reads the same `reviewing` flag the pane does.
+  render();
+  scheduleRestack();
+}
+
+function closeReview(parentId) {
+  const review = reviews.get(parentId);
+  if (!review) return;
+  stopMerge(review.child);
+  review.pane.close();
+  reviews.delete(parentId);
+  render();
+  scheduleRestack();
+}
+
+const reviewOf = (child) => [...reviews.values()].find((review) => review.child === child);
+
+function paint(review) {
+  loadMerge().then((module) => module.render(review.pane, review.payload));
+}
+
+// The pane holds the text; the server is only being told. No repaint on the way back:
+// the reader is still typing into the thing a repaint would rebuild. The promise is
+// handed back because an accept has to wait for the save it carries.
+function reviewPatch(child, proposed) {
+  const review = reviewOf(child);
+  if (!review) return Promise.resolve();
+  review.payload.proposed = proposed;
+  return api.patchMerge(state.canvas.id, child, { proposed });
+}
+
+// `adopt` closes the review the server no longer holds, so all that is left is to
+// redraw around the body that just changed size.
+function afterMerge(view, note) {
+  adopt(view);
+  render();
+  scheduleRestack();
+  if (note) flash(note);
+}
+
+// `proposed` is the text the pane has, handed over by the button that was pressed: the
+// debounced save may still be waiting, and accept writes whatever the server holds.
+async function acceptMerge(child, proposed, { removeChild = false } = {}) {
+  try {
+    if (proposed !== null) await reviewPatch(child, proposed);
+    const view = await api.acceptMerge(state.canvas.id, child, removeChild);
+    const note = removeChild
+      ? 'Merged — the document has it and the answer is gone'
+      : 'Merged — the answer is part of the document now';
+    afterMerge(view, note);
+  } catch (error) {
+    flash(error.message);
+  }
+}
+
+function rejectMerge(child) {
+  api.rejectMerge(state.canvas.id, child)
+    .then((view) => afterMerge(view))
+    .catch((error) => flash(error.message));
+}
+
+// Reviews follow the canvas, in both directions: one the server no longer holds is
+// closed, and one it does hold but nothing is showing is opened. This is what reopens
+// a half-finished review after a reload.
+function syncReviews() {
+  const waiting = new Set(state.canvas ? state.canvas.merges || [] : []);
+  for (const [parentId, review] of [...reviews]) {
+    if (!waiting.has(review.child)) closeReview(parentId);
+  }
+  for (const child of waiting) openReview(child);
+}
+
+function stopMerge(child) {
+  const source = state.merging.get(child);
+  if (!source) return;
+  source.close();
+  state.merging.delete(child);
+}
+
+function listenMerge(child) {
+  if (state.merging.has(child)) return;
+  const source = new EventSource(api.mergeStreamUrl(state.canvas.id, child));
+  state.merging.set(child, source);
+
+  // The merge shares the run queue with answers, so a merge can wait. Without this the
+  // pane says "Reading the answer…" through a wait that has not started reading anything.
+  source.addEventListener('status', (event) => {
+    const review = reviewOf(child);
+    if (!review) return;
+    review.payload.runState = JSON.parse(event.data).status;
+    paint(review);
+  });
+
+  source.addEventListener('edit', (event) => {
+    const review = reviewOf(child);
+    if (!review) return;
+    // Each change is shown the moment its line parses, so a long merge fills in rather
+    // than sitting on a spinner. The server recomputes the rest when the run ends.
+    review.payload.changes = [...(review.payload.changes || []), JSON.parse(event.data).edit];
+    paint(review);
+  });
+
+  source.addEventListener('done', (event) => {
+    stopMerge(child);
+    const review = reviewOf(child);
+    if (!review) return;
+    review.payload = JSON.parse(event.data);
+    paint(review);
+  });
+
+  source.onerror = () => {
+    if (source.readyState === EventSource.CLOSED) stopMerge(child);
+  };
 }
 
 // --- editing a box ------------------------------------------------------------
@@ -1667,6 +1910,7 @@ document.addEventListener('click', (event) => {
   // Anything outside the popover dismisses it, including the click that does
   // something else. The selection that opened it lands after this, on a timeout.
   if (ask && !hit('[data-ask]')) closeAsk();
+  if (mergeAsk && !hit('[data-merge-ask]')) closeMergeAsk();
 
   // A modifier or non-primary click on any link belongs to the browser: that is how a
   // canvas opens in a second tab. Middle-click never arrives here at all, since it
@@ -1776,6 +2020,10 @@ document.addEventListener('click', (event) => {
   if (hit('[data-edit-save]')) { saveEdit(); return; }
 
   if (hit('[data-title]')) { startRename(); return; }
+  const mergeBtn = hit('[data-merge]');
+  if (mergeBtn) { openMergeAsk(mergeBtn.closest('[data-box]')); return; }
+  if (hit('[data-merge-cancel]')) { closeMergeAsk(); return; }
+  if (hit('[data-merge-send]')) { submitMerge(); return; }
 
   const settings = hit('[data-settings-open]');
   if (settings) { openSettings(settings); return; }
@@ -1831,8 +2079,12 @@ document.addEventListener('keydown', (event) => {
   // field holds focus while it is open, so it answers before anything on the desk.
   if (panel) closeSettings();
   else if (rename) closeRename({ refocus: true });
+  else if (mergeAsk) closeMergeAsk();
   else if (ask) closeAsk();
   else if (edit) closeEditor({ keepPlace: true });
+  // Escape closes the review, it does not throw it away. The proposal is on disk so
+  // that a paid run survives a stray keypress; "Reject all" is how you discard it.
+  else if (reviews.size) for (const parentId of [...reviews.keys()]) closeReview(parentId);
   else if (state.selected.size) clearSelection();
   else if (state.focused) setFocus(null);
   else if (selectMode) setSelectMode(false);

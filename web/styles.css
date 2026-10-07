@@ -72,6 +72,10 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
   opacity:0;transition:opacity .14s;pointer-events:none;
 }
 .box[data-focused="1"]::before{opacity:1}
+
+/* Wider than its column for as long as the review is up, so it sits above the boxes
+   it overlaps, and above the edge lines, which must not be drawn across a diff. */
+[data-box][data-reviewing="1"]{z-index:6}
 .box--root{padding:46px 54px 52px}
 .box--answer{padding:24px 28px 26px}
 
@@ -139,6 +143,147 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box__editor .cm-content{padding:12px 14px;caret-color:var(--ink)}
 .box__editor .cm-line{padding:0}
 .box__editor .cm-cursor{border-left-color:var(--ink)}
+
+/* --- merge review --------------------------------------------------------- */
+/* The whole document, twice, inside the box the merge would rewrite: as it stands on
+   the left, as the merge proposes it on the right. The right side is a real editor, so
+   rewording is typing and dropping a change is the control on its chunk. The box
+   borrows a wider width while the review is up, set on the node, never stored. */
+.merge{--merge-keep:#2F6B4F;--merge-drop:var(--warn)}
+[data-theme="dark"] .merge{--merge-keep:#79BF9B}
+
+.merge__head{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:16px;
+}
+.merge__title{font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
+.merge__count{font:400 12.5px/1 var(--sans);font-style:normal;color:var(--accent)}
+.merge__state{margin:0 0 16px;font:400 14px/1.5 var(--sans);color:var(--ink2)}
+
+/* What the run did, in its own words, above the diff that shows it. Numbered in
+   document order, so the strip reads the way the columns below it do. */
+.merge__changes{list-style:none;margin:0 0 16px;padding:0;display:flex;flex-direction:column;gap:9px}
+.merge__change{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.merge__num{
+  flex:none;width:19px;height:19px;border-radius:50%;background:var(--soft);color:var(--accent);
+  font:500 11px/19px var(--sans);text-align:center;
+}
+.merge__why{font:400 14px/1.45 var(--sans);color:var(--ink)}
+.merge__where{
+  font:500 10px/1.6 var(--sans);letter-spacing:.09em;text-transform:uppercase;color:var(--ink2);
+  border:1px solid var(--line);border-radius:3px;padding:0 6px;background:var(--paper);
+}
+/* A change that cannot be placed is shown, never hidden: it has no chunk in the diff,
+   so this line is the only place the reader hears about it. */
+.merge__change[data-result="missing"] .merge__why,
+.merge__change[data-result="ambiguous"] .merge__why{color:var(--ink2)}
+.merge__note{font:400 13.5px/1.5 var(--sans);color:var(--warn)}
+
+/* Keep or skip, change by change. A chunk of the diff is a run of changed lines, so it
+   can hold two changes and the arrow between the columns cannot speak for either one on
+   its own. These can. Both controls read the same document: press one here and the diff
+   moves, drop a chunk over there and the rows it covers say they are skipped. */
+.merge__pick{
+  display:inline-flex;margin-left:auto;border:1px solid var(--line);border-radius:3px;
+  overflow:hidden;
+}
+.merge__pick-btn{
+  border:0;background:var(--paper);color:var(--ink2);cursor:pointer;
+  font:500 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;
+}
+.merge__pick-btn+.merge__pick-btn{border-left:1px solid var(--line)}
+.merge__pick-btn:hover:not(:disabled){color:var(--ink)}
+.merge__pick-btn[data-change-keep][aria-pressed="true"]{
+  background:color-mix(in oklab,var(--merge-keep) 18%,transparent);color:var(--ink);
+}
+.merge__pick-btn[data-change-skip][aria-pressed="true"]{
+  background:color-mix(in oklab,var(--merge-drop) 18%,transparent);color:var(--ink);
+}
+/* Nothing to take or leave: the reader has written over the passage both texts named. */
+.merge__pick-btn:disabled{opacity:.4;cursor:default}
+/* Skipped changes stay on the list, because the reader may want one back. */
+.merge__change[data-state="skipped"] .merge__why{color:var(--ink2)}
+
+/* --- the diff itself ------------------------------------------------------- */
+/* CodeMirror paints the structure; everything here is the app's own ink over it. */
+.merge__diff{border:1px solid var(--line);border-radius:4px;background:var(--paper2)}
+/* One scroller for both columns, which is the library's own arrangement: it holds the
+   two editors at their full height and aligns the chunks with spacers, so scrolling the
+   pair together is the only way the lines stay opposite each other. */
+.merge__diff .cm-mergeView{background:var(--paper2);max-height:70vh}
+/* The revert strip sits between the two editors, so it is also the divider. Wider than
+   the library's own, because each chunk carries two controls rather than one. */
+.merge__diff .cm-merge-revert{
+  background:var(--paper);border-left:1px solid var(--line);border-right:1px solid var(--line);
+  width:2.3em;
+}
+.merge__diff .cm-editor{background:0 0}
+.merge__diff .cm-editor.cm-focused{outline:0}
+.merge__diff .cm-scroller{font:400 13px/1.65 var(--mono)}
+.merge__diff .cm-content{padding:10px 0;caret-color:var(--ink)}
+.merge__diff .cm-line{padding:0 10px}
+.merge__diff .cm-cursor{border-left-color:var(--ink)}
+.merge__diff .cm-gutters{background:var(--paper);border-right:1px solid var(--line);color:var(--ink2)}
+.merge__diff .cm-lineNumbers .cm-gutterElement{font:400 11.5px/1.65 var(--mono);padding:0 6px 0 8px}
+/* The blank the shorter side is padded with, so both columns line up chunk for chunk. */
+.merge__diff .cm-mergeSpacer{background:var(--paper)}
+
+/* A changed line is tinted; the words that actually changed inside it are marked. Green
+   for text the merge brings in, amber for text it takes away, which is the same pairing
+   the Keep and Drop controls used. */
+.merge__diff .cm-changedLine{background:color-mix(in oklab,var(--merge-keep) 9%,transparent)}
+.merge__diff .cm-changedText{
+  background:color-mix(in oklab,var(--merge-keep) 22%,transparent);
+  box-shadow:inset 0 -1.5px 0 var(--merge-keep);border-radius:2px;
+}
+.merge__diff .cm-merge-a .cm-changedLine{background:color-mix(in oklab,var(--merge-drop) 9%,transparent)}
+.merge__diff .cm-merge-a .cm-changedText{
+  background:color-mix(in oklab,var(--merge-drop) 22%,transparent);
+  box-shadow:inset 0 -1.5px 0 var(--merge-drop);
+}
+.merge__diff .cm-changedLineGutter{background:color-mix(in oklab,var(--merge-keep) 16%,transparent)}
+.merge__diff .cm-merge-a .cm-changedLineGutter{
+  background:color-mix(in oklab,var(--merge-drop) 16%,transparent);
+}
+
+/* Unchanged stretches are folded to one clickable strip. Without it a three-word change
+   in a long document is a scroll hunt. */
+.merge__diff .cm-collapsedLines{
+  background:var(--paper);color:var(--ink2);cursor:pointer;
+  font:400 11.5px/2.4 var(--sans);letter-spacing:.04em;
+  border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:0 10px;
+}
+.merge__diff .cm-collapsedLines:hover{background:var(--soft);color:var(--accent)}
+
+/* Two controls per chunk, in that strip: drop this change, or keep only this one. The
+   library positions whatever it is handed, so the strip's own child is the absolutely
+   placed one and the buttons sit inside it, undoing the library's rule for them. */
+.merge__chunk{
+  position:absolute;left:0;width:100%;
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+}
+.merge__diff .cm-merge-revert button{position:static;display:block;width:auto}
+.merge__revert{
+  border:1px solid var(--line);border-radius:3px;background:var(--paper);color:var(--ink2);
+  cursor:pointer;font:400 12px/1 var(--sans);padding:2px 3px;
+}
+.merge__revert:hover{border-color:var(--merge-drop);color:var(--merge-drop)}
+.merge__revert[data-merge-only]:hover{border-color:var(--merge-keep);color:var(--merge-keep)}
+
+/* One bar at each end, as the editor has, for the same reason: a review of a long
+   document is taller than the screen, and an Accept only at the foot is out of reach. */
+.merge__bar{display:flex;align-items:center;gap:9px}
+.merge__bar--head{margin-left:auto}
+.merge__bar--foot{border-top:1px solid var(--line);margin-top:18px;padding-top:14px;justify-content:flex-end}
+/* Both ways of accepting sleep together: with nothing left to write there is nothing to
+   fold the answer into either. */
+.merge__bar .merge__accept:disabled{opacity:.45;cursor:default}
+
+/* Folded in: the answer is in the document now, so the box and its passage step back
+   rather than disappear. The working is still there to read. */
+.box[data-merged="1"]{opacity:.72}
+.box[data-merged="1"]:hover,.box[data-merged="1"]:focus-within{opacity:1}
+mark[data-anchor][data-merged="1"]{background:0 0;box-shadow:inset 0 -1.5px 0 var(--line)}
 
 /* --- prose ---------------------------------------------------------------- */
 

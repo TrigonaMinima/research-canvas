@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from research_canvas.config import BOX_STATUSES as _CONFIG_STATUSES
 from research_canvas.config import FORMAT_VERSION, ROOT_BOX_WIDTH
+from research_canvas.config import MERGE_STATUSES as _CONFIG_MERGE_STATUSES
 
 SUMMARY_KEYS = {"id", "title", "updatedAt", "boxes"}
 
@@ -27,6 +28,7 @@ BOX_KEYS = {
     "collapsed",
     "pinned",
     "sections",
+    "merged",
 }
 
 ANCHOR_KEYS = {"id", "box", "target", "start", "end", "quote"}
@@ -46,6 +48,7 @@ VIEW_KEYS = {
     "boxes",
     "anchors",
     "bodies",
+    "merges",
 }
 
 ASK_RESULT_KEYS = {"box", "anchor"}
@@ -60,6 +63,39 @@ PRESET_KEYS = {"label", "question"}
 ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "w", "webSearch", "anchor"}
 
 STREAM_EVENTS = {"status", "init", "text", "done"}
+
+# --- folding an answer back into its parent -----------------------------------
+
+MERGE_REQUEST_KEYS = {"guidance"}
+
+# The review is the document, so the review saves the document. What the reader did to
+# reach this text, keeping a change or rewording it, is not something the server has to
+# be told a second time.
+MERGE_PATCH_KEYS = {"proposed"}
+
+# `proposed` is the parent's markdown as the review has it. The reader's side of the
+# diff is built from it; the current side comes from `GET …/body`, which the browser
+# already has a route for, so the document travels once.
+MERGE_KEYS = {"childId", "parentId", "status", "reason", "createdAt", "proposed", "changes"}
+
+# `find` and `replace` are the text the change swaps, so the reader can take one change
+# and leave the next even when both land in the same chunk of the diff. No `enabled`:
+# the reviewed document says what is kept, and the browser reads the state back out of
+# it. `result` still says when a change could not be placed at all.
+MERGE_CHANGE_KEYS = {"id", "why", "section", "result", "find", "replace"}
+
+# Accept writes the document; whether the answer box stays afterwards is the reader's,
+# taken on the button they pressed.
+MERGE_ACCEPT_KEYS = {"removeChild"}
+
+# A saved review answers that it saved. The browser holds the text it just sent.
+MERGE_ACK_KEYS = {"saved"}
+
+# No `text`: the run's raw output is edits, and an edit is only worth sending once
+# its line has parsed.
+MERGE_STREAM_EVENTS = {"status", "init", "edit", "done"}
+
+MERGE_STATUSES = set(_CONFIG_MERGE_STATUSES)
 
 # web/config.js reads exactly these. Serving them is what stops the browser from
 # keeping its own copy of a clamp, a status set, or a user-facing sentence.
@@ -81,6 +117,8 @@ CLIENT_CONFIG_KEYS = {
     "maxPresetLabelChars",
     "maxPresetQuestionChars",
     "maxTitleChars",
+    "reviewWidth",
+    "reviewMargin",
 }
 
 BOX_STATUSES = set(_CONFIG_STATUSES)  # one definition, in config
@@ -103,6 +141,7 @@ def make_box(**over) -> dict:
         "collapsed": False,
         "pinned": False,
         "sections": [],
+        "merged": False,
     }
     box.update(over)
     return box
@@ -147,6 +186,7 @@ def make_view(**over) -> dict:
             "residual connection, then normalised.</p>",
             "b2": "<p>It adds the input of a sub-layer back to its output.</p>",
         },
+        "merges": [],
     }
     view.update(over)
     return view

@@ -14,9 +14,10 @@ Any server-side caller of `resolve` must pass that same rendered projection.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
-from .config import MIN_SELECTION_CHARS
+from .config import MERGE_QUOTE_CHARS, MIN_SELECTION_CHARS
 
 
 @dataclass
@@ -59,7 +60,7 @@ def resolve(text: str, anchor: Anchor) -> Anchor | None:
     if text[anchor.start : anchor.end] == quote:
         return anchor
 
-    hits = _occurrences(text, quote)
+    hits = occurrences(text, quote)
     if not hits:
         return None
 
@@ -75,9 +76,26 @@ def resolve(text: str, anchor: Anchor) -> Anchor | None:
     )
 
 
-def _occurrences(text: str, needle: str) -> list[int]:
+def occurrences(text: str, needle: str) -> list[int]:
+    """Every start offset, overlaps included. Shared with the merge matcher."""
     found, at = [], text.find(needle)
     while at != -1:
         found.append(at)
         at = text.find(needle, at + 1)
     return found
+
+
+_SENTENCE_END = re.compile(r"[.!?](\s|$)")
+
+
+def lead_sentence(text: str) -> str:
+    """The opening sentence of a passage, capped so a mark stays a mark.
+
+    Used when a merge rewrites the text an anchor quoted: the anchor follows the
+    replacement, and a whole-paragraph quote would paint a paragraph-long highlight.
+    """
+    flat = " ".join(text.split())
+    end = _SENTENCE_END.search(flat, MIN_SELECTION_CHARS)
+    if end and end.end() <= MERGE_QUOTE_CHARS:
+        return flat[: end.end()].strip()
+    return flat[:MERGE_QUOTE_CHARS].strip()

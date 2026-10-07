@@ -125,6 +125,9 @@ def test_the_dismiss_control_still_says_what_it_does(canvas):
 
 def test_escape_dismisses_the_ask_popover(canvas):
     highlight(canvas, "b1", QUOTE)
+    # The popover opens a tick after the selection settles, so Escape has to arrive after
+    # it rather than racing it: under load the key landed first and closed nothing.
+    canvas.wait_for_selector("[data-ask]")
     canvas.keyboard.press("Escape")
     expect(canvas.locator("[data-ask]")).to_have_count(0)
 

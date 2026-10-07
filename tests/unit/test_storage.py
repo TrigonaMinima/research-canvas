@@ -7,8 +7,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from research_canvas import config, storage
+from research_canvas import config, merge, storage
 from research_canvas.config import (
+    CANVAS_FILE,
     DEFAULT_ASK_PRESETS,
     FORMAT_VERSION,
     INSTRUCTIONS_FILE,
@@ -17,6 +18,7 @@ from research_canvas.config import (
     MAX_PRESET_LABEL_CHARS,
     MAX_PRESET_QUESTION_CHARS,
     MAX_PRESETS,
+    MERGE_DIR,
     MIN_BOX_WIDTH,
     PRESETS_FILE,
     ROOT_BOX_WIDTH,
@@ -360,3 +362,132 @@ def test_should_drop_the_dash_a_cut_leaves_behind(canvas_root):
 def test_should_follow_the_configured_slug_cap(canvas_root, monkeypatch):
     monkeypatch.setattr(storage, "MAX_SLUG_CHARS", 10)
     assert storage._slug("abcdefghijklmnopqrstuvwxyz") == "abcdefghij"
+
+
+# --- merge proposals ----------------------------------------------------------
+# A proposal is a decision waiting to be made, written down so closing the tab does not
+# throw the reading away. It sits beside the canvas, never inside canvas.json, because it
+# is machinery rather than research.
+
+
+@pytest.fixture
+def proposal(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    child = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why attention?")
+    child.status = "done"
+    storage.save(canvas)
+    return canvas, child
+
+
+def make_proposal(child_id, **over):
+    fields = {
+        "child": child_id,
+        "prompt": "keep it short",
+        "status": "done",
+        "edits": [merge.Edit(id="e1", why="w", find="a", replace="b")],
+    }
+    return storage.Proposal(**{**fields, **over})
+
+
+def test_should_start_a_box_unmerged(proposal):
+    _canvas, child = proposal
+    assert child.merged is False
+
+
+def test_should_remember_that_a_box_was_merged(proposal):
+    canvas, child = proposal
+    child.merged = True
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(child.id).merged is True
+
+
+def test_should_load_a_canvas_written_before_boxes_could_be_merged(proposal, canvas_root):
+    canvas, child = proposal
+    path = canvas_root / canvas.id / CANVAS_FILE
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    for box in raw["boxes"]:
+        box.pop("merged", None)
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert storage.load(canvas.id).box(child.id).merged is False
+
+
+def test_should_have_no_proposal_to_begin_with(proposal):
+    canvas, child = proposal
+    assert storage.read_merge(canvas.id, child.id) is None
+
+
+def test_should_write_a_proposal_beside_the_canvas(proposal, canvas_root):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id))
+    assert (canvas_root / canvas.id / MERGE_DIR / f"{child.id}.json").is_file()
+
+
+def test_should_read_a_proposal_back(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id))
+    assert storage.read_merge(canvas.id, child.id).child == child.id
+
+
+def test_should_round_trip_the_reworded_text_of_an_edit(proposal):
+    canvas, child = proposal
+    written = make_proposal(child.id)
+    written.edits[0].replace = "the wording I typed"
+    storage.write_merge(canvas.id, written)
+    assert storage.read_merge(canvas.id, child.id).edits[0].replace == "the wording I typed"
+
+
+def test_should_round_trip_the_document_under_review(proposal):
+    canvas, child = proposal
+    written = make_proposal(child.id)
+    written.proposed = "# The document as the reader left it\n"
+    storage.write_merge(canvas.id, written)
+    read = storage.read_merge(canvas.id, child.id)
+    assert read.proposed == "# The document as the reader left it\n"
+
+
+def test_should_load_a_proposal_written_before_the_document_was_reviewable(proposal, canvas_root):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id))
+    path = canvas_root / canvas.id / MERGE_DIR / f"{child.id}.json"
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    raw.pop("proposed", None)
+    path.write_text(json.dumps(raw), encoding="utf-8")
+    assert storage.read_merge(canvas.id, child.id).proposed == ""
+
+
+def test_should_drop_a_proposal(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id))
+    storage.delete_merge(canvas.id, child.id)
+    assert storage.read_merge(canvas.id, child.id) is None
+
+
+def test_should_list_the_boxes_holding_a_proposal(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id))
+    assert storage.list_merges(canvas.id) == [child.id]
+
+
+def test_should_surface_a_proposal_the_app_died_on_as_interrupted(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id, status="pending", edits=[]))
+    assert storage.read_merge(canvas.id, child.id).status == "interrupted"
+
+
+def test_should_explain_why_an_interrupted_proposal_stopped(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id, status="pending", edits=[]))
+    assert storage.read_merge(canvas.id, child.id).reason
+
+
+def test_should_leave_a_running_proposal_alone_while_it_is_live(proposal):
+    canvas, child = proposal
+    storage.write_merge(canvas.id, make_proposal(child.id, status="pending", edits=[]))
+    with storage.live(canvas.id, child.id):
+        assert storage.read_merge(canvas.id, child.id).status == "pending"
+
+
+def test_should_refuse_a_proposal_path_outside_the_canvas(proposal):
+    canvas, _child = proposal
+    with pytest.raises(storage.CanvasNotFound):
+        storage.read_merge(canvas.id, "../../escape")

@@ -34,6 +34,9 @@ plain files in a folder you own. The only thing that leaves is the Claude reques
 - Ask from inside an answer. Depth is unlimited.
 - Drag boxes, widen them from either edge, minimise them to their header, delete them.
 - Edit any box in place, including the imported document.
+- Merge an answer back into the box it came from, reviewing the whole document as a
+  side-by-side diff, keeping or skipping any change one at a time, and rewording any of
+  them before a word is written.
 - Hold several boxes at once, by cmd-click or by sweeping a band across the desk.
 - Find in canvas, with a match counter and previous and next.
 - Read the whole canvas at a glance in the minimap, and switch between light and dark.
@@ -114,6 +117,7 @@ canvases/instructions.md          standing instructions, one file for every canv
 canvases/<slug>/canvas.json       boxes, anchors, camera, theme, formatVersion
 canvases/<slug>/root.md           the imported document, verbatim
 canvases/<slug>/boxes/<id>.md     one file per answer
+canvases/<slug>/merges/<id>.json  a merge proposal waiting to be reviewed
 ```
 
 A slug is the date plus the document's first heading, trimmed to 48 characters, for
@@ -214,6 +218,7 @@ frontend framework, no bundler in the request path.
 | `context.py` | assembles the path-only prompt and the standing instructions block |
 | `md.py` | markdown rendering, first-heading extraction, LaTeX to MathML |
 | `anchors.py` | resolves a highlight to offsets in rendered text, with a nearest-match fallback |
+| `merge.py` | reads the edit list a merge run returns and writes each edit into the document |
 
 Routes:
 
@@ -231,6 +236,12 @@ GET    /api/canvases/{canvas_id}/boxes/{box_id}/body
 PUT    /api/canvases/{canvas_id}/boxes/{box_id}/body
 DELETE /api/canvases/{canvas_id}/boxes/{box_id}
 GET    /api/canvases/{canvas_id}/boxes/{box_id}/stream    (text/event-stream)
+POST   /api/canvases/{canvas_id}/boxes/{box_id}/merge
+GET    /api/canvases/{canvas_id}/boxes/{box_id}/merge
+PATCH  /api/canvases/{canvas_id}/boxes/{box_id}/merge
+DELETE /api/canvases/{canvas_id}/boxes/{box_id}/merge
+POST   /api/canvases/{canvas_id}/boxes/{box_id}/merge/accept
+GET    /api/canvases/{canvas_id}/boxes/{box_id}/merge/stream  (text/event-stream)
 GET    /                                                  (the app shell)
 ```
 
@@ -253,6 +264,7 @@ Plain ES modules, loaded directly by the browser.
 | `find.js` | the CSS Custom Highlight API, so no DOM surgery |
 | `minimap.js` | the projection and the viewport rectangle |
 | `editor.js` | the CodeMirror view and its key handling |
+| `merge.js` | the merge review: the whole document as a side-by-side diff, with the keep and skip of each change read back out of it, loaded the first time a merge is opened |
 
 `GET /` returns `web/index.html`, and `/static` is mounted over `web/`. The fonts are
 self-hosted woff2 files in `web/fonts/`. Nothing is fetched from a CDN, and

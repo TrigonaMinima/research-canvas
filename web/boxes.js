@@ -2,7 +2,7 @@
 // never blows away a selection or a materialised anchor.
 
 import { materialize } from './anchors.js';
-import { UNFINISHED } from './config.js';
+import { REVIEW_MARGIN, REVIEW_WIDTH, UNFINISHED } from './config.js';
 import * as sections from './sections.js';
 
 export const STATUS = {
@@ -13,6 +13,11 @@ export const STATUS = {
   failed: 'Failed',
   interrupted: 'Interrupted',
 };
+
+// A merge review shows the document twice, side by side, which a reading-width box
+// cannot do. Borrowed for as long as the review is up: `box.w` is never touched, so
+// nothing is persisted and the width comes back on its own when the review closes.
+const reviewWidth = () => Math.min(REVIEW_WIDTH, window.innerWidth - REVIEW_MARGIN);
 
 // Keyed by the element, so a removed box drops its entry with no bookkeeping.
 const rendered = new WeakMap(); // box element -> signature of what its body shows
@@ -29,9 +34,16 @@ export function waitLabel(box, queuedAhead) {
 // here, so the button that offers editing and the double click that starts it agree.
 export const canEdit = (box, editing) => !UNFINISHED.has(box.status) && !editing;
 
+// An answer can be folded into the box it was asked from, once, and only once it has
+// finished arriving. The document itself was asked from nothing, so it folds nowhere.
+export const canMerge = (box) => !!box.parent && box.status === 'done' && !box.merged;
+
 // Depth 0 is the document, so a box reads one deeper than it is stored. One
 // off-by-one, in one place: every label in the app counts from here.
 export const depthOf = (box) => box.depth + 1;
+
+// What a box is called mid-sentence: "ask about the document", "merge into depth 2".
+export const nameOf = (box) => (box.kind === 'root' ? 'the document' : `depth ${depthOf(box)}`);
 
 // Where the way back goes, said in the reader's terms rather than in ids. The arrow
 // is drawn by the stylesheet, so the label reads as one phrase to a screen reader.
@@ -57,6 +69,8 @@ function create(box) {
       <em data-status-label></em>
       <button type="button" class="chrome-btn" data-edit hidden>Edit</button>
       ${child ? `
+      <button type="button" class="chrome-btn" data-merge hidden
+              title="Fold this answer into the box it came from">Merge</button>
       <button type="button" class="chrome-btn" data-unpin hidden
               title="Let the layout place this box again">Unpin</button>
       <button type="button" class="chrome-btn" data-delete>Delete</button>` : ''}
@@ -104,14 +118,23 @@ export function markFocused(el, focused) {
 
 export function update(el, box, {
   html, anchors, inbound, parent, liveText, queuedAhead, editing, selected, focused,
+  merging, reviewing, mergedTargets,
 }) {
   el.dataset.status = box.status;
   el.style.left = `${box.x}px`;
   el.style.top = `${box.y}px`;
-  el.style.width = `${box.w}px`;
+  el.style.width = `${reviewing ? reviewWidth() : box.w}px`;
+  // Review width overruns the box's own column, so it rises above the answers beside
+  // it rather than fighting them for the clicks the diff needs.
+  if (reviewing) el.dataset.reviewing = '1';
+  else delete el.dataset.reviewing;
 
-  el.querySelector('[data-label]').textContent =
-    box.kind === 'root' ? 'Document' : `Depth ${depthOf(box)}`;
+  // An answer that has been folded into its parent says so, quietly and for good: the
+  // text is in the document now, and this box is the working it came from.
+  const name = box.kind === 'root' ? 'Document' : `Depth ${depthOf(box)}`;
+  el.querySelector('[data-label]').textContent = box.merged ? `${name} · merged` : name;
+  if (box.merged) el.dataset.merged = '1';
+  else delete el.dataset.merged;
   el.querySelector('[data-status-label]').textContent = STATUS[box.status] || box.status;
 
   // Folded state is one attribute and no more: the stylesheet does the hiding, and
@@ -161,17 +184,22 @@ export function update(el, box, {
   const unpin = el.querySelector('[data-unpin]');
   if (unpin) unpin.hidden = !box.pinned;
 
-  el.querySelector('[data-edit]').hidden = !canEdit(box, editing);
+  // The editor and the review each replace the body with a pane of their own, and
+  // nothing below cares which: a box whose body is spoken for offers nothing else.
+  const taken = editing || reviewing;
+  el.querySelector('[data-edit]').hidden = !canEdit(box, editing) || reviewing;
+  const mergeBtn = el.querySelector('[data-merge]');
+  if (mergeBtn) mergeBtn.hidden = !canMerge(box) || merging || editing;
 
-  // The editing pane itself is built by whoever opened it, and sits after this.
+  // The editing and review panes are built by whoever opened them, and sit after this.
   const body = el.querySelector('[data-body]');
-  body.hidden = editing;
+  body.hidden = taken;
 
   // The document box has no footer: there is nowhere above it to go back to. The
   // editor opens straight under the body, so the way back waits until it closes.
   const foot = el.querySelector('[data-foot]');
   if (foot) {
-    foot.hidden = editing || !parent;
+    foot.hidden = taken || !parent;
     if (parent) el.querySelector('[data-goparent]').textContent = parentLabel(parent);
   }
 
@@ -203,5 +231,13 @@ export function update(el, box, {
   sections.apply(body, box.sections || []);
   // Where each passage turned out to be. The caller stores it: this module draws, it
   // does not own the canvas.
-  return materialize(body, anchors).moved;
+  const { moved } = materialize(body, anchors);
+  // A passage whose answer has been folded in is still a passage you can jump from,
+  // but the document now says what the answer said. The mark steps back accordingly.
+  if (mergedTargets.size) {
+    for (const mark of body.querySelectorAll('mark[data-target]')) {
+      if (mergedTargets.has(mark.dataset.target)) mark.dataset.merged = '1';
+    }
+  }
+  return moved;
 }

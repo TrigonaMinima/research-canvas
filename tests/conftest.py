@@ -16,10 +16,15 @@ def canvas_root(tmp_path, monkeypatch):
 
 @pytest.fixture
 def sample_markdown():
+    # Two paragraphs, because the merge fixture's two placeable edits land in different
+    # parts of the document, which is what a merge across a real document looks like.
     return (
         "# Attention Is All You Need\n"
         "\n"
         "The dominant sequence transduction models are based on complex recurrent or\n"
         "convolutional neural networks. We propose a new simple network architecture,\n"
         "the Transformer, based solely on attention mechanisms.\n"
+        "\n"
+        "Self-attention layers are faster than recurrent layers when the sequence\n"
+        "length is smaller than the representation dimensionality.\n"
     )

@@ -11,12 +11,21 @@ from tests.fixtures.contract import (
     CAMERA_KEYS,
     CLIENT_CONFIG_KEYS,
     INSTRUCTIONS_KEYS,
+    MERGE_ACCEPT_KEYS,
+    MERGE_ACK_KEYS,
+    MERGE_CHANGE_KEYS,
+    MERGE_KEYS,
+    MERGE_PATCH_KEYS,
+    MERGE_REQUEST_KEYS,
+    MERGE_STATUSES,
+    MERGE_STREAM_EVENTS,
     PRESET_KEYS,
     PRESETS_KEYS,
     STREAM_EVENTS,
     SUMMARY_KEYS,
     VIEW_KEYS,
 )
+from tests.fixtures.merging import answer, run_merge
 
 from research_canvas import api, config
 
@@ -132,3 +141,47 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert served["maxPresetQuestionChars"] == config.MAX_PRESET_QUESTION_CHARS
     assert served["maxTitleChars"] == config.MAX_TITLE_CHARS
     assert set(served["unfinished"]) == set(config.UNFINISHED)
+
+
+# --- folding an answer back into its parent -----------------------------------
+
+
+def test_a_merge_carries_every_documented_field(reviewed):
+    assert set(reviewed) == MERGE_KEYS
+
+
+def test_a_change_carries_every_documented_field(reviewed):
+    assert set(reviewed["changes"][0]) == MERGE_CHANGE_KEYS
+
+
+def test_a_merge_reports_a_known_status(reviewed):
+    assert reviewed["status"] in MERGE_STATUSES
+
+
+def test_the_merge_payload_accepts_every_documented_field():
+    assert set(api.MergeBody.model_fields) == MERGE_REQUEST_KEYS
+
+
+def test_the_review_payload_accepts_every_documented_field():
+    assert set(api.MergePatch.model_fields) == MERGE_PATCH_KEYS
+
+
+def test_the_accept_payload_accepts_every_documented_field():
+    assert set(api.AcceptBody.model_fields) == MERGE_ACCEPT_KEYS
+
+
+def test_the_merge_stream_only_sends_documented_events(client, canvas, fake_answer):
+    child = answer(client, canvas, fake_answer)
+    body = run_merge(client, canvas, child, fake_answer)
+    sent = {
+        line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
+    }
+    assert sent <= MERGE_STREAM_EVENTS
+
+
+def test_saving_a_review_answers_in_the_documented_shape(client, canvas, reviewed):
+    patched = client.patch(
+        f"/api/canvases/{canvas['id']}/boxes/{reviewed['childId']}/merge",
+        json={"proposed": reviewed["proposed"]},
+    ).json()
+    assert set(patched) == MERGE_ACK_KEYS

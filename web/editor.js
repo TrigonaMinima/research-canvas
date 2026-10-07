@@ -34,8 +34,9 @@ const theme = EditorView.theme({
 });
 
 // Everything that does not depend on which box is open, built once. CodeMirror
-// extensions are plain values, so every view can share the same ones.
-const base = [
+// extensions are plain values, so every view can share the same ones. Exported
+// because the merge review's two panes are the same writing surface as this one.
+export const base = [
   history(),
   drawSelection(),
   bracketMatching(),
@@ -48,7 +49,6 @@ const base = [
   indentUnit.of('  '),
   theme,
   EditorView.lineWrapping,
-  EditorView.contentAttributes.of({ 'aria-label': 'Markdown source' }),
   keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
 ];
 
@@ -77,6 +77,7 @@ export function mount(host, doc, { onSave, pos = 0 }) {
           { key: 'Shift-Enter', run: insertNewlineAndIndent },
         ]),
         base,
+        EditorView.contentAttributes.of({ 'aria-label': 'Markdown source' }),
       ],
     }),
   });

@@ -4,7 +4,7 @@
 // language a fenced code block might hold and costs a megabyte on its own; markdown
 // itself still highlights without it.
 export { EditorState } from '@codemirror/state';
-export { EditorView, keymap, drawSelection } from '@codemirror/view';
+export { EditorView, keymap, drawSelection, lineNumbers } from '@codemirror/view';
 export {
   defaultKeymap, history, historyKeymap, indentWithTab, insertNewlineAndIndent,
 } from '@codemirror/commands';
@@ -14,3 +14,7 @@ export {
 } from '@codemirror/language';
 export { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 export { tags } from '@lezer/highlight';
+
+// The merge review's diff surface. Its own dependencies are the ones above, so it
+// adds only its own code to the bundle.
+export { MergeView } from '@codemirror/merge';

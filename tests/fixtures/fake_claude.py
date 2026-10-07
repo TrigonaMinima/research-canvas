@@ -5,11 +5,16 @@ It speaks the same stream-json dialect the real binary does, so the runner, the
 parser, the SSE bridge, and the browser are all exercised for real. The prompt is
 echoed back in the answer, which lets a test assert that path-only context arrived.
 
+A merge run is answered with edits instead of prose. It is told apart by a heading the
+merge prompt always carries, never by the preamble wording, which is prose and will be
+reworded.
+
 Set RESEARCH_CANVAS_CLAUDE to this file to use it.
 Failure paths are chosen per run, so one server can serve every test: put
 `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`,
-or `[[fake:long]]` in the question. FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things
-for every run.
+`[[fake:long]]`, `[[fake:badjson]]`, or `[[fake:onechunk]]` in the question or the
+merge guidance.
+FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things for every run.
 """
 
 from __future__ import annotations
@@ -33,6 +38,26 @@ LONG_PARAGRAPHS = [
     "baked into the client before any restacking pass runs."
     for i in range(1, 10)
 ]
+
+
+# The heading `build_merge_prompt` always writes above the child's answer.
+MERGE_MARK = "## The answer to fold in"
+
+
+def merge_chunks(mode: str) -> list[str]:
+    """One JSON object per line, the way a merge run is told to answer.
+
+    The same edit list the API tests use, so a change to it moves both layers at once:
+    two that land in different parts of the document, one the document never contained.
+    `onechunk` swaps it for the pair that lands on neighbouring lines, which the diff
+    cannot separate.
+    """
+    if mode == "badjson":
+        return ["Here are the changes I would make:\n", "1. Reword the opening.\n"]
+    from merging import EDITS, ONE_CHUNK_EDITS  # this file's own directory, as a script
+
+    edits = ONE_CHUNK_EDITS if mode == "onechunk" else EDITS
+    return [json.dumps(edit) + "\n" for edit in edits]
 
 
 def emit(payload: dict) -> None:
@@ -70,7 +95,10 @@ def main() -> int:
     if mode == "crash":
         return 1  # Dies without a result event, the way a killed process would.
 
-    if mode == "long":
+    if MERGE_MARK in prompt:
+        chunks = merge_chunks(mode)
+        mode = "ok" if mode == "badjson" else mode
+    elif mode == "long":
         # One chunk per paragraph, each followed by a blank line so the markdown
         # renderer breaks them apart rather than folding them into one <p>.
         chunks = [f"{paragraph}\n\n" for paragraph in LONG_PARAGRAPHS]

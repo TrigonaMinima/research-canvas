@@ -25,6 +25,9 @@ CANVAS_ROOT = Path(os.environ.get("RESEARCH_CANVAS_HOME", REPO_ROOT / "canvases"
 CANVAS_FILE = "canvas.json"
 ROOT_DOC_FILE = "root.md"
 BOX_DIR = "boxes"
+# A merge waiting to be reviewed. Machinery, not research, so it sits apart from the
+# markdown and is thrown away the moment the reader accepts or rejects it.
+MERGE_DIR = "merges"
 
 # One file beside the canvases, not inside any of them: the instructions are global.
 INSTRUCTIONS_FILE = "instructions.md"
@@ -153,6 +156,11 @@ DRAG_SLOP = 4
 # An answer sits this far below the underline of the passage it came from, so a reader
 # sees at once which passage it belongs to.
 ANCHOR_LEAD = 40
+# A merge review shows the document twice, side by side, so the box it opens in borrows
+# this width for as long as the review is up. Never stored on the box.
+REVIEW_WIDTH = 1200
+# ...and never wider than the window, less this much air on either side.
+REVIEW_MARGIN = 80
 
 # --- box vocabulary -----------------------------------------------------------
 
@@ -163,10 +171,34 @@ BOX_STATUSES = ("pending", "queued", "running", "done", "failed", "interrupted")
 # Statuses a run can be left in by a force-quit. Reopening surfaces them, never resumes.
 UNFINISHED = frozenset({"pending", "queued", "running"})
 
+MERGE_STATUSES = ("pending", "done", "failed", "interrupted")
+
+# How much of a rewritten passage an anchor may quote once its old text is gone. A
+# whole paragraph would paint a paragraph-long highlight.
+MERGE_QUOTE_CHARS = 160
+
 # Shown by the browser and returned by the API, so the sentence is written once.
 STILL_RUNNING_MESSAGE = "That box is still running — ask once it is done"
 EDIT_WHILE_RUNNING_MESSAGE = "That box is still running — edit once it is done"
 BLANK_BODY_MESSAGE = "A box cannot be empty — write something or press Escape"
+MERGE_ROOT_MESSAGE = "The document has no parent to merge into — merge an answer instead"
+MERGE_WHILE_RUNNING_MESSAGE = "That box is still running — merge once it is done"
+MERGE_PARENT_RUNNING_MESSAGE = "The box being merged into is still running — merge once it is done"
+ALREADY_MERGED_MESSAGE = "That answer is already merged into its parent"
+MERGE_IN_PROGRESS_MESSAGE = (
+    "That box already has a merge waiting for review — accept or reject it first"
+)
+EDIT_WHILE_MERGING_MESSAGE = (
+    "A merge is waiting for review on this box — accept or reject it before editing"
+)
+MERGE_RUN_UNFINISHED_MESSAGE = "The merge is still running — review it once the changes have landed"
+NO_MERGE_MESSAGE = "There is no merge waiting on that box"
+NOTHING_TO_MERGE_MESSAGE = (
+    "The review reads exactly like the document — reword something, or reject the merge"
+)
+MERGE_UNREADABLE_MESSAGE = (
+    "The merge run did not return any change this app could read. Nothing was written."
+)
 INSTRUCTIONS_TOO_LONG_MESSAGE = (
     f"Instructions are capped at {MAX_INSTRUCTIONS_CHARS:,} characters — trim them and save again"
 )

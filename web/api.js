@@ -44,6 +44,29 @@ export const api = {
 
   streamUrl: (id, boxId) => `/api/canvases/${id}/boxes/${boxId}/stream`,
 
+  // Folding an answer into its parent. Keyed by the answer, because the answer is what
+  // is being folded in; the review renders in the parent, which is where it lands.
+  openMerge: (id, boxId, guidance) =>
+    send(`/api/canvases/${id}/boxes/${boxId}/merge`, { method: 'POST', ...asJson({ guidance }) }),
+
+  readMerge: (id, boxId) => send(`/api/canvases/${id}/boxes/${boxId}/merge`),
+
+  patchMerge: (id, boxId, patch) =>
+    send(`/api/canvases/${id}/boxes/${boxId}/merge`, { method: 'PATCH', ...asJson(patch) }),
+
+  // `removeChild` says which button was pressed: accept, or accept and take the answer
+  // off the canvas. One request either way, so the two never come apart.
+  acceptMerge: (id, boxId, removeChild = false) =>
+    send(`/api/canvases/${id}/boxes/${boxId}/merge/accept`, {
+      method: 'POST',
+      ...asJson({ removeChild }),
+    }),
+
+  rejectMerge: (id, boxId) =>
+    send(`/api/canvases/${id}/boxes/${boxId}/merge`, { method: 'DELETE' }),
+
+  mergeStreamUrl: (id, boxId) => `/api/canvases/${id}/boxes/${boxId}/merge/stream`,
+
   // Global, not per canvas: the same instructions ride on every run.
   readInstructions: () => send('/api/instructions'),
 

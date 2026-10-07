@@ -145,3 +145,26 @@ def test_should_add_no_text_to_the_rendered_body():
     html = md.render("# Title\n\nSome text.\n\n- one\n- two\n")
     text = re.sub(r"<[^>]+>", "", html)
     assert text.split() == ["Title", "Some", "text.", "one", "two"]
+
+
+# --- which section a passage sits in ------------------------------------------
+
+
+def test_should_name_the_heading_a_passage_sits_under():
+    doc = "# Title\n\nIntro.\n\n## Pricing\n\nIt costs money.\n"
+    assert md.heading_before(doc, doc.index("It costs")) == "Pricing"
+
+
+def test_should_name_the_nearest_heading_above_a_passage():
+    doc = "# Title\n\n## Pricing\n\nOne.\n\n## Limits\n\nTwo.\n"
+    assert md.heading_before(doc, doc.index("Two.")) == "Limits"
+
+
+def test_should_name_no_heading_for_text_above_every_heading():
+    doc = "Loose opening line.\n\n# Title\n\nBody.\n"
+    assert md.heading_before(doc, 0) is None
+
+
+def test_should_ignore_a_hash_inside_a_fenced_block():
+    doc = "# Title\n\n```\n# not a heading\n```\n\nBody.\n"
+    assert md.heading_before(doc, doc.index("Body.")) == "Title"
