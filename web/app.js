@@ -472,7 +472,7 @@ function openAsk(boxEl, offsets, clientRect) {
   node.className = 'ask';
   node.dataset.ask = '1';
   node.innerHTML = `
-    <div class="ask__head">
+    <div class="ask__head" data-popover-handle>
       <span>Ask about</span><em data-ask-depth></em>
       <span class="spacer"></span>
       <button type="button" class="ask__close" data-ask-cancel
@@ -1129,7 +1129,7 @@ function openMergeAsk(boxEl) {
   node.className = 'ask';
   node.dataset.mergeAsk = '1';
   node.innerHTML = `
-    <div class="ask__head">
+    <div class="ask__head" data-popover-handle>
       <span>Merge into</span><em data-merge-into></em>
       <span class="spacer"></span>
       <button type="button" class="ask__close" data-merge-cancel
@@ -1727,6 +1727,22 @@ function cancelMarquee() {
 window.addEventListener('blur', cancelMarquee);
 window.addEventListener('contextmenu', cancelMarquee);
 
+// A popover moved past the window's edge leaves the pointer outside it, so the release
+// lands elsewhere and its click would read as a click away. One drag, one pass.
+let popoverMoved = false;
+window.addEventListener('mousedown', () => { popoverMoved = false; }, true);
+
+// The popover is picked up by its header and its buttons stay buttons. The move and the
+// release run through the same window listeners as every other drag.
+el.askLayer.addEventListener('mousedown', (event) => {
+  const handle = event.target.closest('[data-popover-handle]');
+  if (event.button !== 0 || !handle || event.target.closest('button')) return;
+  const node = handle.closest('.ask');
+  gesture = { kind: 'popover', el: node, x: event.clientX, y: event.clientY,
+              left: node.offsetLeft, top: node.offsetTop };
+  event.preventDefault();
+});
+
 el.viewport.addEventListener('mousedown', (event) => {
   if (event.button !== 0) return;
   dragged = false;
@@ -1775,6 +1791,11 @@ window.addEventListener('mousemove', (event) => {
     sizeBand(gesture, event.clientX, event.clientY);
     return;
   }
+  if (gesture.kind === 'popover') {
+    placePopover(gesture.el, gesture.left + event.clientX - gesture.x,
+                 gesture.top + event.clientY - gesture.y);
+    return;
+  }
   if (gesture.kind === 'pan') {
     camera.panBy(event.clientX - gesture.x, event.clientY - gesture.y);
     gesture.x = event.clientX;
@@ -1808,6 +1829,10 @@ window.addEventListener('mouseup', () => {
   dragged = !!done.moved;
   delete el.desk.dataset.dragging;
 
+  if (done.kind === 'popover') {
+    popoverMoved = !!done.moved;
+    return;
+  }
   if (done.kind === 'pan') {
     if (done.moved) saveCamera();
     return;
@@ -1909,8 +1934,8 @@ document.addEventListener('click', (event) => {
 
   // Anything outside the popover dismisses it, including the click that does
   // something else. The selection that opened it lands after this, on a timeout.
-  if (ask && !hit('[data-ask]')) closeAsk();
-  if (mergeAsk && !hit('[data-merge-ask]')) closeMergeAsk();
+  if (ask && !popoverMoved && !hit('[data-ask]')) closeAsk();
+  if (mergeAsk && !popoverMoved && !hit('[data-merge-ask]')) closeMergeAsk();
 
   // A modifier or non-primary click on any link belongs to the browser: that is how a
   // canvas opens in a second tab. Middle-click never arrives here at all, since it

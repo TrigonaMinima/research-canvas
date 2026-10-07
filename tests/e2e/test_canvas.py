@@ -41,6 +41,7 @@ from tests.fixtures.viewport import (
     box_rect,
     canvas_id_of,
     drag_header_by,
+    drag_popover,
     edge_start,
     line_rects_of,
     rect_of,
@@ -1829,3 +1830,14 @@ def test_should_not_pin_a_box_from_a_sideways_only_drag(canvas):
     drag_header_by(canvas, "b2", 150, 0)
     settled(canvas)
     expect(canvas.locator('[data-box="b2"] [data-unpin]')).to_be_hidden()
+
+
+def test_should_move_the_ask_popup_when_its_header_is_dragged(canvas):
+    highlight(canvas, "b1", QUOTE)
+    canvas.wait_for_selector("[data-ask]")
+    before = canvas.locator("[data-ask]").bounding_box()
+
+    drag_popover(canvas, "[data-ask]", -120, -80)
+
+    after = canvas.locator("[data-ask]").bounding_box()
+    assert (round(after["x"] - before["x"]), round(after["y"] - before["y"])) == (-120, -80)

@@ -75,6 +75,9 @@ question box rather than sending, so the text is still editable. Edit them in Se
 edit the file directly: `{"presets": [{"label": …, "question": …}]}`, at most eight. A missing
 file means the built-in chips; a corrupt one is reported rather than silently reset.
 
+The ask popover and the merge popover both move by their header, so neither has to sit on
+top of the passage it is about. The position is not kept: each one opens beside its box again.
+
 ## Mathematics
 
 `$E = mc^2$` inline, `$$…$$` on its own, and `\begin{align}` blocks are rendered to MathML by

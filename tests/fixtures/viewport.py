@@ -189,3 +189,17 @@ def answer_in_reach(page) -> None:
     zoom_to_fit(page)
     settled(page)
     fold_help(page)
+
+
+# A popover is picked up by its header, the strip that names what it asks about.
+POPOVER_HANDLE = "[data-popover-handle]"
+
+
+def drag_popover(page, popover: str, dx: float, dy: float) -> None:
+    """Press on the popover's header, move by (dx, dy) in steps, and let go."""
+    handle = page.locator(f"{popover} {POPOVER_HANDLE}").bounding_box()
+    x, y = handle["x"] + handle["width"] / 2, handle["y"] + handle["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx, y + dy, steps=8)
+    page.mouse.up()

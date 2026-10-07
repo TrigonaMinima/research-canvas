@@ -33,6 +33,9 @@ from tests.fixtures.merging import (
     start_merge,
 )
 from tests.fixtures.selection import QUOTE, ask, highlight
+from tests.fixtures.viewport import drag_popover, transform_of
+
+from research_canvas.config import CHROME_HEIGHT
 
 pytestmark = pytest.mark.e2e
 
@@ -508,3 +511,67 @@ def test_should_close_the_review_when_the_answer_under_it_is_deleted(canvas):
 
     canvas.wait_for_selector(PANE.format(box="b1"), state="detached")
     assert canvas.is_visible('[data-box="b1"] [data-body]')
+
+
+# --- moving the guidance popup out of the way ---------------------------------------
+
+POPUP = "[data-merge-ask]"
+
+
+def open_merge_popup(page) -> None:
+    page.click(MERGE_BUTTON.format(box=one_answer(page)))
+    page.wait_for_selector(POPUP)
+
+
+def test_should_move_the_merge_popup_when_its_header_is_dragged(canvas):
+    open_merge_popup(canvas)
+    before = canvas.locator(POPUP).bounding_box()
+
+    drag_popover(canvas, POPUP, -150, -90)
+
+    after = canvas.locator(POPUP).bounding_box()
+    assert (round(after["x"] - before["x"]), round(after["y"] - before["y"])) == (-150, -90)
+
+
+def test_should_keep_the_merge_popup_below_the_bar_when_dragged_past_the_top(canvas):
+    open_merge_popup(canvas)
+
+    drag_popover(canvas, POPUP, 0, -5000)
+
+    assert canvas.locator(POPUP).bounding_box()["y"] >= CHROME_HEIGHT
+
+
+def test_should_keep_the_merge_popup_inside_the_window_when_dragged_past_the_edge(canvas):
+    open_merge_popup(canvas)
+
+    drag_popover(canvas, POPUP, 5000, 0)
+
+    popup = canvas.locator(POPUP).bounding_box()
+    assert popup["x"] + popup["width"] <= canvas.viewport_size["width"]
+
+
+def test_should_not_pan_the_desk_when_the_merge_popup_is_dragged(canvas):
+    open_merge_popup(canvas)
+    before = transform_of(canvas)
+
+    drag_popover(canvas, POPUP, -150, -90)
+
+    assert transform_of(canvas) == before
+
+
+def test_should_keep_the_merge_popup_open_after_it_is_dragged(canvas):
+    open_merge_popup(canvas)
+
+    drag_popover(canvas, POPUP, -150, -90)
+
+    assert canvas.is_visible(POPUP)
+
+
+def test_should_still_send_the_merge_after_the_popup_is_moved(canvas):
+    open_merge_popup(canvas)
+    drag_popover(canvas, POPUP, -150, -90)
+
+    canvas.fill("[data-merge-input]", "Fold it in.")
+    canvas.click("[data-merge-send]")
+
+    canvas.wait_for_selector(PANE.format(box="b1"))
