@@ -2086,6 +2086,11 @@ document.addEventListener('click', (event) => {
     open(new URLSearchParams(canvasLink.search).get('c'));
     return;
   }
+  if (hit('[data-crumb-home]')) {
+    event.preventDefault();
+    showEmpty();
+    return;
+  }
 });
 
 document.addEventListener('keydown', (event) => {
@@ -2127,7 +2132,6 @@ el.selectMode.addEventListener('click', () => setSelectMode(!selectMode));
 el.helpToggle.addEventListener('click', () => setHelpFolded(!el.help.dataset.folded));
 $('[data-theme-toggle]').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-$('[data-crumb-home]').addEventListener('click', showEmpty);
 $('[data-new]').addEventListener('click', showEmpty);
 
 el.minimap.addEventListener('click', (event) => {

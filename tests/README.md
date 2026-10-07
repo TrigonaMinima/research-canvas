@@ -22,7 +22,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 173 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 155 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py` | 464 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py` | 467 |
 | 5 | End-to-end, every UI element | all of `tests/e2e/` | 539 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 68 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
@@ -274,9 +274,11 @@ The same browser, the real server, the real storage, the fake `claude`.
   rather than the box edge, and math rendered in an answer body. One more covers a display
   formula, where the block `<math>` inside an inline mark leaves a slim empty fragment below
   it: the edge belongs on the formula, not on that fragment at the left margin.
-- `test_chrome.py` (18) — find with its `N/M` counter and prev/next, the zoom group and its
+- `test_chrome.py` (21) — find with its `N/M` counter and prev/next, the zoom group and its
   clamps, fit, the theme toggle and its persistence, the minimap and clicking it, the run
-  pill, the breadcrumb home, and the new-canvas button. Two cover the Collapse all and
+  pill, the breadcrumb home, and the new-canvas button. Three cover the breadcrumb as a real
+  link: it has an `href` to the list, and Ctrl or Cmd+click opens the list in a new tab while
+  the canvas stays open in this one. Two cover the Collapse all and
   Expand all pair: both buttons sit with the other view controls, and a narrowed window
   leaves them at full width with no label clipped. The bar is one flex row with no wrap, so
   something has to give; it is the title, which ellipsises. The fold itself is proved in
