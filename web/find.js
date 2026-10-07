@@ -16,6 +16,8 @@ export function search(root, query) {
     (node) => {
       if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
       if (node.dataset && node.dataset.collapsed === '1') return NodeFilter.FILTER_REJECT;
+      // The contents list repeats the headings, which are already found in the body.
+      if (node.dataset && 'toc' in node.dataset) return NodeFilter.FILTER_REJECT;
       return NodeFilter.FILTER_SKIP; // skip still descends, so only text comes back
     },
   );

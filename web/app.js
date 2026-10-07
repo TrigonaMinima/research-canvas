@@ -1094,19 +1094,32 @@ function jumpToParent(boxId) {
     `[data-box="${box.parent}"] mark[data-anchor="${anchor.id}"]`);
   // A passage folded away has no rect, and the way back would land on the parent box
   // instead of the passage. The fold lives on the parent, which is where the mark is.
-  if (mark) {
-    const parent = boxById(box.parent);
-    const body = mark.closest('[data-body]');
-    const held = body ? sections.holding(body, mark) : [];
-    if (parent && held.length) applySections(parent, without(parent.sections || [], held));
-  }
-  if (mark && mark.getClientRects().length) {
+  const parent = boxById(box.parent);
+  if (mark && parent && unfoldTo(parent, mark)) {
     showInBlock(mark);
     camera.centerOnAnchor(camera.rectOf(mark));
     pulse(mark);
     return;
   }
   revealBox(box.parent);
+}
+
+// Opens the folded sections that hide `node`, and says whether it now has a rect to fly
+// to. Both jumps need this: a node folded away has no rect.
+function unfoldTo(box, node) {
+  const body = node.closest('[data-body]');
+  const held = body ? sections.holding(body, node) : [];
+  if (held.length) applySections(box, without(box.sections || [], held));
+  return node.getClientRects().length > 0;
+}
+
+// A contents entry. Boxes never scroll, so the camera goes to the heading instead.
+// Measured in the same task: the read forces the layout the unfold needs, and the
+// camera is already moving when the click returns.
+function jumpToHeading(box, key) {
+  const heading = el.canvas.querySelector(
+    `[data-box="${box.id}"] [data-body] [data-sec="${CSS.escape(key)}"]`)?.firstElementChild;
+  if (heading && unfoldTo(box, heading)) camera.centerOnAnchor(camera.rectOf(heading));
 }
 
 // --- merging an answer into its parent ----------------------------------------
@@ -2055,6 +2068,21 @@ document.addEventListener('click', (event) => {
     applySections(box, folded.includes(key) ? without(folded, [key]) : [...folded, key]);
     return;
   }
+
+  // The contents strip sits between the question and the body, outside both the header
+  // and any section, so neither fold can match it.
+  const tocToggle = hit('[data-toc-toggle]');
+  if (tocToggle) {
+    const box = boxOf(tocToggle);
+    box.tocOpen = !box.tocOpen;
+    render();
+    // The flag and the reflow it causes go in one patch, as a section fold does.
+    scheduleRestack({ [box.id]: { tocOpen: box.tocOpen } });
+    return;
+  }
+
+  const tocEntry = hit('[data-toc-key]');
+  if (tocEntry) { jumpToHeading(boxOf(tocEntry), tocEntry.dataset.tocKey); return; }
 
   // The whole header folds the box, not only the button at its end. The header's other
   // buttons keep their own work.

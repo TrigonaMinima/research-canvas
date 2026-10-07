@@ -42,11 +42,13 @@ from .config import (
     MIN_BOX_WIDTH,
     MIN_SCALE,
     MIN_SELECTION_CHARS,
+    MIN_TOC_HEADINGS,
     NO_MERGE_MESSAGE,
     NOTHING_TO_MERGE_MESSAGE,
     REVIEW_MARGIN,
     REVIEW_WIDTH,
     STILL_RUNNING_MESSAGE,
+    TOC_MAX_LEVEL,
     UNFINISHED,
     WEB_DIR,
 )
@@ -99,6 +101,9 @@ class BoxPatch(BaseModel):
     collapsed: bool | None = None
     pinned: bool | None = None
     sections: list[str] | None = None
+    # camelCase on the wire like every other key; the alias keeps the Python name equal
+    # to the Box field, so the patch loop below can copy it across by name.
+    toc_open: bool | None = Field(default=None, alias="tocOpen")
 
 
 # Both numbers together, never one: an offset and its end are one measurement, and a
@@ -176,6 +181,8 @@ def client_config() -> dict:
         "maxTitleChars": MAX_TITLE_CHARS,
         "reviewWidth": REVIEW_WIDTH,
         "reviewMargin": REVIEW_MARGIN,
+        "minTocHeadings": MIN_TOC_HEADINGS,
+        "tocMaxLevel": TOC_MAX_LEVEL,
     }
 
 
@@ -268,9 +275,10 @@ def _apply_patch(canvas: storage.Canvas, body: PatchBody) -> None:
             continue
         # Tested against None, not truthiness, which is what lets the flags and the
         # section list ride along: false has to travel, or a box could never be opened
-        # again, nor a pinned one handed back to the layout, and an empty list has to
-        # travel, or the last folded section could never be unfolded.
-        for field_name in ("x", "y", "w", "collapsed", "pinned", "sections"):
+        # again, nor a pinned one handed back to the layout, nor a contents list shut,
+        # and an empty list has to travel, or the last folded section could never be
+        # unfolded.
+        for field_name in ("x", "y", "w", "collapsed", "pinned", "toc_open", "sections"):
             value = getattr(patch, field_name)
             if value is not None:
                 setattr(box, field_name, value)

@@ -21,6 +21,8 @@ export const MAX_PRESET_QUESTION_CHARS = served.maxPresetQuestionChars;
 export const MAX_TITLE_CHARS = served.maxTitleChars;
 export const REVIEW_WIDTH = served.reviewWidth;
 export const REVIEW_MARGIN = served.reviewMargin;
+export const MIN_TOC_HEADINGS = served.minTocHeadings;
+export const TOC_MAX_LEVEL = served.tocMaxLevel;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);

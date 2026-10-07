@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import expect
 from tests.fixtures.editor import SAVE_TOP, edit
+from tests.fixtures.sections import chevron
 from tests.fixtures.selection import SELECT, ask, find_offsets, highlight, plain_text
 from tests.fixtures.viewport import box_rect, canvas_id_of, edge_start
 
@@ -38,13 +39,6 @@ def canvas(app):
     a section nested three levels deep, so every shape the transform must handle is
     on the page at once."""
     return canvas_from(app, SECTIONS_DOC)
-
-
-def chevron(page, key: str, box: str = "b1"):
-    """The fold button that belongs to one section, and no other of the same name.
-    The heading is the section's first child whatever its level, and the chevron is
-    the first thing inside it."""
-    return page.locator(f'[data-box="{box}"] [data-sec="{key}"] > * > [data-sec-toggle]')
 
 
 def section_body(page, key: str, box: str = "b1"):

@@ -143,6 +143,11 @@ def test_the_client_config_serves_the_same_values_python_uses(client):
     assert set(served["unfinished"]) == set(config.UNFINISHED)
 
 
+def test_the_client_config_serves_the_contents_list_thresholds(client):
+    served = client.get("/api/config").json()
+    assert (served["minTocHeadings"], served["tocMaxLevel"]) == (3, 3)
+
+
 # --- folding an answer back into its parent -----------------------------------
 
 

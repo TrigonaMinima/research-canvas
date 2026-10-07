@@ -22,7 +22,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/unit/` | 280 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 155 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py` | 467 |
+| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
 | 5 | End-to-end, every UI element | all of `tests/e2e/` | 539 |
 | 6 | Data / persistence | `tests/unit/test_storage.py` | 68 |
 | 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
@@ -552,6 +552,28 @@ The counts above were not re-totalled.
   says so and keeps the editor open. On a web-off canvas the picture host gets no request and a
   pasted picture still shows.
 
+## A contents list in every box (25 tests, across the layers above)
+
+Added with the contents list. The counts in the sections above were not re-totalled for it.
+
+- `tests/unit/test_storage.py` (2) — an open list survives the disk round trip, and a canvas
+  saved before the field existed loads with the list closed.
+- `tests/api/test_endpoints.py` (2) — a `PATCH` with `tocOpen` is stored, and `false` travels
+  back as well as `true`. The pinned tests now share the same `_flag_after()` helper.
+- `tests/api/test_contract.py` and `tests/fixtures/contract.py` — `tocOpen` is a box key, and
+  `minTocHeadings` / `tocMaxLevel` are served config keys (asserted in one new test and the
+  existing key-set tests).
+- `tests/e2e/test_toc.py` (19) — a canvas imported from `fixtures/toc_doc.md`. The strip shows
+  with three h1 to h3 headings, not with two, and an h4 does not count. It shows on first
+  render, starts closed with its list hidden, names its list in `aria-controls`, and counts
+  only listed headings. Entries come in document order and nest by level. The open state
+  survives a reload. An entry click pans the camera to its heading and unfolds a folded
+  section first. The strip hides when the box folds and while the editor is open, and an edit
+  that adds headings rebuilds it. The body's plain text keeps each heading once, Find does not
+  count the list, and the strip cannot be selected.
+- `tests/e2e/test_standards.py` (1) — two boxes with open lists keep unique ids, named
+  buttons and labelled fields.
+
 ## Fixtures
 
 | File | What it is |
@@ -562,10 +584,12 @@ The counts above were not re-totalled.
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
 | `fixtures/tables_doc.md` | A 12-column table of unbreakable names that cannot fit the column, a 2-column table that can, a formula in one cell of the wide table, and a code block of one very long line. |
 | `fixtures/sections_doc.md` | A document with a paragraph before the first heading, one h1, two h2s reading `Background`, and an h3 and h4 nested under the first of them. The repeat is there so two sections cannot share a key, and the nesting is there so a fold can be shown inside a fold. `sample_doc.md` has only an h1 and an h2 and no repeats, so it covers neither. |
+| `fixtures/toc_doc.md` | A long document with five listed headings over three levels (h1, h2, h3, h1, h2), one h4 that must not be listed, and enough text between them that the last heading starts off screen, so an entry click has somewhere to pan to. |
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
 | `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
+| `fixtures/sections.py` | `chevron()`, the fold button of one section, and `THREE_HEADINGS`, the smallest markdown that earns a contents list. Shared by the section, contents-list and standards specs. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. `answer_from_root()` asks about a passage in the document and waits for the answer to land. |
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, `drag_popover()` moves a popover by its header in screen pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. `press_header()` presses a header on its label, moves a few screen pixels and lets go, for the tests that tell a click from a drag. `settled()` gives the restack pass its frames before a rect is read, and `answer_in_reach()` asks for the first answer and brings its header on screen. |
 | `fixtures/merging.py` | The edit list a merge run returns, deliberately mixed: two changes that land in different paragraphs of the document, far enough apart that the diff reads them as separate chunks and one can be dropped without the other, and a third naming text the document has never contained. A second list holds two changes on adjacent lines of one paragraph, which the diff cannot separate: one chunk, one arrow, two changes. Shared by the API tests, the fake binary and the browser tests, so all three move together. Also the selectors a review is driven by, which name the **parent** box, since that is where the review renders. |

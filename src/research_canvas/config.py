@@ -184,6 +184,11 @@ ANCHOR_LEAD = 40
 REVIEW_WIDTH = 1200
 # ...and never wider than the window, less this much air on either side.
 REVIEW_MARGIN = 80
+# A box earns a contents list only once it has this many headings. Under it, the list
+# is longer to read than the document it points into.
+MIN_TOC_HEADINGS = 3
+# Deeper headings stay out of the list, so it reads as an outline, not a second copy.
+TOC_MAX_LEVEL = 3
 
 # --- box vocabulary -----------------------------------------------------------
 

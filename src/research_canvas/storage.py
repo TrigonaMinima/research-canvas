@@ -115,6 +115,8 @@ class Box:
     sections: list[str] = field(default_factory=list)
     # Dragged vertically by the reader, so the layout pass leaves it alone.
     pinned: bool = False
+    # The contents list is unfolded. Stored so it opens the way the reader left it.
+    toc_open: bool = False
     # Its answer has been folded into its parent. The box stays, so the question that
     # produced it and anything asked below it survive the merge.
     merged: bool = False
@@ -136,6 +138,7 @@ class Box:
             "collapsed": self.collapsed,
             "sections": self.sections,
             "pinned": self.pinned,
+            "tocOpen": self.toc_open,
             "merged": self.merged,
             "createdAt": self.created_at,
         }
@@ -157,6 +160,7 @@ class Box:
             collapsed=bool(data.get("collapsed", False)),
             sections=[str(s) for s in data.get("sections", [])],
             pinned=bool(data.get("pinned", False)),
+            toc_open=bool(data.get("tocOpen", False)),
             merged=bool(data.get("merged", False)),
             created_at=data.get("createdAt", ""),
         )

@@ -171,6 +171,26 @@ def test_should_load_a_canvas_saved_before_pinning_existed(canvas_root, sample_m
     assert storage.load(canvas.id).box(canvas.root_id).pinned is False
 
 
+# --- the per-box contents list -------------------------------------------------
+
+
+def test_should_round_trip_an_open_contents_list_through_disk(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    canvas.box(canvas.root_id).toc_open = True
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(canvas.root_id).toc_open is True
+
+
+def test_should_load_a_canvas_saved_before_the_contents_list_existed(canvas_root, sample_markdown):
+    """A canvas.json written by an older build has no tocOpen key at all."""
+    canvas = storage.create_canvas(sample_markdown)
+    path = canvas_root / canvas.id / "canvas.json"
+    data = json.loads(path.read_text())
+    data["boxes"][0].pop("tocOpen", None)
+    path.write_text(json.dumps(data))
+    assert storage.load(canvas.id).box(canvas.root_id).toc_open is False
+
+
 # --- collapsible sections -----------------------------------------------------
 
 

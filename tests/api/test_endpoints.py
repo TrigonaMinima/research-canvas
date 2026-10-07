@@ -453,19 +453,29 @@ def test_should_start_a_box_unpinned(client, canvas):
     assert canvas["boxes"][0]["pinned"] is False
 
 
-def test_should_save_a_pinned_box(client, canvas):
+def _flag_after(client, canvas, field, *values):
+    """An answer's flag as saved, after patching it to each value in turn."""
     client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
-    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": True}}})
+    for value in values:
+        client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {field: value}}})
     boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
-    assert next(b for b in boxes if b["id"] == "b2")["pinned"] is True
+    return next(b for b in boxes if b["id"] == "b2")[field]
+
+
+def test_should_save_a_pinned_box(client, canvas):
+    assert _flag_after(client, canvas, "pinned", True) is True
 
 
 def test_should_save_a_box_unpinned_again(client, canvas):
-    client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask())
-    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": True}}})
-    client.patch(f"/api/canvases/{canvas['id']}", json={"boxes": {"b2": {"pinned": False}}})
-    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
-    assert next(b for b in boxes if b["id"] == "b2")["pinned"] is False
+    assert _flag_after(client, canvas, "pinned", True, False) is False
+
+
+def test_should_save_a_box_with_its_contents_list_open(client, canvas):
+    assert _flag_after(client, canvas, "tocOpen", True) is True
+
+
+def test_should_save_a_box_with_its_contents_list_closed_again(client, canvas):
+    assert _flag_after(client, canvas, "tocOpen", True, False) is False
 
 
 # --- the width a new answer opens at ------------------------------------------

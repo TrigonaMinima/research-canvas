@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import pytest
 from playwright.sync_api import expect
+from tests.fixtures.editor import SAVE_TOP, edit
 from tests.fixtures.rename import FIELD, start_rename
+from tests.fixtures.sections import THREE_HEADINGS
+from tests.fixtures.selection import answer_from_root
+from tests.fixtures.viewport import zoom_to_fit
+
+from .conftest import FIXTURES, canvas_from
 
 pytestmark = pytest.mark.e2e
 
@@ -163,3 +169,19 @@ def test_reduced_motion_is_respected(app, server):
     app.reload()
     app.wait_for_selector("[data-empty]")
     assert app.evaluate("() => matchMedia('(prefers-reduced-motion: reduce)').matches")
+
+
+def test_two_open_contents_lists_pass_the_name_label_and_unique_id_checks(app):
+    """Each box's list takes its id from the box, so two open lists must not collide.
+    The answer gets its headings through the editor: the fake `claude` writes none."""
+    canvas_from(app, (FIXTURES / "toc_doc.md").read_text(encoding="utf-8"))
+    answer_from_root(app, needle="Alpha paragraph 1")
+    edit(app, "b2", THREE_HEADINGS)
+    app.click(SAVE_TOP.format(box="b2"))
+    for box in ("b1", "b2"):
+        # Opening b1's list pushes b2 down, under the minimap at this window size.
+        zoom_to_fit(app)
+        app.click(f'[data-box="{box}"] [data-toc-toggle]')
+        expect(app.locator(f'[data-box="{box}"] [data-toc-list]')).to_be_visible()
+    problems = app.evaluate(DUPLICATE_IDS) + app.evaluate(NAMES) + app.evaluate(UNLABELLED_INPUTS)
+    assert problems == []

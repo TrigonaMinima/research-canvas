@@ -4,6 +4,7 @@
 import { materialize } from './anchors.js';
 import { REVIEW_MARGIN, REVIEW_WIDTH, UNFINISHED } from './config.js';
 import * as sections from './sections.js';
+import * as toc from './toc.js';
 
 export const STATUS = {
   pending: 'Pending',
@@ -103,6 +104,11 @@ function create(box) {
     <div class="box__wait" data-wait hidden>
       <span class="dot-pulse" aria-hidden="true"></span><span data-wait-label></span>
     </div>
+    <div class="box__toc" data-toc hidden>
+      <button type="button" class="box__toc-toggle" data-toc-toggle aria-expanded="false"
+              aria-controls="toc-${box.id}">Contents (<span data-toc-count></span>)</button>
+      <ol class="box__toc-list" id="toc-${box.id}" data-toc-list hidden></ol>
+    </div>
     <div class="prose${child ? '' : ' prose--root'}" data-body></div>
     <div class="box__stopped" data-stopped hidden>
       <p class="box__reason" data-reason></p>
@@ -134,6 +140,18 @@ export function markFocused(el, focused) {
     delete el.dataset.focused;
     el.removeAttribute('aria-current');
   }
+}
+
+// Open or closed is the reader's, and saved per box. The strip itself only shows with
+// a list to show, and never over a body the editor or a review has taken: its entries
+// would jump to headings that are not on screen.
+function showToc(el, box, hide) {
+  const strip = el.querySelector('[data-toc]');
+  const list = strip.querySelector('[data-toc-list]');
+  const open = !!box.tocOpen;
+  list.hidden = !open;
+  strip.querySelector('[data-toc-toggle]').setAttribute('aria-expanded', String(open));
+  strip.hidden = hide || !list.childElementCount;
 }
 
 export function update(el, box, {
@@ -228,6 +246,12 @@ export function update(el, box, {
   // expensive rebuild, and the body is rewritten whenever the anchor list changes, which
   // is one of the commonest flows in the app. The fold is re-applied from `box.sections`
   // on that path, so it survives a rebuild without having to force one.
+
+  // The contents strip hides with a folded box too: the stylesheet already would, but
+  // the attribute is what a screen reader and the tests go by.
+  const tocHidden = taken || collapsed;
+  showToc(el, box, tocHidden);
+
   const signature = streaming
     ? `live:${liveText || ''}`
     : `done:${html || ''}|${anchors.map((a) => `${a.id}@${a.start}`).join(',')}`;
@@ -235,6 +259,9 @@ export function update(el, box, {
   rendered.set(el, signature);
 
   if (streaming) {
+    // Half an answer has half an outline, and it reshuffles with every token.
+    toc.clear(el.querySelector('[data-toc]'));
+    showToc(el, box, tocHidden);
     body.textContent = liveText || '';
     if (box.status === 'running') {
       const caret = document.createElement('span');
@@ -250,6 +277,9 @@ export function update(el, box, {
   // goes last and measures its offsets against the tree the reader actually has.
   sections.sectionize(body, box.id);
   sections.apply(body, box.sections || []);
+  // Inside the guard, so the list is rebuilt only when the body is.
+  toc.build(el.querySelector('[data-toc]'), body);
+  showToc(el, box, tocHidden);
   // Where each passage turned out to be. The caller stores it: this module draws, it
   // does not own the canvas.
   const { moved } = materialize(body, anchors);
