@@ -14,8 +14,8 @@ install: ## Create the venv and install everything, browsers included
 	$(UV) sync
 	$(PY) playwright install chromium
 
-dev: ## Start the app on a freshly picked random free port
-	@$(PY) python -m research_canvas.server
+dev: ## Start the app on a freshly picked random free port; restarts on code changes
+	@$(PY) python -m research_canvas.server --reload
 
 stop: ## Stop this session's server and remove its port file
 	@$(PY) python -m research_canvas.server --stop

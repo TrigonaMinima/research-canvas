@@ -21,6 +21,9 @@ The server picks a fresh random free port on every launch, writes it to `.dev/<b
 and prints the URL. Read the port file at request time, never cache it. If nothing is
 listening on the recorded port, the file is stale; relaunch.
 
+It restarts on its own when a file in `src/research_canvas/` changes, on the same port.
+A restart stops answer runs in flight; they reopen as interrupted.
+
 Print the URL to the user and stop. Do not open a browser for them.
 
 ## Where the research lives

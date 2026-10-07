@@ -12,7 +12,7 @@ import sys
 
 import uvicorn
 
-from .config import CANVAS_ROOT, DEV_DIR, DISPLAY_NAME, HOST, dev_id, port_file
+from .config import CANVAS_ROOT, DEV_DIR, DISPLAY_NAME, HOST, PACKAGE_DIR, dev_id, port_file
 
 
 def pick_free_port() -> int:
@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="research-canvas", description=DISPLAY_NAME)
     parser.add_argument("--stop", action="store_true", help="stop this session's server")
     parser.add_argument("--url", action="store_true", help="print this session's server URL")
+    parser.add_argument("--reload", action="store_true", help="restart on code changes")
     args = parser.parse_args(argv)
 
     if args.stop:
@@ -44,9 +45,21 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{DISPLAY_NAME} — {url}")
     print(f"  canvases: {CANVAS_ROOT}")
     print(f"  port file: {record}  (session: {dev_id()})")
+    if args.reload:
+        print(f"  reload: watching {PACKAGE_DIR}")
 
     try:
-        uvicorn.run("research_canvas.api:app", host=HOST, port=port, log_level="warning")
+        # The supervisor keeps the socket across reloads, so the recorded port stays true.
+        # Watch the package alone: the repo root holds canvases/, .dev/ and .venv, and a
+        # write there must never restart the server.
+        uvicorn.run(
+            "research_canvas.api:app",
+            host=HOST,
+            port=port,
+            log_level="warning",
+            reload=args.reload,
+            reload_dirs=[str(PACKAGE_DIR)] if args.reload else None,
+        )
     finally:
         # Only ever clean up our own file. Parallel sessions own their own servers.
         with contextlib.suppress(OSError):

@@ -69,6 +69,10 @@ make install     # create the venv, install dependencies, install Chromium for t
 make dev         # start the app on a freshly picked free port, and print the URL
 ```
 
+`make dev` restarts the app when a file in `src/research_canvas/` changes. The port stays
+the same. A restart stops any answer that is still running; it reopens as interrupted.
+A change in `web/` needs only a browser refresh.
+
 Open the URL it prints. Two more targets help while it runs:
 
 ```bash

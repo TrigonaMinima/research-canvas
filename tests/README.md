@@ -19,7 +19,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 173 |
+| 1 | API function tests | `tests/unit/` | 280 |
 | 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 155 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
 | 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py` | 467 |
@@ -72,8 +72,10 @@ Each module in isolation, no HTTP, no browser.
 - `test_runner.py` (13) — the `claude -p` command line, and the `stream-json` parser:
   `system/init`, `content_block_delta` text, the terminal `result`, usage-limit and
   error subtypes, and non-JSON noise.
-- `test_server.py` (7) — a freshly picked free port, a different one each time, never a
-  framework default, bound to `127.0.0.1` only.
+- `test_server.py` (11) — a freshly picked free port, a different one each time, never a
+  framework default, bound to `127.0.0.1` only. `--reload` restarts on code changes and
+  watches the package alone, never the repo root; it is off by default, and the port file
+  is still removed when the server stops.
 - `test_merge.py` (25) — the edit list a merge run returns, and what is done with it. One
   JSON object per line, so a change renders the moment its line parses: a fenced block, a
   partial trailing line held back until it completes, and a line that will not parse skipped

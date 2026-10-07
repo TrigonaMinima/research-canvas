@@ -5,7 +5,7 @@ from __future__ import annotations
 import socket
 
 from research_canvas import server
-from research_canvas.config import HOST
+from research_canvas.config import HOST, PACKAGE_DIR
 
 
 def test_should_pick_a_port_that_is_actually_free():
@@ -58,3 +58,38 @@ def test_should_report_no_server_when_nothing_was_recorded(tmp_path, monkeypatch
 
     assert server.main(["--url"]) == 1
     assert "no server recorded" in capsys.readouterr().out
+
+
+# --- `--reload`: restart on code changes, watching the package only ----------
+
+
+def _launch(argv, tmp_path, monkeypatch):
+    """Run main() with uvicorn stubbed out, so nothing listens and nothing real is written."""
+    calls = []
+    record = tmp_path / "session.port"
+    monkeypatch.setattr(server, "port_file", lambda: record)
+    monkeypatch.setattr(server, "DEV_DIR", tmp_path / ".dev")
+    monkeypatch.setattr(server, "CANVAS_ROOT", tmp_path / "canvases")
+    monkeypatch.setattr(server.uvicorn, "run", lambda *a, **kw: calls.append(kw))
+    server.main(argv)
+    return calls[0], record
+
+
+def test_should_reload_when_asked(tmp_path, monkeypatch):
+    kwargs, _ = _launch(["--reload"], tmp_path, monkeypatch)
+    assert kwargs["reload"] is True
+
+
+def test_should_watch_only_the_package_when_reloading(tmp_path, monkeypatch):
+    kwargs, _ = _launch(["--reload"], tmp_path, monkeypatch)
+    assert kwargs["reload_dirs"] == [str(PACKAGE_DIR)]
+
+
+def test_should_not_reload_by_default(tmp_path, monkeypatch):
+    kwargs, _ = _launch([], tmp_path, monkeypatch)
+    assert kwargs["reload"] is False
+
+
+def test_should_remove_the_port_file_after_a_reloading_server_stops(tmp_path, monkeypatch):
+    _, record = _launch(["--reload"], tmp_path, monkeypatch)
+    assert not record.exists()
