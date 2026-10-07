@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 
 import pytest
+from tests.fixtures.images import PNG
 
-from research_canvas import config
+from research_canvas import assets, config
 
 OFFLINE_RULE = "Web search is off"
+REMOTE = "![x](https://example.com/a.png)"
+PICTURE_RULE = "![short caption]"
 
 
 def _create(client, sample_markdown, **extra):
@@ -49,6 +52,19 @@ def answering(fake_answer):
     event = fake_answer.Event
     fake_answer([event(kind="text", text="Fine."), event(kind="done")])
     return fake_answer
+
+
+@pytest.fixture
+def downloads(monkeypatch):
+    """Every URL the downloader was asked for."""
+    calls: list[str] = []
+
+    async def fetch(url):
+        calls.append(url)
+        return PNG
+
+    monkeypatch.setattr(assets, "fetch_image", fetch)
+    return calls
 
 
 # --- the canvas switch --------------------------------------------------------
@@ -190,3 +206,77 @@ def test_should_tell_a_web_off_run_that_search_is_off(client, web_off, answering
 def test_should_not_tell_a_web_on_run_that_search_is_off(client, canvas, answering):
     _stream(client, canvas, _ask(client, canvas))
     assert OFFLINE_RULE not in answering.prompts[0]
+
+
+def test_should_leave_the_picture_rule_out_of_the_prompt_of_a_web_off_run(
+    client, web_off, answering
+):
+    _stream(client, web_off, _ask(client, web_off))
+    assert PICTURE_RULE not in answering.prompts[0]
+
+
+def test_should_put_the_picture_rule_in_the_prompt_of_a_web_on_run(client, canvas, answering):
+    _stream(client, canvas, _ask(client, canvas))
+    assert PICTURE_RULE in answering.prompts[0]
+
+
+# --- pictures follow the switch -----------------------------------------------
+
+
+def _answer_with(fake_answer, text):
+    event = fake_answer.Event
+    fake_answer([event(kind="text", text=text), event(kind="done")])
+
+
+def test_should_save_a_remote_picture_as_a_plain_link_on_a_web_off_box(
+    client, canvas, fake_answer, downloads
+):
+    _answer_with(fake_answer, REMOTE)
+    box = _ask(client, canvas, webSearch=False)
+    _stream(client, canvas, box)
+    assert _body(client, canvas, box) == "[x](https://example.com/a.png)"
+
+
+def test_should_never_call_the_downloader_for_a_web_off_box(client, canvas, fake_answer, downloads):
+    _answer_with(fake_answer, REMOTE)
+    _stream(client, canvas, _ask(client, canvas, webSearch=False))
+    assert downloads == []
+
+
+def test_should_never_call_the_downloader_when_the_canvas_is_patched_off_before_the_stream(
+    client, canvas, fake_answer, downloads
+):
+    _answer_with(fake_answer, REMOTE)
+    box = _ask(client, canvas)
+    _patch(client, canvas, webSearch=False)
+    _stream(client, canvas, box)
+    assert downloads == []
+
+
+def test_should_send_a_link_not_an_image_in_the_done_event_of_a_web_off_box(
+    client, canvas, fake_answer, downloads
+):
+    _answer_with(fake_answer, REMOTE)
+    body = _stream(client, canvas, _ask(client, canvas, webSearch=False))
+    assert "<img" not in body
+
+
+def test_should_still_download_the_picture_of_a_web_on_box(client, canvas, fake_answer, downloads):
+    _answer_with(fake_answer, REMOTE)
+    _stream(client, canvas, _ask(client, canvas))
+    assert downloads == ["https://example.com/a.png"]
+
+
+def test_should_accept_an_uploaded_picture_on_a_web_off_canvas(client, web_off):
+    response = client.post(f"/api/canvases/{web_off['id']}/assets", content=PNG)
+    assert response.status_code == 201
+
+
+def test_should_render_an_uploaded_picture_in_a_web_off_canvas(client, web_off):
+    path = client.post(f"/api/canvases/{web_off['id']}/assets", content=PNG).json()["path"]
+    client.put(
+        f"/api/canvases/{web_off['id']}/boxes/b1/body",
+        json={"markdown": f"# Doc\n\n![pic]({path})\n"},
+    )
+    html = _view(client, web_off)["bodies"]["b1"]
+    assert f'src="/api/canvases/{web_off["id"]}/{path}"' in html

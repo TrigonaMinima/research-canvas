@@ -8,20 +8,30 @@ questioning cannot leak into another.
 from __future__ import annotations
 
 from . import storage
-from .config import INSTRUCTIONS_HEADING, INSTRUCTIONS_PRECEDENCE
+from .config import INSTRUCTIONS_HEADING, INSTRUCTIONS_PRECEDENCE, MAX_IMAGES_PER_ANSWER
 from .storage import Box, Canvas
 
-SYSTEM_PREAMBLE = (
+_BASE = (
     "You are answering a reader's question about a passage they highlighted while "
     "reading. Answer the question directly and concretely. Use plain markdown. Do not "
     "restate the question, do not greet, and do not offer to help further. Write "
-    "mathematics as LaTeX: $...$ inline and $$...$$ on its own line for display."
+    "mathematics as LaTeX: $...$ inline and $$...$$ on its own line for display. "
 )
 
-# Said outright, so the run does not promise a search it has no tool for.
-OFFLINE_PREAMBLE = SYSTEM_PREAMBLE + (
-    " Web search is off for this question. Answer from the passages given and what you "
-    "already know."
+SYSTEM_PREAMBLE = _BASE + (
+    "Back factual claims with sources you found on the web and link them inline, unless "
+    "the document and passages given here already hold the facts. When the reader asks "
+    "for pictures, or the answer is about something visual, embed up to "
+    f"{MAX_IMAGES_PER_ANSWER} pictures as ![short caption](direct image file URL). Use "
+    "only direct image file URLs you saw in search or fetch results; Wikimedia Commons "
+    "upload URLs work well. Never invent a URL. Do not say whether a picture was checked: "
+    "the app downloads and checks every one itself."
+)
+
+# Without search the run can only guess picture URLs, and a guessed URL is never shown.
+OFFLINE_PREAMBLE = _BASE + (
+    "Web search is off for this question. Do not embed pictures, because you cannot "
+    "check that a picture URL is real."
 )
 
 

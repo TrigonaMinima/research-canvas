@@ -32,6 +32,7 @@ canvases/<slug>/canvas.json   boxes, anchors, camera, theme, formatVersion
 canvases/<slug>/root.md       the imported document, verbatim
 canvases/<slug>/boxes/<id>.md one file per answer
 canvases/<slug>/merges/<id>.json a merge waiting to be reviewed
+canvases/<slug>/assets/       pictures, named by the hash of their bytes
 ```
 
 To resume earlier research, open the app and pick the canvas from the "Canvases" list.
@@ -41,7 +42,8 @@ To inspect it outside the app, read those files directly: they are plain markdow
 
 Each question spawns a headless `claude -p` run that is sandboxed on purpose: no local file
 access, no shell, no personal CLAUDE.md, no skills, no MCP servers. Web search and web fetch
-are the only tools, and only when web search is on for the question.
+are the only tools, and only when web search is on for the question. Answers that searched
+link the sources they used.
 
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
@@ -63,7 +65,16 @@ refuses the web tools even for a question that asks for them. The server reads t
 again when a run starts, so a queued question obeys a switch flipped after it was asked.
 With the canvas on, each question can turn search off for itself.
 
-A run without search gets no tools at all, and its prompt says search is off.
+A run without search gets no tools at all, is told not to embed pictures, and any remote
+picture it writes anyway is kept as a plain link and never fetched.
+
+## Pictures
+
+An answer with web search on can embed pictures it found on the web, up to six. When the run
+ends, the app downloads each one into `canvases/<slug>/assets/` and points the answer at the
+local copy, so the canvas works offline. A picture that cannot be fetched becomes a plain link.
+To add your own, paste or drop an image into the editor. PNG, JPEG, GIF, and WebP only, 8 MB
+each.
 
 ## Renaming a canvas
 

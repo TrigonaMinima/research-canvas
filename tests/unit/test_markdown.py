@@ -168,3 +168,34 @@ def test_should_name_no_heading_for_text_above_every_heading():
 def test_should_ignore_a_hash_inside_a_fenced_block():
     doc = "# Title\n\n```\n# not a heading\n```\n\nBody.\n"
     assert md.heading_before(doc, doc.index("Body.")) == "Title"
+
+
+# --- pictures -----------------------------------------------------------------
+
+LOCAL = "![A cat](assets/" + "a" * 64 + ".png)"
+BASE = "/api/canvases/c1/"
+
+
+def test_should_resolve_a_local_asset_against_the_base():
+    assert f'src="{BASE}assets/' + "a" * 64 + '.png"' in md.render(LOCAL, base=BASE)
+
+
+def test_should_leave_a_remote_image_untouched_when_a_base_is_given():
+    html = md.render("![x](https://example.com/a.png)", base=BASE)
+    assert 'src="https://example.com/a.png"' in html
+
+
+def test_should_leave_a_local_asset_untouched_without_a_base():
+    assert 'src="assets/' + "a" * 64 + '.png"' in md.render(LOCAL)
+
+
+def test_should_lazy_load_every_image():
+    assert 'loading="lazy"' in md.render("![x](https://example.com/a.png)")
+
+
+def test_should_decode_every_image_asynchronously():
+    assert 'decoding="async"' in md.render(LOCAL, base=BASE)
+
+
+def test_should_keep_the_caption_as_alt_text():
+    assert 'alt="A cat"' in md.render(LOCAL, base=BASE)

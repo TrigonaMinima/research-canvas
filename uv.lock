@@ -704,6 +704,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "latex2mathml" },
     { name = "linkify-it-py" },
     { name = "markdown-it-py" },
@@ -714,7 +715,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-playwright" },
@@ -724,6 +724,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "latex2mathml", specifier = ">=3.81.1" },
     { name = "linkify-it-py", specifier = ">=2.0" },
     { name = "markdown-it-py", specifier = ">=3.0" },
@@ -734,7 +735,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.27" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
     { name = "pytest-playwright", specifier = ">=0.5" },

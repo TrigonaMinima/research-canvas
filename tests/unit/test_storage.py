@@ -493,6 +493,44 @@ def test_should_refuse_a_proposal_path_outside_the_canvas(proposal):
         storage.read_merge(canvas.id, "../../escape")
 
 
+# --- pictures: asset_path -----------------------------------------------------
+
+_HASH = "a" * 64
+
+
+def _make_canvas(sample_markdown):
+    return storage.create_canvas(sample_markdown)
+
+
+def test_should_resolve_an_asset_inside_the_canvas_asset_folder(canvas_root, sample_markdown):
+    canvas = _make_canvas(sample_markdown)
+    path = storage.asset_path(canvas.id, f"{_HASH}.png")
+    assert path == canvas_root / canvas.id / "assets" / f"{_HASH}.png"
+
+
+@pytest.mark.parametrize("ext", ["png", "jpg", "gif", "webp"])
+def test_should_accept_every_supported_extension(canvas_root, sample_markdown, ext):
+    canvas = _make_canvas(sample_markdown)
+    assert storage.asset_path(canvas.id, f"{_HASH}.{ext}").name == f"{_HASH}.{ext}"
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../canvas.json", "..", f"{'A' * 64}.png", f"{_HASH}.svg", f"{_HASH[:-1]}.png", "x.png", ""],
+)
+def test_should_refuse_an_asset_name_that_is_not_hash_dot_extension(
+    canvas_root, sample_markdown, name
+):
+    canvas = _make_canvas(sample_markdown)
+    with pytest.raises(ValueError):
+        storage.asset_path(canvas.id, name)
+
+
+def test_should_raise_canvas_not_found_for_an_asset_of_an_unknown_canvas(canvas_root):
+    with pytest.raises(storage.CanvasNotFound):
+        storage.asset_path("nope", f"{_HASH}.png")
+
+
 # --- web search switch --------------------------------------------------------
 
 

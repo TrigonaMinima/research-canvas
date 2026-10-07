@@ -99,6 +99,28 @@ NO_TOOLS = ""
 # How many answers may run at once before the rest queue.
 MAX_CONCURRENT_RUNS = 3
 
+# --- pictures in answers -----------------------------------------------------
+# A picture an answer links to is downloaded once and kept beside the canvas, so the
+# canvas still shows it offline and no third party learns when it is reopened.
+
+ASSET_DIR = "assets"
+MAX_IMAGES_PER_ANSWER = 6
+MAX_IMAGE_BYTES = 8 * 1024 * 1024
+IMAGE_FETCH_TIMEOUT = 10.0
+MAX_IMAGE_REDIRECTS = 3
+# Wikimedia, the best source of free pictures, answers 403 to a client whose user agent
+# gives no contact (https://w.wiki/4wJS). A bare name passes from curl, not from httpx.
+IMAGE_USER_AGENT = "research-canvas/0.1 (https://github.com/TrigonaMinima/research-canvas)"
+# Raster formats only, by sniffed kind. SVG is left out: it can carry script.
+IMAGE_TYPES = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+# Tests serve pictures from 127.0.0.1, which the fetch guard otherwise refuses.
+ALLOW_PRIVATE_FETCH = os.environ.get("RESEARCH_CANVAS_ALLOW_PRIVATE_FETCH") == "1"
+
 # --- standing instructions ----------------------------------------------------
 # What the reader wants of every answer, on every canvas. Sent as text in the prompt,
 # because the run has no file access to read it with (US-7).

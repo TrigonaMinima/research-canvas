@@ -22,11 +22,31 @@ const reviewWidth = () => Math.min(REVIEW_WIDTH, window.innerWidth - REVIEW_MARG
 // Keyed by the element, so a removed box drops its entry with no bookkeeping.
 const rendered = new WeakMap(); // box element -> signature of what its body shows
 
-export function waitLabel(box, queuedAhead) {
+// Raised from a picture that finished loading after its body was drawn. The box is
+// taller than when it was measured, and only the owner of the canvas can reseat it.
+export const GREW = 'box-grew';
+
+// `detail` is what a run says it is doing, when it says anything at all.
+export function waitLabel(box, queuedAhead, detail) {
   if (box.status === 'queued') {
     return `Queued — ${queuedAhead} answer${queuedAhead === 1 ? '' : 's'} running`;
   }
-  return box.webSearch ? 'Searching the web…' : 'Thinking…';
+  return detail || (box.webSearch ? 'Searching the web…' : 'Thinking…');
+}
+
+// From the picture, not the box: a body rebuilt before its old pictures land has
+// detached them, and a detached picture's event reaches nobody.
+function grew(event) {
+  event.target.dispatchEvent(new CustomEvent(GREW, { bubbles: true }));
+}
+
+function watchPictures(body) {
+  for (const img of body.querySelectorAll('img')) {
+    img.draggable = false; // the stylesheet's user-drag is WebKit only
+    if (img.complete) continue;
+    img.addEventListener('load', grew, { once: true });
+    img.addEventListener('error', grew, { once: true });
+  }
 }
 
 // An answer that has not landed yet has no source worth editing, and neither has one
@@ -117,7 +137,7 @@ export function markFocused(el, focused) {
 }
 
 export function update(el, box, {
-  html, anchors, inbound, parent, liveText, queuedAhead, editing, selected, focused,
+  html, anchors, inbound, parent, liveText, waitDetail, queuedAhead, editing, selected, focused,
   merging, reviewing, mergedTargets,
 }) {
   el.dataset.status = box.status;
@@ -173,7 +193,7 @@ export function update(el, box, {
   const waiting = UNFINISHED.has(box.status);
   const wait = el.querySelector('[data-wait]');
   wait.hidden = !waiting;
-  if (waiting) el.querySelector('[data-wait-label]').textContent = waitLabel(box, queuedAhead);
+  if (waiting) el.querySelector('[data-wait-label]').textContent = waitLabel(box, queuedAhead, waitDetail);
 
   const stopped = el.querySelector('[data-stopped]');
   stopped.hidden = !(box.status === 'failed' || box.status === 'interrupted');
@@ -225,6 +245,7 @@ export function update(el, box, {
     return [];
   }
   body.innerHTML = html || '';
+  watchPictures(body);
   // Structure, then the fold, then the marks: `materialize` splits text nodes, so it
   // goes last and measures its offsets against the tree the reader actually has.
   sections.sectionize(body, box.id);

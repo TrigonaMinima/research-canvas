@@ -42,6 +42,14 @@ export const api = {
   deleteBox: (id, boxId) =>
     send(`/api/canvases/${id}/boxes/${boxId}`, { method: 'DELETE' }),
 
+  // Raw bytes, not a form: the content type is the file's own, and the server checks it.
+  uploadAsset: (id, file) =>
+    send(`/api/canvases/${id}/assets`, {
+      method: 'POST',
+      headers: { 'content-type': file.type || 'application/octet-stream' },
+      body: file,
+    }),
+
   streamUrl: (id, boxId) => `/api/canvases/${id}/boxes/${boxId}/stream`,
 
   // Folding an answer into its parent. Keyed by the answer, because the answer is what

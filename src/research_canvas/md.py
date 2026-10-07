@@ -14,6 +14,8 @@ from markdown_it.token import Token
 from mdit_py_plugins.amsmath import amsmath_plugin
 from mdit_py_plugins.dollarmath import dollarmath_plugin
 
+from .config import ASSET_DIR
+
 # html=False escapes raw HTML in the source. An imported document is untrusted text.
 _md = MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": True})
 _md.enable(["table", "strikethrough", "linkify"])
@@ -43,8 +45,18 @@ _HEADING = re.compile(r"^\s*#{1,6}\s*(.+?)\s*#*\s*$")
 _CODE_FENCE = re.compile(r"^\s*(```|~~~)")
 
 
-def render(markdown: str) -> str:
-    return _md.render(markdown)
+def render(markdown: str, base: str | None = None) -> str:
+    """HTML for one body. `base` is where its canvas serves pictures from."""
+    return _md.render(markdown, {"base": base})
+
+
+def parse(markdown: str) -> list[Token]:
+    return _md.parse(markdown)
+
+
+def normalize_link(url: str) -> str:
+    """A URL as markdown-it stores it on a token, percent-encoding and all."""
+    return _md.normalizeLink(url)
 
 
 def first_heading(markdown: str) -> str | None:
@@ -131,3 +143,20 @@ def _table_close(self: Any, tokens: Sequence[Token], idx: int, options: Any, env
 
 _md.add_render_rule("table_open", _table_open)
 _md.add_render_rule("table_close", _table_close)
+
+
+# A saved picture is written as a path relative to its canvas, so the markdown stays
+# portable. The server knows the canvas, so it resolves the path here.
+def _image(self: Any, tokens: Sequence[Token], idx: int, options: Any, env: Any) -> str:
+    token = tokens[idx]
+    src = str(token.attrGet("src") or "")
+    base = (env or {}).get("base")
+    if base and src.startswith(f"{ASSET_DIR}/"):
+        token.attrSet("src", base + src)
+    # A long answer can hold several pictures; none should hold up the first paint.
+    token.attrSet("loading", "lazy")
+    token.attrSet("decoding", "async")
+    return self.image(tokens, idx, options, env)
+
+
+_md.add_render_rule("image", _image)

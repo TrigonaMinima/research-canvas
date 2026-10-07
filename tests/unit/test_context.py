@@ -200,9 +200,26 @@ def test_should_not_merge_a_box_that_has_no_parent(merging):
         context.build_merge_prompt(canvas, canvas.box(canvas.root_id), "")
 
 
+# --- web sources and pictures in the preamble ---------------------------------
+
+
+def test_should_tell_the_run_to_back_claims_with_sources():
+    assert "source" in context.SYSTEM_PREAMBLE.lower()
+
+
+def test_should_tell_the_run_how_to_embed_a_picture():
+    assert "![" in context.SYSTEM_PREAMBLE
+
+
+def test_should_tell_the_run_never_to_invent_a_url():
+    assert "invent" in context.SYSTEM_PREAMBLE.lower()
+
+
 # --- the preamble follows the box's web switch --------------------------------
 
 OFFLINE_RULE = "Web search is off"
+SOURCES_RULE = "sources you found on the web"
+PICTURE_RULE = "![short caption]"
 
 
 def _asked(canvas, *, web_search):
@@ -229,6 +246,27 @@ def test_should_tell_the_run_web_search_is_off_when_the_canvas_switch_is_off(fre
     box = storage.add_answer(fresh, parent_id=fresh.root_id, question="Why?")
     fresh.web_search = False
     assert OFFLINE_RULE in context.build_prompt(fresh, box)
+
+
+def test_should_ask_for_sources_when_web_search_is_on(fresh):
+    assert SOURCES_RULE in _asked(fresh, web_search=True)
+
+
+def test_should_ask_for_pictures_when_web_search_is_on(fresh):
+    assert PICTURE_RULE in _asked(fresh, web_search=True)
+
+
+def test_should_not_ask_for_sources_when_web_search_is_off(fresh):
+    assert SOURCES_RULE not in _asked(fresh, web_search=False)
+
+
+def test_should_not_ask_for_pictures_when_web_search_is_off(fresh):
+    assert PICTURE_RULE not in _asked(fresh, web_search=False)
+
+
+def test_should_tell_the_run_not_to_embed_pictures_when_web_search_is_off(fresh):
+    prompt = _asked(fresh, web_search=False)
+    assert re.search(r"(do not|don't|never)[^.]*\b(picture|image)s?\b", prompt, re.IGNORECASE)
 
 
 def test_should_keep_the_maths_rule_when_web_search_is_off(fresh):

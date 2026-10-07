@@ -12,8 +12,8 @@ reworded.
 Set RESEARCH_CANVAS_CLAUDE to this file to use it.
 Failure paths are chosen per run, so one server can serve every test: put
 `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`,
-`[[fake:long]]`, `[[fake:badjson]]`, or `[[fake:onechunk]]` in the question or the
-merge guidance.
+`[[fake:long]]`, `[[fake:badjson]]`, `[[fake:onechunk]]`, or `[[fake:images]]` (answers with a
+picture from FAKE_CLAUDE_IMAGE_URL) in the question or the merge guidance.
 FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things for every run.
 """
 
@@ -102,6 +102,10 @@ def main() -> int:
         # One chunk per paragraph, each followed by a blank line so the markdown
         # renderer breaks them apart rather than folding them into one <p>.
         chunks = [f"{paragraph}\n\n" for paragraph in LONG_PARAGRAPHS]
+    elif mode == "images":
+        chunks = [
+            f"Here is a picture.\n\n![A sample]({os.environ.get('FAKE_CLAUDE_IMAGE_URL', '')})\n"
+        ]
     else:
         chunks = [
             "A residual connection ",

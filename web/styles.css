@@ -304,7 +304,10 @@ mark[data-anchor][data-merged="1"]{background:0 0;box-shadow:inset 0 -1.5px 0 va
 .prose table{width:100%;border-collapse:collapse;border:1px solid var(--line);font:400 14.5px/1.4 var(--serif)}
 .prose th{font:500 11px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);background:var(--paper2);text-align:left}
 .prose th,.prose td{padding:11px 14px;border-bottom:1px solid var(--line)}
-.prose img{max-width:100%;height:auto}
+/* Not draggable: a drag that starts on a picture should select text, not carry the image off. */
+.prose img{display:block;max-width:100%;height:auto;margin:0 0 13px;border:1px solid var(--line);border-radius:4px;-webkit-user-drag:none}
+/* Markdown puts a picture inside a paragraph, which already spaces it. */
+.prose p > img:last-child{margin-bottom:0}
 
 /* Maths is native MathML, rendered on the server and set in whichever maths face the
    machine already has. Nothing is fetched: the `math` generic is the browser's own. */

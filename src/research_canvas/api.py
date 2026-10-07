@@ -7,12 +7,12 @@ import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import anchors, context, md, merge, runner, storage
+from . import anchors, assets, config, context, md, merge, runner, storage
 from .anchors import Anchor
 from .config import (
     ALREADY_MERGED_MESSAGE,
@@ -24,6 +24,7 @@ from .config import (
     DRAG_SLOP,
     EDIT_WHILE_MERGING_MESSAGE,
     EDIT_WHILE_RUNNING_MESSAGE,
+    IMAGE_TYPES,
     MAX_BOX_WIDTH,
     MAX_CONCURRENT_RUNS,
     MAX_INSTRUCTIONS_CHARS,
@@ -369,7 +370,7 @@ def write_box_body(canvas_id: str, box_id: str, body: BodyBody) -> dict:
         # that survived the edit still resolves, and one that did not simply stops
         # showing rather than taking its answer box down with it.
         storage.write_body(canvas.id, box.id, body.markdown)
-    return {"boxId": box.id, "html": md.render(body.markdown)}
+    return {"boxId": box.id, "html": _render(canvas.id, body.markdown)}
 
 
 @app.delete("/api/canvases/{canvas_id}/boxes/{box_id}")
@@ -444,7 +445,20 @@ async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]
         except Exception as exc:  # noqa: BLE001 - a run must never take the server down
             outcome, reason = "failed", f"{runner.CRASHED_REASON} ({exc})"
 
-        html = _finish(canvas_id, box_id, "".join(collected), outcome, reason)
+        text = "".join(collected)
+        pictures = assets.remote_images(text)
+        if pictures and not web_search:
+            # Without search the URLs are guesses; keep them as links and fetch nothing.
+            text = assets.as_links(text, pictures)
+        elif pictures:
+            yield _sse("status", {"status": "running", "detail": "Fetching pictures…"})
+            try:
+                text = await _localize(canvas_id, text, pictures)
+            except asyncio.CancelledError:
+                # The answer itself is complete; keep it, with its links as they came.
+                _finish(canvas_id, box_id, text, outcome, reason)
+                raise
+        html = _finish(canvas_id, box_id, text, outcome, reason)
         yield _sse("done", {"status": outcome, "reason": reason, "html": html})
 
 
@@ -457,7 +471,15 @@ def _finish(canvas_id: str, box_id: str, text: str, status: str, reason: str) ->
             box.reason = reason
     except (KeyError, storage.CanvasNotFound):
         return ""  # deleted mid-run; nothing to record
-    return md.render(text)
+    return _render(canvas_id, text)
+
+
+async def _localize(canvas_id: str, text: str, pictures: list) -> str:
+    """The answer with its pictures saved locally, or as it came if that goes wrong."""
+    try:
+        return await assets.localize(canvas_id, text, matches=pictures)
+    except Exception:  # noqa: BLE001 - a picture must never cost the reader the answer
+        return text
 
 
 def _set_status(canvas_id: str, box_id: str, status: str) -> bool:
@@ -779,7 +801,7 @@ def _editing(canvas_id: str) -> Iterator[storage.Canvas]:
         with storage.edit(canvas_id) as canvas:
             yield canvas
     except storage.CanvasNotFound as exc:
-        raise HTTPException(status_code=404, detail="No such canvas.") from exc
+        raise _no_canvas() from exc
 
 
 @contextmanager
@@ -796,7 +818,11 @@ def _load(canvas_id: str) -> storage.Canvas:
     try:
         return storage.load(canvas_id)
     except storage.CanvasNotFound as exc:
-        raise HTTPException(status_code=404, detail="No such canvas.") from exc
+        raise _no_canvas() from exc
+
+
+def _no_canvas() -> HTTPException:
+    return HTTPException(status_code=404, detail="No such canvas.")
 
 
 def _box(canvas: storage.Canvas, box_id: str) -> storage.Box:
@@ -813,16 +839,64 @@ def _descendants(canvas: storage.Canvas, box_id: str) -> set[str]:
     return children
 
 
+def _render(canvas_id: str, markdown: str) -> str:
+    # Bodies store pictures relative to their canvas; the browser needs the route.
+    return md.render(markdown, base=f"/api/canvases/{canvas_id}/")
+
+
 def _view(canvas: storage.Canvas) -> dict:
     data = canvas.to_dict()
     data["bodies"] = {
-        box.id: md.render(storage.read_body(canvas.id, box.id)) for box in canvas.boxes
+        box.id: _render(canvas.id, storage.read_body(canvas.id, box.id)) for box in canvas.boxes
     }
     # Ids only. A reload uses them to reopen the reviews; the payloads are fetched one
     # at a time, so a waiting merge does not make every canvas read carry a diff.
     waiting = set(storage.list_merges(canvas.id))
     data["merges"] = [box.id for box in canvas.boxes if box.id in waiting]
     return data
+
+
+# --- pictures -----------------------------------------------------------------
+
+
+@app.post("/api/canvases/{canvas_id}/assets", status_code=201)
+async def upload_asset(canvas_id: str, request: Request) -> dict:
+    """A picture pasted or dropped into the editor. The body is the raw image bytes."""
+    declared = request.headers.get("content-length", "")
+    try:
+        # Refused before the body is read. Through the module so tests can lower the cap.
+        if declared.isdigit() and int(declared) > config.MAX_IMAGE_BYTES:
+            raise assets.ImageTooLarge(declared)
+        data = await request.body()
+        # Hashing and writing up to 8 MB would stall every answer stream on the loop.
+        return {"path": await asyncio.to_thread(assets.save, canvas_id, data)}
+    except assets.ImageTooLarge as exc:
+        raise HTTPException(status_code=413, detail="That picture is too large.") from exc
+    except assets.UnsupportedImage as exc:
+        raise HTTPException(
+            status_code=415, detail="Only PNG, JPEG, GIF, and WebP pictures are kept."
+        ) from exc
+    except storage.CanvasNotFound as exc:
+        raise _no_canvas() from exc
+
+
+@app.get("/api/canvases/{canvas_id}/assets/{name}")
+def read_asset(canvas_id: str, name: str) -> FileResponse:
+    try:
+        path = storage.asset_path(canvas_id, name)
+    except (ValueError, storage.CanvasNotFound) as exc:
+        raise HTTPException(status_code=404, detail="No such picture.") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="No such picture.")
+    return FileResponse(
+        path,
+        media_type=IMAGE_TYPES[path.suffix[1:]],
+        # The name is the hash of the bytes, so the file at a URL never changes.
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "public, max-age=31536000, immutable",
+        },
+    )
 
 
 # --- the app shell ------------------------------------------------------------

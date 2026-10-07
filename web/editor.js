@@ -52,8 +52,81 @@ export const base = [
   keymap.of([indentWithTab, ...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap]),
 ];
 
+// --- pictures ------------------------------------------------------------------
+
+const picturesIn = (transfer) =>
+  transfer ? [...transfer.files].filter((file) => file.type.startsWith('image/')) : [];
+
+// The alt text: the file's own name, or "image" for a screenshot that has none.
+// Brackets would close the alt early, so they go.
+function altOf(file) {
+  const name = file.name.replace(/\.[^.]*$/, '').replace(/[[\]]/g, '').trim();
+  return name || 'image';
+}
+
+// Each picture is a placeholder line at once, swapped for its markdown when the upload
+// lands. Found again by its text, not its offset: the reader keeps typing meanwhile.
+// Numbered, so two pictures with one name cannot swap into each other's place.
+let uploads = 0;
+const pending = new WeakMap(); // view -> uploads still out
+
+// A save now would keep a placeholder nothing can swap: the editor closes on save.
+export const isUploading = (view) => (pending.get(view) || 0) > 0;
+
+function insertPictures(view, files, at, onImage) {
+  const items = files.map((file) => ({ file, alt: altOf(file) }));
+  for (const item of items) item.placeholder = `![Uploading ${item.alt} #${++uploads}…]()`;
+  const line = view.state.doc.lineAt(at.from);
+  const before = at.from > line.from ? '\n' : '';
+  const after = at.to < view.state.doc.lineAt(at.to).to ? '\n' : '';
+  const insert = before + items.map((item) => item.placeholder).join('\n') + after;
+  view.dispatch({
+    changes: { from: at.from, to: at.to, insert },
+    selection: { anchor: at.from + insert.length - after.length },
+    userEvent: 'input.paste',
+  });
+
+  pending.set(view, (pending.get(view) || 0) + items.length);
+  for (const item of items) {
+    const swap = (text) => {
+      pending.set(view, pending.get(view) - 1);
+      if (!view.dom.isConnected) return; // the editor closed while the upload was out
+      const from = view.state.doc.toString().indexOf(item.placeholder);
+      if (from < 0) return; // the reader deleted it
+      const to = from + item.placeholder.length;
+      // Removing a failed one takes its line break too, so no blank line is left behind.
+      const end = !text && view.state.doc.sliceString(to, to + 1) === '\n' ? to + 1 : to;
+      view.dispatch({ changes: { from, to: end, insert: text } });
+    };
+    // The caller says why it failed; all that is left here is the placeholder.
+    onImage(item.file).then((path) => swap(`![${item.alt}](${path})`), () => swap(''));
+  }
+}
+
+// Only a transfer carrying image files is ours; anything else keeps CodeMirror's own
+// handling, so a text paste or a text drag works as it always has.
+const pictureHandlers = (onImage) => EditorView.domEventHandlers({
+  paste(event, view) {
+    const files = picturesIn(event.clipboardData);
+    if (!files.length) return false;
+    event.preventDefault();
+    insertPictures(view, files, view.state.selection.main, onImage);
+    return true;
+  },
+  drop(event, view) {
+    const files = picturesIn(event.dataTransfer);
+    if (!files.length) return false;
+    event.preventDefault();
+    const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+      ?? view.state.selection.main.head;
+    insertPictures(view, files, { from: pos, to: pos }, onImage);
+    return true;
+  },
+});
+
 // `pos` is where the caret starts: the word the reader double clicked, or the top.
-export function mount(host, doc, { onSave, pos = 0 }) {
+// `onImage` takes a pasted or dropped picture and resolves to its path in the canvas.
+export function mount(host, doc, { onSave, onImage, pos = 0 }) {
   const view = new EditorView({
     parent: host,
     state: EditorState.create({
@@ -76,6 +149,7 @@ export function mount(host, doc, { onSave, pos = 0 }) {
           { key: 'Shift-Enter', run: insertNewlineContinueMarkup },
           { key: 'Shift-Enter', run: insertNewlineAndIndent },
         ]),
+        onImage ? pictureHandlers(onImage) : [],
         base,
         EditorView.contentAttributes.of({ 'aria-label': 'Markdown source' }),
       ],

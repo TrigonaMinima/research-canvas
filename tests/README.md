@@ -517,11 +517,45 @@ Added with the rename feature. The counts in the sections above were not re-tota
   toggle starts at the canvas value, flips one question only, and is disabled with "off for
   this canvas" when the switch is off, following the switch while open.
 
+## Pictures in boxes (added with picture support)
+
+The counts above were not re-totalled.
+
+- `tests/unit/test_assets.py` — `sniff` names PNG, JPEG, GIF and WebP by their bytes and
+  refuses SVG, HTML and empty input. `is_public` refuses loopback, private, link-local,
+  unspecified, reserved and multicast addresses. `save` names a file by its hash, writes it
+  once, and refuses an unsupported type and an oversize one. `fetch_image` refuses non-http
+  schemes, a host that resolves to any non-public address, a redirect to one, more than three
+  redirects, an oversize body and a non-image body. `localize` rewrites a remote picture to its
+  local copy with its alt text kept, turns a failed one into a plain link, fetches a repeated
+  URL once, stops at the cap, and leaves code blocks, local pictures and plain text alone.
+  `as_links` turns every remote picture into a plain link, saves no file, and leaves a local
+  picture alone.
+- `tests/api/test_assets.py` — upload gives 201 and a path, 415 for SVG or text, 413 over the
+  cap, 404 for an unknown canvas. Serving gives the right type, `nosniff` and an immutable
+  cache, and 404 for a bad name, a traversal or an unknown canvas. Every rendered body points
+  `assets/…` at the canvas route. A finished run is saved with local pictures, its `done` HTML
+  uses them, and a "pictures" status event comes first.
+- `tests/api/test_web_search.py` (+9) — the picture rule is in the prompt only with web search
+  on. A web-off answer keeps remote pictures as links, in the saved body and in the `done`
+  event, and never calls the downloader, even when the canvas is switched off while it waits.
+  An upload still works on a web-off canvas.
+- `tests/unit/test_context.py` (+8), `test_markdown.py`, `test_storage.py` — with web search on
+  the preamble asks for sources and for pictures by URL, never invented; off, it says not to
+  embed pictures. `render(base=)` rewrites only local pictures and marks every one lazy and
+  async. `asset_path` accepts only a hash name.
+- `tests/e2e/test_images.py` — an answer with a picture shows it, loaded from
+  `/api/canvases/…`, and the page never contacts the picture's host. A pasted picture becomes
+  `![…](assets/…)` in the source and shows after Save. Save while a picture is still uploading
+  says so and keeps the editor open. On a web-off canvas the picture host gets no request and a
+  pasted picture still shows.
+
 ## Fixtures
 
 | File | What it is |
 |------|-----------|
-| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, and `[[fake:long]]` for an answer tall enough to overlap the box below it. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
+| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, `[[fake:long]]` for an answer tall enough to overlap the box below it, and `[[fake:images]]` for an answer holding one picture at `FAKE_CLAUDE_IMAGE_URL`. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
+| `fixtures/images/__init__.py` | Picture bytes built in code (a valid PNG, plus GIF, JPEG and WebP headers, an SVG and an HTML page), so no binary is committed. |
 | `fixtures/sample_doc.md` | An excerpt of *Attention Is All You Need*. The word "attention" appears exactly four times; the find tests count on it. |
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
 | `fixtures/tables_doc.md` | A 12-column table of unbreakable names that cannot fit the column, a 2-column table that can, a formula in one cell of the wide table, and a code block of one very long line. |
@@ -534,4 +568,4 @@ Added with the rename feature. The counts in the sections above were not re-tota
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, `drag_popover()` moves a popover by its header in screen pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. `press_header()` presses a header on its label, moves a few screen pixels and lets go, for the tests that tell a click from a drag. `settled()` gives the restack pass its frames before a rect is read, and `answer_in_reach()` asks for the first answer and brings its header on screen. |
 | `fixtures/merging.py` | The edit list a merge run returns, deliberately mixed: two changes that land in different paragraphs of the document, far enough apart that the diff reads them as separate chunks and one can be dropped without the other, and a third naming text the document has never contained. A second list holds two changes on adjacent lines of one paragraph, which the diff cannot separate: one chunk, one arrow, two changes. Shared by the API tests, the fake binary and the browser tests, so all three move together. Also the selectors a review is driven by, which name the **parent** box, since that is where the review renders. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
-| `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. |
+| `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. A loopback server hands out the fixture PNG, and the app is started with `RESEARCH_CANVAS_ALLOW_PRIVATE_FETCH=1` so it may fetch from it; `picture_hits` records who asked. |

@@ -70,6 +70,7 @@ const state = {
   canvas: null,
   bodies: {},
   live: new Map(),     // boxId -> text streamed so far
+  waits: new Map(),    // boxId -> what a run says it is doing, shown while it waits
   streams: new Map(),  // boxId -> EventSource
   merging: new Map(),  // childId -> EventSource, keyed apart: a box can run both at once
   geometry: { boxes: [], edges: [] },
@@ -185,6 +186,7 @@ function render() {
       inbound: inbound.get(box.id) || null,
       parent: box.parent ? byId.get(box.parent) : null,
       liveText: state.live.get(box.id),
+      waitDetail: state.waits.get(box.id),
       queuedAhead,
       editing: !!edit && box.id === edit.id,
       selected: state.selected.has(box.id),
@@ -378,11 +380,16 @@ function listen(boxId) {
   const source = new EventSource(api.streamUrl(state.canvas.id, boxId));
   state.streams.set(boxId, source);
 
-  const stop = () => { source.close(); state.streams.delete(boxId); };
+  // The detail goes with the stream: box ids repeat across canvases.
+  const stop = () => { source.close(); state.streams.delete(boxId); state.waits.delete(boxId); };
 
   source.addEventListener('status', (event) => {
+    const data = JSON.parse(event.data);
     const box = boxById(boxId);
-    if (box) box.status = JSON.parse(event.data).status;
+    if (box) box.status = data.status;
+    // A status without a detail is a plain step, and the default label returns.
+    if (data.detail) state.waits.set(boxId, data.detail);
+    else state.waits.delete(boxId);
     render();
   });
 
@@ -969,6 +976,10 @@ function scheduleRestack(extra) {
   }));
 }
 
+// A picture that lands after its body was drawn makes the box taller. Every one of them
+// joins the same queued pass, so a page of pictures is still one reseat.
+el.canvas.addEventListener(boxes.GREW, () => scheduleRestack());
+
 async function submitAsk() {
   if (!ask) return;
   const node = el.askLayer.querySelector('.ask');
@@ -1432,8 +1443,9 @@ async function openEditor(boxEl, place = null) {
   edit.pane = openPane(boxEl);
   render(); // the body has to be hidden before CodeMirror measures what is left
   const pos = sourcemap.offsetIn(source, place);
+  edit.editor = editor;
   edit.view = editor.mount(edit.pane.querySelector('[data-editor]'), source,
-    { onSave: saveEdit, pos });
+    { onSave: saveEdit, onImage: uploadPicture, pos });
   // A reader who moved the desk while the source was on its way has chosen their view.
   if (place && stood === cameraKey()) holdCaretAt(edit.view, pos, place.y);
   // `render` has already queued the one geometry pass, which now also reaches the view.
@@ -1455,8 +1467,20 @@ function closeEditor({ keepPlace = false } = {}) {
   scheduleRestack();
 }
 
+// The editor knows where a picture goes in the source; this knows which canvas keeps
+// it. A failure is said here, and the editor takes its placeholder back out.
+function uploadPicture(file) {
+  return api.uploadAsset(state.canvas.id, file)
+    .then(({ path }) => path)
+    .catch((error) => {
+      flash(error.message);
+      throw error;
+    });
+}
+
 function saveEdit() {
   if (!edit || !edit.view) return;
+  if (edit.editor.isUploading(edit.view)) { flash('A picture is still uploading. Save once it appears.'); return; }
   const { id, view } = edit;
   api.writeBody(state.canvas.id, id, view.state.doc.toString())
     .then(({ html }) => {

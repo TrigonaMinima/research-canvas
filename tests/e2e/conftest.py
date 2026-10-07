@@ -11,10 +11,14 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
+from functools import lru_cache
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
+from tests.fixtures.images import PNG
 
 from research_canvas.server import listening
 
@@ -25,6 +29,41 @@ SAMPLE_DOC = (FIXTURES / "sample_doc.md").read_text(encoding="utf-8")
 
 DEV_ID = "e2e-test"
 STARTUP_TIMEOUT = 25.0
+
+
+class _PictureHandler(BaseHTTPRequestHandler):
+    """Serves the fixture PNG, and remembers it was asked, so a test can see who called."""
+
+    def do_GET(self):
+        self.server.hits.append(self.path)
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(PNG)))
+        self.end_headers()
+        self.wfile.write(PNG)
+
+    def log_message(self, *args):
+        pass
+
+
+@lru_cache(maxsize=1)
+def picture_server() -> ThreadingHTTPServer:
+    """A loopback host standing in for the open web, on a random port, for the session."""
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), _PictureHandler)
+    httpd.hits = []
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    return httpd
+
+
+@pytest.fixture(scope="session")
+def picture_port() -> int:
+    return picture_server().server_address[1]
+
+
+@pytest.fixture(scope="session")
+def picture_hits() -> list[str]:
+    """Every path the fixture host was asked for, by whoever asked."""
+    return picture_server().hits
 
 
 @pytest.fixture(scope="session")
@@ -49,6 +88,9 @@ def start_server(canvas_home: Path, dev_id: str) -> tuple[subprocess.Popen, str]
         "RESEARCH_CANVAS_HOME": str(canvas_home),
         "RESEARCH_CANVAS_CLAUDE": str(FAKE_CLAUDE),
         "PYTHONUNBUFFERED": "1",
+        # The fixture host is on loopback, which the fetch guard refuses unless told.
+        "RESEARCH_CANVAS_ALLOW_PRIVATE_FETCH": "1",
+        "FAKE_CLAUDE_IMAGE_URL": f"http://127.0.0.1:{picture_server().server_address[1]}/sample.png",
     }
     proc = subprocess.Popen(
         [sys.executable, "-m", "research_canvas.server"],

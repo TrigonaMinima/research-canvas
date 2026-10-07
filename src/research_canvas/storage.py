@@ -20,6 +20,7 @@ from itertools import count
 from . import md
 from .anchors import Anchor
 from .config import (
+    ASSET_DIR,
     BLANK_PRESET_MESSAGE,
     BLANK_TITLE_MESSAGE,
     BOX_DIR,
@@ -27,6 +28,7 @@ from .config import (
     CANVAS_ROOT,
     DEFAULT_ASK_PRESETS,
     FORMAT_VERSION,
+    IMAGE_TYPES,
     INSTRUCTIONS_FILE,
     INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
@@ -473,6 +475,29 @@ def delete_body(canvas_id: str, box_id: str) -> None:
     _body_path(canvas_id, box_id).unlink(missing_ok=True)
 
 
+# --- pictures -----------------------------------------------------------------
+# Named by the hash of their bytes, so the name is the only thing a URL can carry and a
+# strict pattern on it is the whole path-traversal guard.
+
+_ASSET_NAME = re.compile(rf"[0-9a-f]{{64}}\.(?:{'|'.join(IMAGE_TYPES)})")
+
+
+def asset_path(canvas_id: str, name: str):
+    if not _ASSET_NAME.fullmatch(name):
+        raise ValueError(f"not an asset name: {name!r}")
+    base = _dir(canvas_id)
+    if not (base / CANVAS_FILE).is_file():
+        raise CanvasNotFound(canvas_id)
+    return base / ASSET_DIR / name
+
+
+def write_asset(canvas_id: str, name: str, data: bytes) -> None:
+    path = asset_path(canvas_id, name)
+    # Same name means same bytes, so an existing file is already right.
+    if not path.exists():
+        _atomic_write(path, data)
+
+
 # --- renaming -----------------------------------------------------------------
 # Only the title changes. The id is the folder name, cut from the first title, and it
 # stays put so open tabs and saved links keep working.
@@ -626,12 +651,15 @@ def _merge_path(canvas_id: str, box_id: str):
 _TMP_SEQ = count()
 
 
-def _atomic_write(path, text: str) -> None:
+def _atomic_write(path, content: str | bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Unique per write: two writers sharing one temp name clobber each other.
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{next(_TMP_SEQ)}.tmp")
     try:
-        tmp.write_text(text, encoding="utf-8")
+        if isinstance(content, bytes):
+            tmp.write_bytes(content)
+        else:
+            tmp.write_text(content, encoding="utf-8")
         os.replace(tmp, path)
     except OSError:
         tmp.unlink(missing_ok=True)
