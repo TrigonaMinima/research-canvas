@@ -218,6 +218,10 @@ class Canvas:
 
     root_id: str = ROOT_BOX_ID
 
+    def searches(self, box: Box) -> bool:
+        """The canvas switch turns web search off as a whole; a question can only opt out."""
+        return self.web_search and box.web_search
+
     def box(self, box_id: str) -> Box:
         for box in self.boxes:
             if box.id == box_id:
@@ -339,7 +343,7 @@ def add_answer(
         parent=parent_id,
         status="pending",
         question=question,
-        web_search=canvas.web_search if web_search is None else web_search,
+        web_search=canvas.web_search and web_search is not False,
         created_at=_now(),
     )
     canvas.boxes.append(box)

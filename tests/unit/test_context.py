@@ -198,3 +198,38 @@ def test_should_not_merge_a_box_that_has_no_parent(merging):
     canvas, _left, _right = merging
     with pytest.raises(ValueError):
         context.build_merge_prompt(canvas, canvas.box(canvas.root_id), "")
+
+
+# --- the preamble follows the box's web switch --------------------------------
+
+OFFLINE_RULE = "Web search is off"
+
+
+def _asked(canvas, *, web_search):
+    box = storage.add_answer(
+        canvas, parent_id=canvas.root_id, question="Why?", web_search=web_search
+    )
+    return context.build_prompt(canvas, box)
+
+
+@pytest.fixture
+def fresh(canvas_root, sample_markdown):
+    return storage.create_canvas(sample_markdown)
+
+
+def test_should_tell_the_run_web_search_is_off_when_it_is_off(fresh):
+    assert OFFLINE_RULE in _asked(fresh, web_search=False)
+
+
+def test_should_not_tell_the_run_web_search_is_off_when_it_is_on(fresh):
+    assert OFFLINE_RULE not in _asked(fresh, web_search=True)
+
+
+def test_should_tell_the_run_web_search_is_off_when_the_canvas_switch_is_off(fresh):
+    box = storage.add_answer(fresh, parent_id=fresh.root_id, question="Why?")
+    fresh.web_search = False
+    assert OFFLINE_RULE in context.build_prompt(fresh, box)
+
+
+def test_should_keep_the_maths_rule_when_web_search_is_off(fresh):
+    assert "LaTeX" in _asked(fresh, web_search=False)

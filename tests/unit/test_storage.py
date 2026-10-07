@@ -491,3 +491,73 @@ def test_should_refuse_a_proposal_path_outside_the_canvas(proposal):
     canvas, _child = proposal
     with pytest.raises(storage.CanvasNotFound):
         storage.read_merge(canvas.id, "../../escape")
+
+
+# --- web search switch --------------------------------------------------------
+
+
+def test_should_default_a_new_canvas_to_web_search_on(canvas_root, sample_markdown):
+    assert storage.create_canvas(sample_markdown).web_search is True
+
+
+def test_should_create_a_canvas_with_web_search_off(canvas_root, sample_markdown):
+    assert storage.create_canvas(sample_markdown, web_search=False).web_search is False
+
+
+def test_should_emit_the_canvas_web_search_in_its_dict(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown, web_search=False)
+    assert canvas.to_dict()["webSearch"] is False
+
+
+def test_should_write_the_canvas_web_search_to_canvas_json(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown, web_search=False)
+    data = json.loads((canvas_root / canvas.id / config.CANVAS_FILE).read_text())
+    assert data["webSearch"] is False
+
+
+def test_should_read_the_canvas_web_search_back_from_disk(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown, web_search=False)
+    assert storage.load(canvas.id).web_search is False
+
+
+def test_should_read_an_old_canvas_file_without_web_search_as_on(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    path = canvas_root / canvas.id / config.CANVAS_FILE
+    data = json.loads(path.read_text())
+    data.pop("webSearch", None)
+    for box in data["boxes"]:
+        box.pop("webSearch", None)
+    path.write_text(json.dumps(data))
+    assert storage.load(canvas.id).web_search is True
+
+
+def test_should_give_the_root_box_the_canvas_web_search(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown, web_search=False)
+    assert canvas.box(canvas.root_id).web_search is False
+
+
+def test_should_let_an_answer_inherit_the_canvas_web_search(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown, web_search=False)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why?")
+    assert box.web_search is False
+
+
+def test_should_let_an_answer_turn_web_search_off_on_a_web_search_canvas(
+    canvas_root, sample_markdown
+):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why?", web_search=False)
+    assert box.web_search is False
+
+
+def test_should_emit_the_box_web_search_in_its_dict(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why?", web_search=False)
+    assert box.to_dict()["webSearch"] is False
+
+
+def test_should_keep_the_box_web_search_across_a_save_and_load(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why?", web_search=False)
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(box.id).web_search is False

@@ -49,6 +49,8 @@ const el = {
   findCount: $('[data-find-count]'),
   zoomLevel: $('[data-zoom-level]'),
   themeLabel: $('[data-theme-label]'),
+  canvasWeb: $('[data-canvas-web]'),
+  startWeb: $('[data-start-web]'),
   minimap: $('[data-minimap]'),
   miniSvg: $('[data-mini-svg]'),
   askLayer: $('[data-ask-layer]'),
@@ -232,6 +234,7 @@ function adopt(view) {
   // Every path that takes a new view reconciles reviews with it, including deleting the
   // box under review. Idempotent, so `open` calling it again once the boxes exist is free.
   syncReviews();
+  pressWeb(el.canvasWeb, view.webSearch);
 }
 
 // `loaded` lets the create path reuse the view it already has instead of re-fetching.
@@ -413,7 +416,7 @@ function listen(boxId) {
 
 // --- asking -------------------------------------------------------------------
 
-let ask = null; // { boxEl, offsets, rect, webSearch }
+let ask = null; // { boxEl, offsets, rect, anchorRect, webSearch }
 
 // One button per chip, in the order Settings put them. Text, never markup: a chip
 // label is the reader's own words.
@@ -482,10 +485,7 @@ function openAsk(boxEl, offsets, clientRect) {
     <label class="sr-only" for="ask-field">Your question</label>
     <textarea id="ask-field" data-ask-input placeholder="What do you want to know?"></textarea>
     <div class="ask__foot">
-      <button type="button" class="webtoggle" data-ask-web aria-pressed="true">
-        <span class="track" aria-hidden="true"><span class="knob"></span></span>
-        <span>Web search</span>
-      </button>
+      <button type="button" class="webtoggle" data-ask-web><span class="track" aria-hidden="true"><span class="knob"></span></span><span data-web-label></span></button>
       <span class="ask__hint">The answer lands beside this passage</span>
       <button type="button" class="btn-primary" data-ask-send>Ask</button>
     </div>`;
@@ -493,8 +493,7 @@ function openAsk(boxEl, offsets, clientRect) {
   const box = boxById(boxEl.dataset.box);
   node.querySelector('[data-ask-depth]').textContent = boxes.nameOf(box);
   node.querySelector('[data-ask-quote]').textContent = offsets.quote;
-  node.querySelector('[data-ask-web]').setAttribute(
-    'aria-pressed', String(state.canvas.webSearch));
+  paintAskWeb(node.querySelector('[data-ask-web]'));
 
   if (state.presets.length) node.querySelector('[data-ask-quote]').after(presetChips());
 
@@ -1533,6 +1532,48 @@ function setTheme(theme, remember = true) {
   if (state.canvas) api.patchCanvas(state.canvas.id, { theme: next }).catch(() => {});
 }
 
+// --- web search ---------------------------------------------------------------
+
+function pressWeb(button, on) { button.setAttribute('aria-pressed', String(on)); }
+
+// Disabled, not hidden, when the canvas is off: the label says why nothing will search.
+function paintAskWeb(button) {
+  const allowed = state.canvas.webSearch;
+  button.disabled = !allowed;
+  pressWeb(button, ask.webSearch);
+  button.querySelector('[data-web-label]').textContent =
+    allowed ? 'Web search' : 'Web search off for this canvas';
+}
+
+// The one place the canvas value changes, so the bar and an open question never disagree.
+// An open question follows it: off locks the question, and on again starts it from on.
+function applyCanvasWeb(on) {
+  state.canvas.webSearch = on;
+  pressWeb(el.canvasWeb, on);
+  const askWeb = el.askLayer.querySelector('[data-ask-web]');
+  if (ask && askWeb) { ask.webSearch = on; paintAskWeb(askWeb); }
+}
+
+function setCanvasWeb(on) {
+  const { id } = state.canvas;
+  applyCanvasWeb(on);
+  api.patchCanvas(id, { webSearch: on }).catch((error) => {
+    flash(error.message);
+    // Put the switch back only if the reader is still on this canvas and has not flipped it since.
+    if (state.canvas && state.canvas.id === id && state.canvas.webSearch === on) applyCanvasWeb(!on);
+  });
+}
+
+// Kept outside the tabs, so switching tabs never resets it.
+let startWeb = true;
+el.startWeb.addEventListener('click', () => {
+  startWeb = !startWeb;
+  pressWeb(el.startWeb, startWeb);
+});
+el.canvasWeb.addEventListener('click', () => {
+  if (state.canvas) setCanvasWeb(!state.canvas.webSearch);
+});
+
 // --- find ---------------------------------------------------------------------
 
 function runFind() {
@@ -1934,7 +1975,8 @@ document.addEventListener('click', (event) => {
 
   // Anything outside the popover dismisses it, including the click that does
   // something else. The selection that opened it lands after this, on a timeout.
-  if (ask && !popoverMoved && !hit('[data-ask]')) closeAsk();
+  // The bar's web switch is the exception: it changes what the open question may do.
+  if (ask && !popoverMoved && !hit('[data-ask]') && !hit('[data-keeps-ask]')) closeAsk();
   if (mergeAsk && !popoverMoved && !hit('[data-merge-ask]')) closeMergeAsk();
 
   // A modifier or non-primary click on any link belongs to the browser: that is how a
@@ -2073,10 +2115,10 @@ document.addEventListener('click', (event) => {
 
   if (hit('[data-ask-cancel]')) { closeAsk(); return; }
   if (hit('[data-ask-send]')) { submitAsk(); return; }
-  const web = hit('[data-ask-web]');
-  if (web) {
+  const askWeb = hit('[data-ask-web]');
+  if (askWeb) {
     ask.webSearch = !ask.webSearch;
-    web.setAttribute('aria-pressed', String(ask.webSearch));
+    paintAskWeb(askWeb);
     return;
   }
 
@@ -2161,7 +2203,7 @@ $('[data-create]').addEventListener('click', async () => {
   const markdown = el.paste.value;
   el.note.removeAttribute('data-refused');
   try {
-    const view = await api.createCanvas(markdown);
+    const view = await api.createCanvas(markdown, startWeb);
     await open(view.id, { fresh: true, loaded: view });
   } catch (error) {
     el.note.textContent = error.message;

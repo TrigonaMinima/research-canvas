@@ -8,18 +8,32 @@ from research_canvas import runner
 
 
 def test_should_pass_the_prompt_with_p():
-    command = runner.build_command("why?", web_search=False)
+    command = runner.build_command("why?", web_search=True)
     assert command[command.index("-p") + 1] == "why?"
 
 
-def test_should_allow_only_the_web_tools_when_web_search_is_on():
+def test_should_offer_the_web_tools_when_web_search_is_on():
     command = runner.build_command("why?", web_search=True)
     assert command[command.index("--tools") + 1] == "WebSearch,WebFetch"
 
 
-def test_should_allow_no_tools_at_all_when_web_search_is_off():
+def test_should_pre_allow_exactly_the_web_tools_when_web_search_is_on():
+    # dontAsk denies every tool that is not pre-allowed.
+    command = runner.build_command("why?", web_search=True)
+    assert command[command.index("--allowedTools") + 1] == "WebSearch,WebFetch"
+
+
+def test_should_offer_no_tools_when_web_search_is_off():
     command = runner.build_command("why?", web_search=False)
     assert command[command.index("--tools") + 1] == ""
+
+
+def test_should_pre_allow_no_tools_when_web_search_is_off():
+    assert "--allowedTools" not in runner.build_command("why?", web_search=False)
+
+
+def test_should_keep_the_sandbox_flags_when_web_search_is_off():
+    assert "--safe-mode" in runner.build_command("why?", web_search=False)
 
 
 def test_should_drop_personal_config_from_every_run():

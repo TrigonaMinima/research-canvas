@@ -498,6 +498,25 @@ Added with the rename feature. The counts in the sections above were not re-tota
 - `tests/e2e/test_chrome.py` (1) — the rename field does not push the view controls off a
   narrow bar.
 
+## Web search switches (73 new tests)
+
+- `tests/unit/test_storage.py` (+11) — a canvas defaults to web search on, keeps `webSearch`
+  through `canvas.json`, reads an old file without it as on, and gives it to the root box. An
+  answer inherits the canvas value and can turn it off for itself.
+- `tests/unit/test_runner.py` (+3) — with web search on, `--tools` and `--allowedTools` name
+  exactly the web tools; off, `--tools ""`, no `--allowedTools`, and the sandbox flags stay.
+- `tests/unit/test_context.py` (+4) — the prompt says search is off when the question or the
+  canvas has it off, and only then. The maths rule stays.
+- `tests/api/test_web_search.py` (26) — create and PATCH set `webSearch`, it shows on the
+  canvas and every box, a non-boolean PATCH gives 422. An ask inherits the canvas value, can
+  opt out, and is clamped off when the canvas is off. The runner gets `web_search` from the
+  canvas read when the run starts, so a canvas switched off while a question waits runs without
+  search.
+- `tests/e2e/test_web_search.py` (29) — one start-card toggle shared by both tabs, sent on
+  create. The chrome-bar switch reflects the canvas, PATCHes it, and survives a reload. The ask
+  toggle starts at the canvas value, flips one question only, and is disabled with "off for
+  this canvas" when the switch is off, following the switch while open.
+
 ## Fixtures
 
 | File | What it is |

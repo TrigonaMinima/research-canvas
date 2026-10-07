@@ -73,7 +73,8 @@ ANSWER_MODEL = os.environ.get("RESEARCH_CANVAS_MODEL", "sonnet")
 # Flags verified against Claude Code 2.1.273.
 #   --safe-mode          drops personal CLAUDE.md, skills, plugins, hooks, MCP servers
 #   --strict-mcp-config  ignores every configured MCP server
-#   --tools              explicit allowlist; "" means no tools at all
+#   --tools              the only tools the run has at all
+#   --allowedTools       pre-approves them; dontAsk silently denies anything not listed
 #   --no-session-persistence  nothing about the run is written to the user's history
 # --bare is deliberately NOT used: under it, auth is API-key only and the
 # keychain is never read, which breaks signed-in-plan usage.

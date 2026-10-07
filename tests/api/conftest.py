@@ -22,13 +22,15 @@ def fake_answer(monkeypatch):
     """Replace the Claude subprocess so tests never spend real usage.
 
     Every prompt the app would have sent lands in `make.prompts`, so a test can assert
-    what a run was told without standing up a stub of its own.
+    what a run was told without standing up a stub of its own, and the `web_search` each
+    run was given lands in `make.web_searches`.
     """
     from research_canvas import api, runner
 
     def make(events):
         async def fake_run(prompt, *, web_search):
             make.prompts.append(prompt)
+            make.web_searches.append(web_search)
             for event in events:
                 yield event
 
@@ -37,6 +39,7 @@ def fake_answer(monkeypatch):
 
     make.Event = runner.Event
     make.prompts = []
+    make.web_searches = []
     return make
 
 

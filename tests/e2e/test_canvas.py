@@ -146,14 +146,6 @@ def test_clicking_inside_the_ask_popover_keeps_it_open(canvas):
     expect(canvas.locator("[data-ask]")).to_be_visible()
 
 
-def test_web_search_is_on_by_default_and_can_be_turned_off(canvas):
-    highlight(canvas, "b1", QUOTE)
-    toggle = canvas.locator("[data-ask-web]")
-    expect(toggle).to_have_attribute("aria-pressed", "true")
-    toggle.click()
-    expect(toggle).to_have_attribute("aria-pressed", "false")
-
-
 # --- asking ---------------------------------------------------------------
 
 

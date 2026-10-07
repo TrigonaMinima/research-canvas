@@ -18,6 +18,12 @@ SYSTEM_PREAMBLE = (
     "mathematics as LaTeX: $...$ inline and $$...$$ on its own line for display."
 )
 
+# Said outright, so the run does not promise a search it has no tool for.
+OFFLINE_PREAMBLE = SYSTEM_PREAMBLE + (
+    " Web search is off for this question. Answer from the passages given and what you "
+    "already know."
+)
+
 
 MERGE_PREAMBLE = (
     "You are folding an answer back into the document a reader is reading. Return the "
@@ -48,7 +54,8 @@ def build_prompt(canvas: Canvas, box: Box) -> str:
         raise ValueError(f"box {box.id} has no question to ask")
 
     # Beside the preamble, not beside the question: these are rules, not the ask.
-    parts: list[str] = [SYSTEM_PREAMBLE, "", *instructions_block()]
+    preamble = SYSTEM_PREAMBLE if canvas.searches(box) else OFFLINE_PREAMBLE
+    parts: list[str] = [preamble, "", *instructions_block()]
     chain = canvas.path_to(box.id)
 
     for step in chain[:-1]:

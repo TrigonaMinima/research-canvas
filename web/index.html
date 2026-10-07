@@ -53,6 +53,10 @@
       <button type="button" class="chrome-btn" data-select-mode aria-pressed="false"
               title="Drag to select boxes instead of moving the desk">Select</button>
 
+      <!-- Short in the bar, which has no width to spare at 1100px; aria-label has the full name.
+           data-keeps-ask: it acts on an open question, so a click on it must not close it. -->
+      <button type="button" class="webtoggle" data-canvas-web data-keeps-ask aria-pressed="true"
+              aria-label="Web search" title="Web search for this canvas"><span class="track" aria-hidden="true"><span class="knob"></span></span><span>Web</span></button>
       <button type="button" class="chrome-btn" data-theme-toggle aria-label="Switch theme">
         <span data-theme-label>Dark</span>
       </button>
@@ -133,11 +137,16 @@
     </p>
 
     <div class="card">
-      <div class="tabs" role="tablist" aria-label="How to start">
-        <button type="button" role="tab" id="tab-paste" aria-controls="panel-paste"
-                aria-selected="true" data-tab="paste">Paste markdown</button>
-        <button type="button" role="tab" id="tab-research" aria-controls="panel-research"
-                aria-selected="false" data-tab="research">Research a topic</button>
+      <!-- The switch sits beside the tabs, not in a panel: either way of starting
+           makes a canvas, and the choice should not reset when the tab does. -->
+      <div class="card__head">
+        <div class="tabs" role="tablist" aria-label="How to start">
+          <button type="button" role="tab" id="tab-paste" aria-controls="panel-paste"
+                  aria-selected="true" data-tab="paste">Paste markdown</button>
+          <button type="button" role="tab" id="tab-research" aria-controls="panel-research"
+                  aria-selected="false" data-tab="research">Research a topic</button>
+        </div>
+        <button type="button" class="webtoggle" data-start-web aria-pressed="true"><span class="track" aria-hidden="true"><span class="knob"></span></span><span>Web search</span></button>
       </div>
 
       <div role="tabpanel" id="panel-paste" aria-labelledby="tab-paste" data-panel="paste">

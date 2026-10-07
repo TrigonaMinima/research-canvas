@@ -81,6 +81,7 @@ class AskBody(BaseModel):
     # The browser sends the width it laid the box out with; the server clamps it again.
     w: float | None = Field(default=None, ge=MIN_BOX_WIDTH, le=MAX_BOX_WIDTH)
     anchor: AnchorBody | None = None
+    # None takes the canvas's setting.
     webSearch: bool | None = None
 
 
@@ -397,29 +398,28 @@ async def stream(canvas_id: str, box_id: str) -> StreamingResponse:
     prompt = context.build_prompt(canvas, box)
 
     return StreamingResponse(
-        _run_and_save(canvas.id, box_id, prompt, box.web_search),
+        _run_and_save(canvas.id, box_id, prompt),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 
 
-async def _run_and_save(
-    canvas_id: str, box_id: str, prompt: str, web_search: bool
-) -> AsyncIterator[str]:
+async def _run_and_save(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]:
     """Stream one answer, saving as it goes so a force-quit never loses the question."""
     with storage.live(canvas_id, box_id):
-        async for chunk in _drive(canvas_id, box_id, prompt, web_search):
+        async for chunk in _drive(canvas_id, box_id, prompt):
             yield chunk
 
 
-async def _drive(canvas_id: str, box_id: str, prompt: str, web_search: bool) -> AsyncIterator[str]:
+async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]:
     queued = _slots.locked()
     if queued:
         _set_status(canvas_id, box_id, "queued")
         yield _sse("status", {"status": "queued"})
 
     async with _slots:
-        _set_status(canvas_id, box_id, "running")
+        # Read now, not when asked: the canvas switch may have gone off while this queued.
+        web_search = _set_status(canvas_id, box_id, "running")
         yield _sse("status", {"status": "running"})
 
         collected: list[str] = []
@@ -460,12 +460,15 @@ def _finish(canvas_id: str, box_id: str, text: str, status: str, reason: str) ->
     return md.render(text)
 
 
-def _set_status(canvas_id: str, box_id: str, status: str) -> None:
+def _set_status(canvas_id: str, box_id: str, status: str) -> bool:
+    """Record the status. Says whether the run may search, read in the same pass."""
     try:
         with storage.edit(canvas_id) as canvas:
-            canvas.box(box_id).status = status
+            box = canvas.box(box_id)
+            box.status = status
+            return canvas.searches(box)
     except (KeyError, storage.CanvasNotFound):
-        return
+        return False
 
 
 def _sse(event: str, data: dict) -> str:

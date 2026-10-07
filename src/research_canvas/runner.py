@@ -36,12 +36,16 @@ class Event:
 
 
 def build_command(prompt: str, *, web_search: bool) -> list[str]:
+    # dontAsk denies every tool not pre-allowed, so without --allowedTools the run is
+    # offered the web tools and then silently refused them.
+    tools = (
+        ["--tools", WEB_TOOLS, "--allowedTools", WEB_TOOLS] if web_search else ["--tools", NO_TOOLS]
+    )
     return [
         CLAUDE_BIN,
         "-p",
         prompt,
-        "--tools",
-        WEB_TOOLS if web_search else NO_TOOLS,
+        *tools,
         "--model",
         ANSWER_MODEL,
         *SANDBOX_FLAGS,

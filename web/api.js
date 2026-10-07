@@ -20,8 +20,8 @@ const asJson = (body) => ({
 export const api = {
   listCanvases: () => send('/api/canvases'),
 
-  createCanvas: (markdown) =>
-    send('/api/canvases', { method: 'POST', ...asJson({ markdown }) }),
+  createCanvas: (markdown, webSearch) =>
+    send('/api/canvases', { method: 'POST', ...asJson({ markdown, webSearch }) }),
 
   readCanvas: (id) => send(`/api/canvases/${id}`),
 

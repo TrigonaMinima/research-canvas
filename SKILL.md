@@ -41,10 +41,29 @@ To inspect it outside the app, read those files directly: they are plain markdow
 
 Each question spawns a headless `claude -p` run that is sandboxed on purpose: no local file
 access, no shell, no personal CLAUDE.md, no skills, no MCP servers. Web search and web fetch
-are the only tools, and only when the canvas has web search on.
+are the only tools, and only when web search is on for the question.
 
 The run receives the **path only**: the root document, the ancestors of the box being asked
 from, the highlighted passage, and the question. Sibling branches are never sent.
+
+## Web search
+
+```
+start card toggle ──► canvas webSearch ──► chrome-bar switch (same value, change any time)
+                                │
+                                ▼
+                    ask popover toggle: starts at the canvas value
+                    run searches only if canvas AND question say on
+```
+
+The start card has one Web search toggle, shared by both tabs, on by default. The canvas
+keeps that choice as `webSearch` in `canvas.json`. The switch in the chrome bar changes it.
+Off turns web search off for the whole canvas: each ask toggle is greyed out, and the server
+refuses the web tools even for a question that asks for them. The server reads the switch
+again when a run starts, so a queued question obeys a switch flipped after it was asked.
+With the canvas on, each question can turn search off for itself.
+
+A run without search gets no tools at all, and its prompt says search is off.
 
 ## Renaming a canvas
 
