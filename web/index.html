@@ -162,13 +162,22 @@
       <div role="tabpanel" id="panel-research" aria-labelledby="tab-research"
            data-panel="research" hidden>
         <label class="sr-only" for="topic-field">Topic to research</label>
-        <input type="text" id="topic-field" data-topic placeholder="A question worth an afternoon">
-        <p class="empty__note--research" data-research-note>
-          A research run reads the web and writes the document for you. It is next on the list,
-          not in this build.
-        </p>
+        <div class="empty__topic">
+          <textarea id="topic-field" data-topic rows="1"
+                    placeholder="A question worth an afternoon"></textarea>
+          <button type="button" class="btn-draft" data-research-draft>Draft the brief</button>
+        </div>
+        <div class="empty__brief" data-research-brief hidden>
+          <div class="empty__briefhead">
+            <label for="brief-field">Research brief</label>
+            <span class="dot-pulse" data-research-dot-top aria-hidden="true" hidden></span>
+          </div>
+          <textarea id="brief-field" data-research-prompt spellcheck="false"></textarea>
+        </div>
         <div class="empty__row">
-          <button type="button" class="btn-disabled" data-research-start disabled>Start research</button>
+          <span class="dot-pulse" data-research-dot aria-hidden="true" hidden></span>
+          <span class="empty__note" data-research-note></span>
+          <button type="button" class="btn-create" data-research-start disabled>Start research</button>
         </div>
       </div>
     </div>

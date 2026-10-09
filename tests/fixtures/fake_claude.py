@@ -15,6 +15,12 @@ Failure paths are chosen per run, so one server can serve every test: put
 `[[fake:long]]`, `[[fake:badjson]]`, `[[fake:onechunk]]`, or `[[fake:images]]` (answers with a
 picture from FAKE_CLAUDE_IMAGE_URL) in the question or the merge guidance.
 FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things for every run.
+
+The two research prompts are recognised by their headings (config.EXPAND_SENTINEL and
+config.RESEARCH_SENTINEL, repeated here because this file must run with no imports from
+the app). A brief gets a canned brief about the topic. A research run searches, fetches,
+and writes a report, in the event shapes of tests/fixtures/stream_research.jsonl.
+`[[fake:noweb]]` makes it write the report without ever touching the web.
 """
 
 from __future__ import annotations
@@ -60,6 +66,75 @@ def merge_chunks(mode: str) -> list[str]:
     return [json.dumps(edit) + "\n" for edit in edits]
 
 
+EXPAND_SENTINEL = "## Topic to expand into a research brief"
+RESEARCH_SENTINEL = "## Research brief"
+
+QUERY = "python releases overview"
+FETCHED = "https://www.python.org/downloads/"
+FOUND = "https://example.org/python-guide"
+UNCITED = "https://example.org/junk-result"
+UNSEEN = "https://example.org/never-opened"
+
+
+def after(prompt: str, heading: str) -> str:
+    return prompt.split(heading, 1)[1].strip()
+
+
+def brief_chunks(prompt: str) -> list[str]:
+    topic = after(prompt, EXPAND_SENTINEL)
+    return [
+        f"## Goal\n\nUnderstand {topic}.\n\n",
+        f"## Key sub-questions\n\n1. What is the current state of {topic}?\n",
+    ]
+
+
+def report(prompt: str) -> str:
+    # The last line of the brief comes back in the report, so a test can prove that
+    # the brief the reader edited is the one the run was given.
+    last = after(prompt, RESEARCH_SENTINEL).splitlines()[-1]
+    return (
+        "# Python releases: a short report\n\n"
+        f"The stable release is on the [downloads page]({FETCHED}). "
+        f"A [guide]({FOUND}) gives an overview. "
+        f"One figure comes from [a page nobody opened]({UNSEEN}).\n\n"
+        f"The brief ended with: {last}\n"
+    )
+
+
+def text(chunk: str) -> dict:
+    return {
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": chunk},
+        },
+    }
+
+
+def tool_call(name: str, given: dict) -> dict:
+    block = {"type": "tool_use", "id": f"toolu_{name}", "name": name, "input": given}
+    return {"type": "assistant", "message": {"role": "assistant", "content": [block]}}
+
+
+def tool_result(result: dict) -> dict:
+    return {
+        "type": "user",
+        "message": {"role": "user", "content": [{"type": "tool_result", "content": "…"}]},
+        "tool_use_result": result,
+    }
+
+
+def web_steps() -> list[dict]:
+    hits = [{"title": "A guide", "url": FOUND}, {"title": "Junk", "url": UNCITED}]
+    return [
+        text("Let me search for that."),
+        tool_call("WebSearch", {"query": QUERY}),
+        tool_result({"query": QUERY, "results": [{"content": hits}, "A summary string."]}),
+        tool_call("WebFetch", {"url": FETCHED, "prompt": "What is the latest release?"}),
+        tool_result({"code": 200, "codeText": "OK", "url": FETCHED, "result": "…"}),
+    ]
+
+
 def emit(payload: dict) -> None:
     sys.stdout.write(json.dumps(payload) + "\n")
     sys.stdout.flush()
@@ -95,9 +170,19 @@ def main() -> int:
     if mode == "crash":
         return 1  # Dies without a result event, the way a killed process would.
 
+    final = None
     if MERGE_MARK in prompt:
         chunks = merge_chunks(mode)
         mode = "ok" if mode == "badjson" else mode
+    elif RESEARCH_SENTINEL in prompt:
+        for step in [] if mode == "noweb" else web_steps():
+            emit(step)
+            if delay:
+                time.sleep(delay)
+        final = report(prompt)
+        chunks = [final]
+    elif EXPAND_SENTINEL in prompt:
+        chunks = brief_chunks(prompt)
     elif mode == "long":
         # One chunk per paragraph, each followed by a blank line so the markdown
         # renderer breaks them apart rather than folding them into one <p>.
@@ -114,15 +199,7 @@ def main() -> int:
             f"[prompt-bytes:{len(prompt)}]",
         ]
     for chunk in chunks:
-        emit(
-            {
-                "type": "stream_event",
-                "event": {
-                    "type": "content_block_delta",
-                    "delta": {"type": "text_delta", "text": chunk},
-                },
-            }
-        )
+        emit(text(chunk))
         if delay:
             time.sleep(delay)
 
@@ -138,6 +215,7 @@ def main() -> int:
             "type": "result",
             "subtype": "success",
             "stop_reason": "end_turn",
+            "result": final if final is not None else "".join(chunks),
             "total_cost_usd": 0.0,
             "usage": {"server_tool_use": {"web_search_requests": 1 if tools else 0}},
         }

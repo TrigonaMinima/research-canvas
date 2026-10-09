@@ -27,12 +27,21 @@ const rendered = new WeakMap(); // box element -> signature of what its body sho
 // taller than when it was measured, and only the owner of the canvas can reseat it.
 export const GREW = 'box-grew';
 
+// "1 answer", "2 answers". Said in one place: counts are worded all over the app.
+export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// A long run makes dozens of searches. The log shows where it is now, not its history.
+const ACTIVITY_SHOWN = 8;
+const RETRY_RESEARCH = 'Retry research';
+
 // `detail` is what a run says it is doing, when it says anything at all.
-export function waitLabel(box, queuedAhead, detail) {
+export function waitLabel(box, queuedAhead, detail, research) {
   if (box.status === 'queued') {
-    return `Queued — ${queuedAhead} answer${queuedAhead === 1 ? '' : 's'} running`;
+    return `Queued — ${plural(queuedAhead, 'answer')} running`;
   }
-  return detail || (box.webSearch ? 'Searching the web…' : 'Thinking…');
+  if (detail) return detail;
+  if (research) return 'Researching the web…';
+  return box.webSearch ? 'Searching the web…' : 'Thinking…';
 }
 
 // From the picture, not the box: a body rebuilt before its old pictures land has
@@ -109,6 +118,9 @@ function create(box) {
               aria-controls="toc-${box.id}">Contents (<span data-toc-count></span>)</button>
       <ol class="box__toc-list" id="toc-${box.id}" data-toc-list hidden></ol>
     </div>
+    ${child ? '' : `
+    <ol class="box__activity" data-activity aria-label="What the run is doing" hidden></ol>
+    <p class="box__flag" data-sources-flag hidden></p>`}
     <div class="prose${child ? '' : ' prose--root'}" data-body></div>
     <div class="box__stopped" data-stopped hidden>
       <p class="box__reason" data-reason></p>
@@ -128,6 +140,31 @@ export function ensure(layer, box) {
     layer.append(el);
   }
   return el;
+}
+
+// Text only: a query and an address both come from outside, and neither is ours to
+// trust with markup. Rebuilt only when a step is added, since this runs per text chunk.
+function drawActivity(list, steps, waiting) {
+  list.hidden = !waiting || steps.length === 0;
+  if (list.hidden || Number(list.dataset.count) === steps.length) return;
+  list.dataset.count = steps.length;
+  const earlier = steps.length - ACTIVITY_SHOWN;
+  const lines = steps.slice(-ACTIVITY_SHOWN).map((step) =>
+    (step.kind === 'search' ? `Search: ${step.query}` : `Read: ${step.url}`));
+  if (earlier > 0) lines.unshift(plural(earlier, 'earlier step'));
+  list.replaceChildren(...lines.map((line, i) => {
+    const li = document.createElement('li');
+    li.textContent = line;
+    if (earlier > 0 && i === 0) li.dataset.more = '1';
+    return li;
+  }));
+}
+
+function flagText(count) {
+  const one = count === 1;
+  return `${plural(count, 'citation')} in this report ${one ? 'was' : 'were'} not seen `
+    + `during the run. ${one ? 'It is' : 'They are'} listed at the end: check before relying on `
+    + `${one ? 'it' : 'them'}.`;
 }
 
 // The one writer of the focus mark, so app.js can move it without a full update.
@@ -156,7 +193,7 @@ function showToc(el, box, hide) {
 
 export function update(el, box, {
   html, anchors, inbound, parent, liveText, waitDetail, queuedAhead, editing, selected, focused,
-  merging, reviewing, mergedTargets,
+  merging, reviewing, mergedTargets, research = null, activity = [],
 }) {
   el.dataset.status = box.status;
   el.style.left = `${box.x}px`;
@@ -205,13 +242,28 @@ export function update(el, box, {
   }
 
   const question = el.querySelector('[data-question]');
-  question.textContent = box.question;
-  question.hidden = !box.question;
+  // A researched document was asked for too: its topic sits where a question would.
+  const asked = research ? research.topic : box.question;
+  question.textContent = asked;
+  question.hidden = !asked;
 
   const waiting = UNFINISHED.has(box.status);
   const wait = el.querySelector('[data-wait]');
   wait.hidden = !waiting;
-  if (waiting) el.querySelector('[data-wait-label]').textContent = waitLabel(box, queuedAhead, waitDetail);
+  if (waiting) {
+    el.querySelector('[data-wait-label]').textContent =
+      waitLabel(box, queuedAhead, waitDetail, research);
+  }
+
+  if (research) {
+    drawActivity(el.querySelector('[data-activity]'), activity, waiting);
+    const unseen = research.unverified.length;
+    const flag = el.querySelector('[data-sources-flag]');
+    flag.hidden = editing || box.status !== 'done' || unseen === 0;
+    if (!flag.hidden) flag.textContent = flagText(unseen);
+    const retry = el.querySelector('[data-retry]');
+    if (retry.textContent !== RETRY_RESEARCH) retry.textContent = RETRY_RESEARCH;
+  }
 
   const stopped = el.querySelector('[data-stopped]');
   stopped.hidden = !(box.status === 'failed' || box.status === 'interrupted');

@@ -21,6 +21,7 @@ from tests.fixtures.contract import (
     MERGE_STREAM_EVENTS,
     PRESET_KEYS,
     PRESETS_KEYS,
+    RESEARCH_KEYS,
     STREAM_EVENTS,
     SUMMARY_KEYS,
     VIEW_KEYS,
@@ -190,3 +191,9 @@ def test_saving_a_review_answers_in_the_documented_shape(client, canvas, reviewe
         json={"proposed": reviewed["proposed"]},
     ).json()
     assert set(patched) == MERGE_ACK_KEYS
+
+
+def test_a_research_canvas_carries_the_documented_research_keys(client):
+    body = {"topic": "python releases", "prompt": "Find the latest."}
+    view = client.post("/api/research", json=body).json()
+    assert set(view["research"]) == RESEARCH_KEYS

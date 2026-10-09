@@ -5,7 +5,7 @@ PY := $(UV) run
 DEV_ID ?=
 export DEV_ID
 
-.PHONY: help install dev stop url test test-unit test-api test-e2e test-sandbox lint fmt vendor link unlink clean
+.PHONY: help install dev stop url test test-unit test-api test-e2e test-sandbox test-research-live lint fmt vendor link unlink clean
 
 help:
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sed 's/:.*## /\t/' | column -t -s "$$(printf '\t')"
@@ -36,6 +36,9 @@ test-e2e: ## Playwright over every UI element, plus web-standards checks
 
 test-sandbox: ## Prove a run cannot see local config, files, or MCP servers (US-7)
 	$(PY) pytest tests/api -q -m live -k sandbox -s
+
+test-research-live: ## One real research run, end to end through the parser (spends usage)
+	$(PY) pytest tests/api -q -m live -k research -s
 
 lint: ## Static checks
 	$(PY) ruff check .

@@ -34,6 +34,25 @@ def test_should_give_a_run_no_tools_when_web_search_is_off():
     assert init.tools == []
 
 
+@pytest.mark.live
+def test_should_refuse_a_web_run_none_of_its_tools(search_events):
+    """`--tools` lists a tool; only `--allowedTools` lets a dontAsk run use it."""
+    assert [e.text for e in search_events if e.kind == "denied"] == []
+
+
+@pytest.mark.live
+def test_should_show_a_web_run_the_pages_it_searched(search_events):
+    assert [url for e in search_events if e.kind == "results" for url in e.urls]
+
+
+# One run for both tests: each one spends usage.
+@pytest.fixture(scope="module")
+def search_events() -> list[runner.Event]:
+    prompt = "Search the web once for the latest stable Python release. Answer in one line."
+    out = _run(runner.build_command(prompt, web_search=True))
+    return list(runner.parse_stream(out.splitlines()))
+
+
 def _run(command: list[str], cwd=None) -> str:
     result = subprocess.run(
         command, check=False, capture_output=True, text=True, timeout=180, cwd=cwd

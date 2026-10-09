@@ -4,6 +4,7 @@
 const served = await fetch('/api/config').then((r) => r.json());
 
 export const DISPLAY_NAME = served.displayName;
+export const HARD_RELOAD_ATTR = served.hardReloadAttr;
 export const MIN_SCALE = served.minScale;
 export const MAX_SCALE = served.maxScale;
 export const MIN_BOX_WIDTH = served.minBoxWidth;
@@ -23,6 +24,11 @@ export const REVIEW_WIDTH = served.reviewWidth;
 export const REVIEW_MARGIN = served.reviewMargin;
 export const MIN_TOC_HEADINGS = served.minTocHeadings;
 export const TOC_MAX_LEVEL = served.tocMaxLevel;
+export const BLANK_TOPIC_MESSAGE = served.blankTopicMessage;
+export const BRIEF_CRASHED_REASON = served.briefCrashedReason;
+export const MAX_TOPIC_CHARS = served.maxTopicChars;
+export const MAX_RESEARCH_PROMPT_CHARS = served.maxResearchPromptChars;
+export const RESEARCH_PROMPT_TOO_LONG_MESSAGE = served.researchPromptTooLongMessage;
 
 // Statuses that mean a run has not settled yet.
 export const UNFINISHED = new Set(served.unfinished);

@@ -28,9 +28,10 @@ def fake_answer(monkeypatch):
     from research_canvas import api, runner
 
     def make(events):
-        async def fake_run(prompt, *, web_search):
+        async def fake_run(prompt, *, web_search, model=None):
             make.prompts.append(prompt)
             make.web_searches.append(web_search)
+            make.calls.append({"web_search": web_search, "model": model})
             for event in events:
                 yield event
 
@@ -40,6 +41,7 @@ def fake_answer(monkeypatch):
     make.Event = runner.Event
     make.prompts = []
     make.web_searches = []
+    make.calls = []
     return make
 
 

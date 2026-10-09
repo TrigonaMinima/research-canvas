@@ -23,6 +23,12 @@ export const api = {
   createCanvas: (markdown, webSearch) =>
     send('/api/canvases', { method: 'POST', ...asJson({ markdown, webSearch }) }),
 
+  // A stream, so the brief is read as it is written. The address, not the call.
+  expandUrl: (topic) => `/api/research/expand?topic=${encodeURIComponent(topic)}`,
+
+  startResearch: (topic, prompt) =>
+    send('/api/research', { method: 'POST', ...asJson({ topic, prompt }) }),
+
   readCanvas: (id) => send(`/api/canvases/${id}`),
 
   patchCanvas: (id, patch) =>

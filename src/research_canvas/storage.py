@@ -36,6 +36,7 @@ from .config import (
     MAX_PRESET_LABEL_CHARS,
     MAX_PRESET_QUESTION_CHARS,
     MAX_PRESETS,
+    MAX_RESEARCH_TITLE_CHARS,
     MAX_SLUG_CHARS,
     MAX_TITLE_CHARS,
     MERGE_DIR,
@@ -45,6 +46,8 @@ from .config import (
     PRESET_QUESTION_TOO_LONG_MESSAGE,
     PRESETS_FILE,
     PRESETS_UNREADABLE_MESSAGE,
+    RESEARCH_FILE,
+    RESEARCH_MODEL,
     ROOT_BOX_ID,
     ROOT_BOX_WIDTH,
     ROOT_DOC_FILE,
@@ -299,6 +302,25 @@ def create_canvas(markdown: str, *, web_search: bool = True) -> Canvas:
         raise ImportRefused(REFUSED_MESSAGE)
 
     title = md.first_heading(markdown) or "Untitled"
+    canvas = _new_canvas(title, root_status="done", web_search=web_search)
+    write_body(canvas.id, ROOT_BOX_ID, markdown)
+    save(canvas)
+    return canvas
+
+
+def create_research_canvas(topic: str, prompt: str) -> Canvas:
+    """A canvas whose root is still to be written, by a run that reads the web."""
+    # A topic may run over several lines; a title is one.
+    title = " ".join(topic.split())[:MAX_RESEARCH_TITLE_CHARS].strip() or "Untitled"
+    # Web search is not a choice here: a report from memory is what the reader ruled out.
+    canvas = _new_canvas(title, root_status="pending", web_search=True)
+    write_body(canvas.id, ROOT_BOX_ID, "")
+    write_research(canvas.id, {"topic": topic.strip(), "prompt": prompt, **_NO_FINDINGS})
+    save(canvas)
+    return canvas
+
+
+def _new_canvas(title: str, *, root_status: str, web_search: bool) -> Canvas:
     now = _now()
     canvas = Canvas(
         id=_reserve_id(title),
@@ -314,16 +336,55 @@ def create_canvas(markdown: str, *, web_search: bool = True) -> Canvas:
                 y=0.0,
                 w=float(ROOT_BOX_WIDTH),
                 depth=0,
-                status="done",
+                status=root_status,
                 web_search=web_search,
                 created_at=now,
             )
         ],
     )
     (_dir(canvas.id) / BOX_DIR).mkdir(parents=True, exist_ok=True)
-    write_body(canvas.id, ROOT_BOX_ID, markdown)
-    save(canvas)
     return canvas
+
+
+# --- research from a topic ----------------------------------------------------
+# One file per researched canvas, beside canvas.json. Its presence is what marks a
+# canvas as researched, so canvas.json keeps its shape and older canvases still load.
+
+# What one run leaves behind. Reset as a set, so a retry starts from nothing.
+_NO_FINDINGS = {
+    "model": RESEARCH_MODEL,
+    "activity": [],
+    "seen": [],
+    "cited": [],
+    "unverified": [],
+    "finishedAt": None,
+}
+
+
+def read_research(canvas_id: str) -> dict | None:
+    try:
+        return json.loads((_dir(canvas_id) / RESEARCH_FILE).read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
+
+
+def write_research(canvas_id: str, data: dict) -> None:
+    _write_json(_dir(canvas_id) / RESEARCH_FILE, data)
+
+
+def update_research(canvas_id: str, **fields) -> dict:
+    with _lock_for(canvas_id):
+        data = {**(read_research(canvas_id) or {}), **fields}
+        write_research(canvas_id, data)
+        return data
+
+
+def reset_research(canvas_id: str) -> dict:
+    return update_research(canvas_id, **_NO_FINDINGS)
+
+
+def finished_now() -> str:
+    return _now()
 
 
 def add_answer(
@@ -434,9 +495,7 @@ def load(canvas_id: str) -> Canvas:
 
 def save(canvas: Canvas) -> None:
     canvas.updated_at = _now()
-    # Serialise before touching the file, so a failure here cannot truncate the old one.
-    payload = json.dumps(canvas.to_dict(), indent=2, ensure_ascii=False) + "\n"
-    _atomic_write(_dir(canvas.id) / CANVAS_FILE, payload)
+    _write_json(_dir(canvas.id) / CANVAS_FILE, canvas.to_dict())
 
 
 def list_canvases() -> list[CanvasSummary]:
@@ -544,8 +603,7 @@ def read_merge(canvas_id: str, box_id: str) -> Proposal | None:
 def write_merge(canvas_id: str, proposal: Proposal) -> None:
     if not proposal.created_at:
         proposal.created_at = _now()
-    payload = json.dumps(proposal.to_dict(), indent=2, ensure_ascii=False) + "\n"
-    _atomic_write(_merge_path(canvas_id, proposal.child), payload)
+    _write_json(_merge_path(canvas_id, proposal.child), proposal.to_dict())
 
 
 def delete_merge(canvas_id: str, box_id: str) -> None:
@@ -602,8 +660,7 @@ def read_presets() -> list[dict]:
 def write_presets(presets: Iterable[dict]) -> list[dict]:
     """Store the chips trimmed, and hand back exactly what was stored."""
     cleaned = _clean_presets(presets)
-    body = json.dumps({"presets": cleaned}, ensure_ascii=False, indent=2)
-    _atomic_write(CANVAS_ROOT / PRESETS_FILE, body + "\n")
+    _write_json(CANVAS_ROOT / PRESETS_FILE, {"presets": cleaned})
     return cleaned
 
 
@@ -668,6 +725,11 @@ def _atomic_write(path, content: str | bytes) -> None:
     except OSError:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def _write_json(path, data: dict) -> None:
+    # Serialise before touching the file, so a failure here cannot truncate the old one.
+    _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
 
 
 def _clamp_width(w: float) -> float:

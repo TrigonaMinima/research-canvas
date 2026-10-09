@@ -57,14 +57,6 @@ def test_research_tab_shows_a_disabled_start_button(app):
     expect(app.locator("[data-research-start]")).to_be_disabled()
 
 
-def test_research_start_explains_why_it_is_off(app):
-    app.click('[data-tab="research"]')
-    app.click("[data-research-note]")
-    expect(app.locator("[data-toast]")).to_have_text(
-        "Research runs are P1 — not in the v1 skeleton"
-    )
-
-
 def test_refuses_a_paste_that_is_too_short(app):
     app.fill("[data-paste]", SHORT_PASTE)
     app.click("[data-create]")

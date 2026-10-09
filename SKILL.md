@@ -36,6 +36,7 @@ canvases/<slug>/root.md       the imported document, verbatim
 canvases/<slug>/boxes/<id>.md one file per answer
 canvases/<slug>/merges/<id>.json a merge waiting to be reviewed
 canvases/<slug>/assets/       pictures, named by the hash of their bytes
+canvases/<slug>/research.json researched canvases only: topic, brief, run log, citations
 ```
 
 To resume earlier research, open the app and pick the canvas from the "Canvases" list.
@@ -85,6 +86,25 @@ A canvas is named after the first heading of its document. Click the title in th
 to change it: `Enter` saves, `Esc` or a click elsewhere discards. Only `title` in
 `canvas.json` changes. The folder name, which is the id and the `?c=` link, is the date plus
 a slug of the first title, cut at 48 characters, and it never changes.
+## Researching a topic
+
+The "Research a topic" tab on the first screen starts from a topic instead of a document.
+A short run (the answer model, no tools) drafts a detailed brief. The user edits it, and
+nothing is researched until they start it. The research run (`RESEARCH_CANVAS_RESEARCH_MODEL`,
+default `opus`) then writes the root box of a new canvas, live, with a log of each search
+and each page read.
+
+The topic and the brief survive a plain refresh: the page keeps them in `sessionStorage`
+for the life of the tab. A hard refresh clears them. The page cannot tell the two apart, so
+the server marks the shell when the request carries `Cache-Control: no-cache`.
+
+It is the same sandbox with the two web tools on. The prompt forbids facts from memory
+and asks for a link per claim. The server checks the links against the pages the run was
+shown, appends a Sources list, and lists apart any link the run never saw. A run that
+never reached the web is saved as failed, not as a report.
+
+A run lives as long as its browser tab. A reload leaves the root interrupted, with
+"Retry research".
 
 ## Settings
 

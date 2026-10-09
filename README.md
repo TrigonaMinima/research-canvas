@@ -46,8 +46,22 @@ plain files in a folder you own. The only thing that leaves is the Claude reques
 
 Answers stream in as they are written. Nothing on the canvas moves while you read.
 
-The empty state has a second tab, "Research a topic", which reads the web and writes the
-document for you. It is visible but disabled. It is not in this build.
+The empty state has a second tab, "Research a topic", for when there is no document yet:
+
+1. Type a topic and draft a brief. A short run turns the topic into a detailed research
+   brief: goal, scope, sub-questions, angles, sources to prefer, report structure.
+2. Read the brief and edit it. Nothing is researched until you start it.
+3. Start. A new canvas opens, and its document box is the report, written live. The box
+   lists each search and each page read as it happens.
+
+The run is told to use the web only, to take nothing from memory, and to link every claim
+to the page it came from. A prompt can only ask for that, so the server also checks: it
+keeps the list of pages the run was shown, and compares the report's links against it. The
+report ends with a Sources list of what it cites, and a link the run never saw is listed
+apart, under "Cited, but not seen during the run", with a note on the box.
+
+A run lives as long as its browser tab. Leave or reload in the middle and the report is
+marked interrupted, with a "Retry research" button that starts it again from the brief.
 
 ## Requirements
 
@@ -122,6 +136,8 @@ canvases/<slug>/canvas.json       boxes, anchors, camera, theme, formatVersion
 canvases/<slug>/root.md           the imported document, verbatim
 canvases/<slug>/boxes/<id>.md     one file per answer
 canvases/<slug>/merges/<id>.json  a merge proposal waiting to be reviewed
+canvases/<slug>/research.json     a researched canvas only: topic, brief, model, the
+                                  searches and pages of the run, and its checked citations
 ```
 
 A slug is the date plus the document's first heading, trimmed to 48 characters, for
@@ -142,6 +158,7 @@ Each question spawns a headless `claude -p` run that is sandboxed on purpose:
 ```
 claude -p <prompt>
   --tools "WebSearch,WebFetch"      # or "" for no tools at all
+  --allowedTools WebSearch,WebFetch # only with web search on; see below
   --model sonnet
   --safe-mode                      # no personal CLAUDE.md, skills, plugins, or hooks
   --strict-mcp-config              # ignores every configured MCP server
@@ -153,7 +170,15 @@ claude -p <prompt>
 
 No file access, no shell, no personal configuration. Web search and web fetch are the
 only tools, and only when the canvas has web search on. The flags are verified against
-Claude Code 2.1.273.
+Claude Code 2.1.289.
+
+`--tools` only decides which tools exist. Under `dontAsk` a tool that is not also allowed
+is refused, and the run still reports success, so a web answer would quietly be written
+from memory. `--allowedTools` names the same two tools and no others. `make test-sandbox`
+checks against the real CLI that a web run is refused nothing.
+
+A research run is the same sandboxed command with the web tools on and
+`--model opus`.
 
 The run receives the path only: the root document, the ancestors of the box you asked
 from, the highlighted passage, and the question. Sibling branches are never sent, so a
@@ -199,7 +224,8 @@ finished HTML, so there is no math library, no web font, and nothing to fetch at
 | --- | --- | --- |
 | `RESEARCH_CANVAS_HOME` | `<repo>/canvases` | where canvases are stored |
 | `RESEARCH_CANVAS_CLAUDE` | `claude` | which CLI binary to spawn for answers |
-| `RESEARCH_CANVAS_MODEL` | `sonnet` | model used for answer runs |
+| `RESEARCH_CANVAS_MODEL` | `sonnet` | model used for answer runs, and to draft a research brief |
+| `RESEARCH_CANVAS_RESEARCH_MODEL` | `opus` | model used for a research run |
 | `DEV_ID` | the current git branch, else `default` | names this session's port file |
 
 Every other constant lives in `src/research_canvas/config.py`. Defined once, imported
@@ -220,6 +246,7 @@ frontend framework, no bundler in the request path.
 | `storage.py` | the on-disk format is the database: atomic writes, one lock per canvas |
 | `runner.py` | spawns the sandboxed `claude -p` run and parses its `stream-json` output |
 | `context.py` | assembles the path-only prompt and the standing instructions block |
+| `research.py` | the brief and research prompts, and the check of a report's citations against the pages its run saw |
 | `md.py` | markdown rendering, first-heading extraction, LaTeX to MathML |
 | `anchors.py` | resolves a highlight to offsets in rendered text, with a nearest-match fallback |
 | `merge.py` | reads the edit list a merge run returns and writes each edit into the document |
@@ -246,6 +273,8 @@ PATCH  /api/canvases/{canvas_id}/boxes/{box_id}/merge
 DELETE /api/canvases/{canvas_id}/boxes/{box_id}/merge
 POST   /api/canvases/{canvas_id}/boxes/{box_id}/merge/accept
 GET    /api/canvases/{canvas_id}/boxes/{box_id}/merge/stream  (text/event-stream)
+GET    /api/research/expand?topic=                        (text/event-stream, the brief)
+POST   /api/research
 GET    /                                                  (the app shell)
 ```
 

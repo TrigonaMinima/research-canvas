@@ -10,6 +10,7 @@ from research_canvas.config import (
     BLANK_PRESET_MESSAGE,
     DEFAULT_ASK_PRESETS,
     DISPLAY_NAME,
+    HARD_RELOAD_ATTR,
     INSTRUCTIONS_HEADING,
     INSTRUCTIONS_TOO_LONG_MESSAGE,
     MAX_BOX_WIDTH,
@@ -218,6 +219,24 @@ def test_should_refuse_to_delete_the_root_box(client, canvas):
 
 def test_should_serve_the_app_shell(client):
     assert DISPLAY_NAME in client.get("/").text
+
+
+def test_should_never_let_the_shell_be_cached(client):
+    assert client.get("/").headers["cache-control"] == "no-store"
+
+
+def test_should_mark_the_shell_of_a_hard_refresh(client):
+    response = client.get("/", headers={"Cache-Control": "no-cache", "Pragma": "no-cache"})
+    assert f"<html {HARD_RELOAD_ATTR}" in response.text
+
+
+def test_should_not_mark_the_shell_of_a_plain_refresh(client):
+    response = client.get("/", headers={"Cache-Control": "max-age=0"})
+    assert HARD_RELOAD_ATTR not in response.text
+
+
+def test_should_not_mark_the_shell_of_a_first_load(client):
+    assert HARD_RELOAD_ATTR not in client.get("/").text
 
 
 def _ask(

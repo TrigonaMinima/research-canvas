@@ -10,6 +10,10 @@ from pathlib import Path
 SKILL_NAME = "research-canvas"
 DISPLAY_NAME = "Deep Research"
 
+# Set on <html> when the browser asked for the page with a hard refresh. A page cannot tell
+# a hard refresh from a plain one by itself; only the request headers differ.
+HARD_RELOAD_ATTR = "data-hard-reload"
+
 # Bump when the on-disk canvas shape changes in a way older readers cannot handle.
 FORMAT_VERSION = 1
 
@@ -34,6 +38,10 @@ INSTRUCTIONS_FILE = "instructions.md"
 
 # The question chips are global in the same way, and live beside them.
 PRESETS_FILE = "presets.json"
+
+# Inside one canvas folder, and only when that canvas was researched from a topic:
+# the brief the reader approved, what the run did, and which citations it never saw.
+RESEARCH_FILE = "research.json"
 
 # --- dev server ---------------------------------------------------------------
 
@@ -70,7 +78,7 @@ def _safe(name: str) -> str:
 CLAUDE_BIN = os.environ.get("RESEARCH_CANVAS_CLAUDE", "claude")
 ANSWER_MODEL = os.environ.get("RESEARCH_CANVAS_MODEL", "sonnet")
 
-# Flags verified against Claude Code 2.1.273.
+# Flags verified against Claude Code 2.1.289.
 #   --safe-mode          drops personal CLAUDE.md, skills, plugins, hooks, MCP servers
 #   --strict-mcp-config  ignores every configured MCP server
 #   --tools              the only tools the run has at all
@@ -93,11 +101,35 @@ STREAM_FLAGS = (
     "--include-partial-messages",
     "--verbose",
 )
-WEB_TOOLS = "WebSearch,WebFetch"
+# The CLI name of each web tool, and what the activity log calls it.
+TOOL_KINDS = {"WebSearch": "search", "WebFetch": "fetch"}
+WEB_TOOLS = ",".join(TOOL_KINDS)
 NO_TOOLS = ""
 
 # How many answers may run at once before the rest queue.
 MAX_CONCURRENT_RUNS = 3
+# The CLI writes one JSON object per line, and a whole report or a fetched page is one
+# line. asyncio's default of 64 KB would end a long research run at its last step.
+STREAM_LINE_LIMIT = 32 * 1024 * 1024
+
+# --- research from a topic ----------------------------------------------------
+# Two runs, same sandbox. The brief is drafted with no tools on the answer model. The
+# research itself is long multi-source synthesis, so it gets the stronger model.
+RESEARCH_MODEL = os.environ.get("RESEARCH_CANVAS_RESEARCH_MODEL", "opus")
+
+MAX_TOPIC_CHARS = 2000
+# Room for an exhaustive brief. A drafted one runs to well over ten thousand characters.
+MAX_RESEARCH_PROMPT_CHARS = 60_000
+MAX_RESEARCH_TITLE_CHARS = 80
+
+# Headings inside the two prompts. tests/fixtures/fake_claude.py tells the runs apart
+# by them, so a change here is a change there.
+EXPAND_SENTINEL = "## Topic to expand into a research brief"
+RESEARCH_SENTINEL = "## Research brief"
+
+# Written by the server under every report, never by the run.
+SOURCES_HEADING = "Sources"
+UNVERIFIED_HEADING = "Cited, but not seen during the run"
 
 # --- pictures in answers -----------------------------------------------------
 # A picture an answer links to is downloaded once and kept beside the canvas, so the
@@ -243,6 +275,30 @@ BLANK_TITLE_MESSAGE = "A canvas needs a name — type one or press Escape"
 TITLE_TOO_LONG_MESSAGE = (
     f"A canvas name is capped at {MAX_TITLE_CHARS} characters — shorten it and try again"
 )
+BLANK_TOPIC_MESSAGE = "Type a topic to research first"
+TOPIC_TOO_LONG_MESSAGE = (
+    f"A topic is capped at {MAX_TOPIC_CHARS} characters — the detail belongs in the brief"
+)
+BLANK_RESEARCH_PROMPT_MESSAGE = "The research brief is empty — draft one or write your own"
+RESEARCH_PROMPT_TOO_LONG_MESSAGE = f"A research brief is capped at {MAX_RESEARCH_PROMPT_CHARS:,} characters — trim it and start again"
+RESEARCH_CRASHED_REASON = (
+    "The research run stopped before it finished. The brief is kept: retry to run it again."
+)
+RESEARCH_USAGE_LIMIT_REASON = (
+    "Usage limit reached on your Claude plan. The brief is kept: retry once the limit resets."
+)
+# A report with nothing behind it is the one thing this feature must never save as done.
+RESEARCH_NO_WEB_REASON = (
+    "The run could not read anything from the web, so there is nothing to back a report with. "
+    "The brief is kept: retry to run it again."
+)
+# A draft that fails leaves no brief behind, so it cannot promise that one is kept.
+BRIEF_CRASHED_REASON = "The brief could not be drafted. Try again."
+BRIEF_USAGE_LIMIT_REASON = (
+    "Usage limit reached on your Claude plan. Draft the brief once the limit resets."
+)
+RETRY_PASTED_ROOT_MESSAGE = "A pasted document has no run to retry"
+ALREADY_STREAMING_MESSAGE = "That run is already streaming in another window"
 # Said out loud rather than silently restoring the defaults: chips someone wrote are
 # theirs, and a hand-edited file that will not parse is worth hearing about.
 PRESETS_UNREADABLE_MESSAGE = (

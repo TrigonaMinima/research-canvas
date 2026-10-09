@@ -7,13 +7,19 @@ import { offsetsOf } from './anchors.js';
 import { bounds } from './geom.js';
 import {
   ANCHOR_LEAD,
+  BLANK_TOPIC_MESSAGE,
+  BRIEF_CRASHED_REASON,
   BOX_GAP,
   CHROME_HEIGHT,
   DISPLAY_NAME,
   DRAG_SLOP,
+  HARD_RELOAD_ATTR,
   MAX_BOX_WIDTH,
   MAX_INSTRUCTIONS_CHARS,
   MAX_PRESET_LABEL_CHARS,
+  MAX_RESEARCH_PROMPT_CHARS,
+  RESEARCH_PROMPT_TOO_LONG_MESSAGE,
+  MAX_TOPIC_CHARS,
   MAX_PRESET_QUESTION_CHARS,
   MAX_PRESETS,
   MAX_TITLE_CHARS,
@@ -59,6 +65,13 @@ const el = {
   empty: $('[data-empty]'),
   paste: $('[data-paste]'),
   note: $('[data-note]'),
+  topic: $('[data-topic]'),
+  draft: $('[data-research-draft]'),
+  brief: $('[data-research-brief]'),
+  prompt: $('[data-research-prompt]'),
+  start: $('[data-research-start]'),
+  researchNote: $('[data-research-note]'),
+  researchDots: document.querySelectorAll('[data-research-dot], [data-research-dot-top]'),
   list: $('[data-canvas-list]'),
   selectMode: $('[data-select-mode]'),
   help: $('[data-help]'),
@@ -71,6 +84,7 @@ const state = {
   bodies: {},
   live: new Map(),     // boxId -> text streamed so far
   waits: new Map(),    // boxId -> what a run says it is doing, shown while it waits
+  activity: new Map(), // boxId -> searches and page reads of a research run, in order
   streams: new Map(),  // boxId -> EventSource
   merging: new Map(),  // childId -> EventSource, keyed apart: a box can run both at once
   geometry: { boxes: [], edges: [] },
@@ -194,6 +208,8 @@ function render() {
       merging: folding.has(box.id),
       reviewing: reviews.has(box.id),
       mergedTargets: merged,
+      research: box.kind === 'root' ? state.canvas.research : null,
+      activity: state.activity.get(box.id),
     }));
   }
   if (drifted.length) reanchor(drifted);
@@ -201,7 +217,7 @@ function render() {
   showTitle();
   el.runpill.hidden = busy.length === 0;
   if (busy.length) {
-    el.runLabel.textContent = `${busy.length} answer${busy.length === 1 ? '' : 's'} running`;
+    el.runLabel.textContent = `${boxes.plural(busy.length, 'answer')} running`;
   }
   requestAnimationFrame(measure);
 }
@@ -279,6 +295,7 @@ async function showEmpty() {
   for (const parentId of [...reviews.keys()]) closeReview(parentId);
   for (const source of state.merging.values()) source.close();
   state.merging.clear();
+  state.activity.clear();
   state.canvas = null;
   lastGeometry = '';
   el.canvas.querySelectorAll('[data-box]').forEach((n) => n.remove());
@@ -290,6 +307,7 @@ async function showEmpty() {
   history.replaceState(null, '', location.pathname);
   document.title = DISPLAY_NAME;
   el.empty.hidden = false;
+  fitResearch(); // a draft restored behind a canvas has not been measured yet
 
   const canvases = await api.listCanvases();
   el.list.replaceChildren();
@@ -401,24 +419,78 @@ function listen(boxId) {
     render();
   });
 
-  source.addEventListener('done', (event) => {
-    const data = JSON.parse(event.data);
-    const box = boxById(boxId);
-    if (box) {
-      box.status = data.status;
-      box.reason = data.reason || '';
-    }
-    state.bodies[boxId] = data.html || '';
-    state.live.delete(boxId);
-    stop();
+  // A research run only: one search or one page read.
+  source.addEventListener('tool', (event) => {
+    const steps = state.activity.get(boxId) || [];
+    steps.push(JSON.parse(event.data));
+    state.activity.set(boxId, steps);
     render();
-    scheduleRestack();
+  });
+
+  // What came before a search was the run talking to itself, not the report.
+  source.addEventListener('reset', () => {
+    state.live.set(boxId, '');
+    render();
+  });
+
+  source.addEventListener('done', (event) => {
+    stop();
+    applyOutcome(boxId, JSON.parse(event.data));
   });
 
   source.onerror = () => {
-    // The browser retries by itself; a closed stream means the run is over.
-    if (source.readyState === EventSource.CLOSED) stop();
+    // Left alone, the browser reconnects, and a new connection is a new run: the server
+    // ends a run when its stream drops. Never start one the reader did not ask for.
+    // Close, and let the disk say how the run ended.
+    stop();
+    settle(state.canvas.id, boxId);
   };
+}
+
+// How a run ended, from the stream that carried it or from the disk.
+function applyOutcome(boxId, { status, reason, html, title, research }) {
+  const box = boxById(boxId);
+  if (box) {
+    box.status = status;
+    box.reason = reason || '';
+  }
+  // A report names itself, and says which of its citations the run never saw.
+  if (title) state.canvas.title = title;
+  if (research) state.canvas.research = research;
+  state.bodies[boxId] = html || '';
+  state.live.delete(boxId);
+  state.activity.delete(boxId);
+  render();
+  scheduleRestack();
+}
+
+// Each look re-reads the whole canvas, so they thin out: a run another window is
+// driving can take minutes.
+const SETTLE_FIRST_MS = 500;
+const SETTLE_SLOWEST_MS = 5000;
+
+// A stream that closed without saying how the run ended: refused because the run it
+// would have started is still being driven for a page that has just gone, or dropped.
+// The disk knows the outcome, a moment later or, for a run another window is driving,
+// minutes later, so keep asking it rather than show "running" for ever.
+async function settle(canvasId, boxId, wait = SETTLE_FIRST_MS) {
+  await new Promise((resolve) => { setTimeout(resolve, wait); });
+  if (!state.canvas || state.canvas.id !== canvasId || state.streams.has(boxId)) return;
+  const view = await api.readCanvas(canvasId).catch(() => null);
+  if (!state.canvas || state.canvas.id !== canvasId) return;
+  const fresh = view && view.boxes.find((b) => b.id === boxId);
+  if (!fresh) return;
+  if (UNFINISHED.has(fresh.status)) {
+    settle(canvasId, boxId, Math.min(wait * 2, SETTLE_SLOWEST_MS));
+    return;
+  }
+  applyOutcome(boxId, {
+    status: fresh.status,
+    reason: fresh.reason,
+    html: view.bodies[boxId],
+    title: view.title,
+    research: view.research,
+  });
 }
 
 // --- asking -------------------------------------------------------------------
@@ -2126,6 +2198,7 @@ document.addEventListener('click', (event) => {
     api.retry(state.canvas.id, box.id).then((fresh) => {
       Object.assign(box, fresh);
       state.live.set(box.id, '');
+      state.activity.delete(box.id);
       state.bodies[box.id] = '';
       render();
       listen(box.id);
@@ -2226,7 +2299,16 @@ el.selectMode.addEventListener('click', () => setSelectMode(!selectMode));
 el.helpToggle.addEventListener('click', () => setHelpFolded(!el.help.dataset.folded));
 $('[data-theme-toggle]').addEventListener('click', () =>
   setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-$('[data-new]').addEventListener('click', showEmpty);
+// A run lives only as long as the page that is listening to it. An answer is cheap to
+// ask again; a research run is long enough that losing one to a stray click is worth
+// a question.
+function leave() {
+  const root = state.canvas && boxById(state.canvas.rootId);
+  const researching = root && state.canvas.research && UNFINISHED.has(root.status);
+  if (researching && !window.confirm('The research run stops if you leave. Leave anyway?')) return;
+  showEmpty();
+}
+$('[data-new]').addEventListener('click', leave);
 
 el.minimap.addEventListener('click', (event) => {
   const frame = el.minimap.getBoundingClientRect();
@@ -2238,18 +2320,171 @@ el.minimap.addEventListener('click', (event) => {
 
 // --- the empty state ----------------------------------------------------------
 
-for (const tab of document.querySelectorAll('[data-tab]')) {
-  tab.addEventListener('click', () => {
-    for (const other of document.querySelectorAll('[data-tab]')) {
-      const on = other === tab;
-      other.setAttribute('aria-selected', String(on));
-      document.querySelector(`[data-panel="${other.dataset.tab}"]`).hidden = !on;
-    }
-  });
+const tabs = [...document.querySelectorAll('[data-tab]')];
+const shownTab = () => tabs.find((tab) => tab.getAttribute('aria-selected') === 'true').dataset.tab;
+
+function showTab(name) {
+  if (!tabs.some((tab) => tab.dataset.tab === name)) return;
+  for (const tab of tabs) {
+    const on = tab.dataset.tab === name;
+    tab.setAttribute('aria-selected', String(on));
+    document.querySelector(`[data-panel="${tab.dataset.tab}"]`).hidden = !on;
+  }
+  fitResearch();
+}
+for (const tab of tabs) tab.addEventListener('click', () => showTab(tab.dataset.tab));
+
+// --- researching a topic ------------------------------------------------------
+
+const RESEARCH_HINT =
+  'Name a topic and draft a brief. You edit the brief, then the run reads the web.';
+const BRIEF_READY_HINT = 'Edit the brief until it says what you want, then start.';
+const BRIEF_CUT_SHORT_HINT = 'The refresh stopped the draft part way. Redraft, or edit what is here.';
+// Kept for the life of the tab, so a refresh does not cost the reader a brief they edited.
+const DRAFT_KEY = 'deep-research-draft';
+
+let drafting = null; // the stream writing the brief, while there is one
+
+function researchNote(text, refused = false) {
+  el.researchNote.textContent = text;
+  if (refused) el.researchNote.dataset.refused = '1';
+  else el.researchNote.removeAttribute('data-refused');
 }
 
-$('[data-research-note]').addEventListener('click', () =>
-  flash('Research runs are P1 — not in the v1 skeleton'));
+// A field as tall as its text, so a long topic or brief is read whole and the page
+// scrolls, not the box. A hidden field measures as nothing, so it waits to be shown.
+//
+// Measuring means collapsing the field for an instant, which shortens the page and
+// drags its scroll position up with it. So the page is put back where the reader had
+// it: a brief still being written must not pull them away from the line they are on.
+function fit(field) {
+  const at = el.empty.scrollTop;
+  field.style.height = 'auto';
+  if (!field.offsetParent) return;
+  const borders = field.offsetHeight - field.clientHeight;
+  field.style.height = `${field.scrollHeight + borders}px`;
+  el.empty.scrollTop = at;
+}
+const fitResearch = () => { fit(el.topic); fit(el.prompt); };
+
+function syncResearch() {
+  fitResearch();
+  el.draft.disabled = !!drafting;
+  for (const dot of el.researchDots) dot.hidden = !drafting;
+  el.draft.textContent = el.brief.hidden ? 'Draft the brief' : 'Redraft';
+  el.prompt.readOnly = !!drafting;
+  // No maxlength on the brief: a field at its cap takes no typing at all, and says nothing.
+  // So a long brief stays editable, and is told it is long.
+  const over = !drafting && el.prompt.value.length > MAX_RESEARCH_PROMPT_CHARS;
+  if (over) researchNote(RESEARCH_PROMPT_TOO_LONG_MESSAGE, true);
+  else if (el.researchNote.textContent === RESEARCH_PROMPT_TOO_LONG_MESSAGE) researchNote(BRIEF_READY_HINT);
+  el.start.disabled = !!drafting || over || !el.prompt.value.trim();
+}
+
+function stopDrafting() {
+  if (drafting) drafting.close();
+  drafting = null;
+}
+
+function resetResearch() {
+  stopDrafting();
+  el.topic.value = '';
+  el.prompt.value = '';
+  el.brief.hidden = true;
+  researchNote(RESEARCH_HINT);
+  syncResearch();
+}
+
+function draftBrief() {
+  if (drafting) return;
+  const topic = el.topic.value.trim();
+  if (!topic) { researchNote(BLANK_TOPIC_MESSAGE, true); return; }
+
+  const source = new EventSource(api.expandUrl(topic));
+  drafting = source;
+  el.brief.hidden = false;
+  el.prompt.value = '';
+  researchNote('Drafting the brief…');
+  syncResearch();
+
+  const finish = (text, refused) => {
+    stopDrafting();
+    researchNote(text, refused);
+    syncResearch();
+  };
+
+  source.addEventListener('text', (event) => {
+    el.prompt.value += JSON.parse(event.data).text;
+    fit(el.prompt);
+  });
+
+  source.addEventListener('done', (event) => {
+    const data = JSON.parse(event.data);
+    if (data.status !== 'done') { finish(data.reason, true); return; }
+    el.prompt.value = data.prompt;
+    finish(BRIEF_READY_HINT, false);
+  });
+
+  // An EventSource cannot read why it was refused, so the reason is a general one.
+  source.onerror = () => finish(BRIEF_CRASHED_REASON, true);
+}
+
+el.topic.maxLength = MAX_TOPIC_CHARS;
+el.draft.addEventListener('click', draftBrief);
+// Enter drafts, as it did when this was a one-line field. Shift+Enter is the new line.
+el.topic.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
+  event.preventDefault();
+  draftBrief();
+});
+el.topic.addEventListener('input', () => fit(el.topic));
+el.prompt.addEventListener('input', syncResearch);
+
+// Written once, as the page goes, not on every key or streamed chunk.
+function keepResearch() {
+  const draft = {
+    topic: el.topic.value,
+    brief: el.brief.hidden ? null : el.prompt.value,
+    cutShort: !!drafting,
+    tab: shownTab(),
+  };
+  try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft)); } catch { /* private mode */ }
+}
+
+// A plain refresh brings the draft back. A hard refresh is the reader asking for a clean
+// page, and the server marks it, because both look the same from in here.
+function restoreResearch() {
+  resetResearch();
+  let draft = null;
+  try {
+    if (document.documentElement.hasAttribute(HARD_RELOAD_ATTR)) sessionStorage.removeItem(DRAFT_KEY);
+    else draft = JSON.parse(sessionStorage.getItem(DRAFT_KEY));
+  } catch { /* private mode, or a draft that will not parse */ }
+  if (!draft) return;
+
+  el.topic.value = draft.topic || '';
+  if (typeof draft.brief === 'string') {
+    el.prompt.value = draft.brief;
+    el.brief.hidden = false;
+    researchNote(draft.cutShort ? BRIEF_CUT_SHORT_HINT : BRIEF_READY_HINT);
+  }
+  showTab(draft.tab);
+  syncResearch();
+}
+window.addEventListener('pagehide', keepResearch);
+
+el.start.addEventListener('click', async () => {
+  el.start.disabled = true;
+  try {
+    const view = await api.startResearch(el.topic.value.trim(), el.prompt.value);
+    resetResearch();
+    await open(view.id, { loaded: view });
+  } catch (error) {
+    researchNote(error.message, true);
+    syncResearch();
+  }
+});
+restoreResearch();
 
 $('[data-create]').addEventListener('click', async () => {
   const markdown = el.paste.value;

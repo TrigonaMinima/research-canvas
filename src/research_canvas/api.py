@@ -6,24 +6,32 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import anchors, assets, config, context, md, merge, runner, storage
+from . import anchors, assets, config, context, md, merge, research, runner, storage
 from .anchors import Anchor
 from .config import (
     ALREADY_MERGED_MESSAGE,
+    ALREADY_STREAMING_MESSAGE,
     ANCHOR_LEAD,
+    ANSWER_MODEL,
     BLANK_BODY_MESSAGE,
+    BLANK_RESEARCH_PROMPT_MESSAGE,
+    BLANK_TOPIC_MESSAGE,
     BOX_GAP,
+    BRIEF_CRASHED_REASON,
+    BRIEF_USAGE_LIMIT_REASON,
     CHROME_HEIGHT,
     DISPLAY_NAME,
     DRAG_SLOP,
     EDIT_WHILE_MERGING_MESSAGE,
     EDIT_WHILE_RUNNING_MESSAGE,
+    HARD_RELOAD_ATTR,
     IMAGE_TYPES,
     MAX_BOX_WIDTH,
     MAX_CONCURRENT_RUNS,
@@ -31,8 +39,10 @@ from .config import (
     MAX_PRESET_LABEL_CHARS,
     MAX_PRESET_QUESTION_CHARS,
     MAX_PRESETS,
+    MAX_RESEARCH_PROMPT_CHARS,
     MAX_SCALE,
     MAX_TITLE_CHARS,
+    MAX_TOPIC_CHARS,
     MERGE_IN_PROGRESS_MESSAGE,
     MERGE_PARENT_RUNNING_MESSAGE,
     MERGE_ROOT_MESSAGE,
@@ -45,10 +55,17 @@ from .config import (
     MIN_TOC_HEADINGS,
     NO_MERGE_MESSAGE,
     NOTHING_TO_MERGE_MESSAGE,
+    RESEARCH_CRASHED_REASON,
+    RESEARCH_MODEL,
+    RESEARCH_NO_WEB_REASON,
+    RESEARCH_PROMPT_TOO_LONG_MESSAGE,
+    RESEARCH_USAGE_LIMIT_REASON,
+    RETRY_PASTED_ROOT_MESSAGE,
     REVIEW_MARGIN,
     REVIEW_WIDTH,
     STILL_RUNNING_MESSAGE,
     TOC_MAX_LEVEL,
+    TOPIC_TOO_LONG_MESSAGE,
     UNFINISHED,
     WEB_DIR,
 )
@@ -68,6 +85,11 @@ _slots = asyncio.Semaphore(MAX_CONCURRENT_RUNS)
 class ImportBody(BaseModel):
     markdown: str
     webSearch: bool = True
+
+
+class ResearchBody(BaseModel):
+    topic: str
+    prompt: str
 
 
 class AnchorBody(BaseModel):
@@ -163,6 +185,7 @@ def client_config() -> dict:
     """Served so the frontend reads one definition instead of keeping its own copy."""
     return {
         "displayName": DISPLAY_NAME,
+        "hardReloadAttr": HARD_RELOAD_ATTR,
         "minScale": MIN_SCALE,
         "maxScale": MAX_SCALE,
         "minBoxWidth": MIN_BOX_WIDTH,
@@ -183,6 +206,11 @@ def client_config() -> dict:
         "reviewMargin": REVIEW_MARGIN,
         "minTocHeadings": MIN_TOC_HEADINGS,
         "tocMaxLevel": TOC_MAX_LEVEL,
+        "blankTopicMessage": BLANK_TOPIC_MESSAGE,
+        "briefCrashedReason": BRIEF_CRASHED_REASON,
+        "maxTopicChars": MAX_TOPIC_CHARS,
+        "maxResearchPromptChars": MAX_RESEARCH_PROMPT_CHARS,
+        "researchPromptTooLongMessage": RESEARCH_PROMPT_TOO_LONG_MESSAGE,
     }
 
 
@@ -238,6 +266,73 @@ def create_canvas(body: ImportBody) -> dict:
     except storage.ImportRefused as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _view(canvas)
+
+
+# --- research from a topic ----------------------------------------------------
+# Two steps, so the reader approves what is researched before anything is spent on it:
+# draft a brief from the topic, then start a canvas whose root the run will write.
+
+
+@app.get("/api/research/expand")
+async def expand_topic(topic: str = Query(default="")) -> StreamingResponse:
+    """Draft the brief. A GET because that is all an EventSource can send."""
+    prompt = research.build_expand_prompt(_topic(topic))
+    return StreamingResponse(
+        _draft(prompt), media_type="text/event-stream", headers=_STREAM_HEADERS
+    )
+
+
+async def _draft(prompt: str) -> AsyncIterator[str]:
+    """Stream the brief and keep nothing: it is the reader's to edit, in the browser."""
+    async with _slots:
+        yield _sse("status", {"status": "running"})
+        collected: list[str] = []
+        outcome, reason = "done", ""
+        try:
+            async for event in RUN(prompt, web_search=False, model=ANSWER_MODEL):
+                if event.kind == "text":
+                    collected.append(event.text)
+                    yield _sse("text", {"text": event.text})
+                elif event.kind == "failed":
+                    outcome, reason = "failed", _reworded(event.reason, _BRIEF_REASONS)
+                    break
+                elif event.kind == "done":
+                    break
+        except Exception as exc:  # noqa: BLE001 - a run must never take the server down
+            outcome, reason = "failed", f"{BRIEF_CRASHED_REASON} ({exc})"
+        # Always a last word, even on failure: an EventSource left hanging reconnects,
+        # and a reconnect here would spend a second run.
+        yield _sse("done", {"status": outcome, "reason": reason, "prompt": "".join(collected)})
+
+
+@app.post("/api/research", status_code=201)
+def start_research(body: ResearchBody) -> dict:
+    topic = _topic(body.topic)
+    if not body.prompt.strip():
+        raise HTTPException(status_code=422, detail=BLANK_RESEARCH_PROMPT_MESSAGE)
+    if len(body.prompt) > MAX_RESEARCH_PROMPT_CHARS:
+        raise HTTPException(status_code=422, detail=RESEARCH_PROMPT_TOO_LONG_MESSAGE)
+    return _view(storage.create_research_canvas(topic, body.prompt.strip()))
+
+
+def _topic(topic: str) -> str:
+    topic = topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail=BLANK_TOPIC_MESSAGE)
+    if len(topic) > MAX_TOPIC_CHARS:
+        raise HTTPException(status_code=422, detail=TOPIC_TOO_LONG_MESSAGE)
+    return topic
+
+
+# (usage limit, anything else). The runner words its failures for an answer box, and
+# neither a report nor a brief has a question to keep.
+_RESEARCH_REASONS = (RESEARCH_USAGE_LIMIT_REASON, RESEARCH_CRASHED_REASON)
+_BRIEF_REASONS = (BRIEF_USAGE_LIMIT_REASON, BRIEF_CRASHED_REASON)
+
+
+def _reworded(reason: str, wording: tuple[str, str]) -> str:
+    limit, crashed = wording
+    return limit if reason == runner.USAGE_LIMIT_REASON else crashed
 
 
 @app.get("/api/canvases/{canvas_id}")
@@ -341,6 +436,12 @@ def _add_question(canvas: storage.Canvas, body: AskBody) -> dict:
 def retry(canvas_id: str, box_id: str) -> dict:
     with _editing(canvas_id) as canvas:
         box = _box(canvas, box_id)
+        if box.kind == "root":
+            # A pasted root is the reader's document, not the output of a run. Clearing
+            # it would destroy the one thing on a canvas that cannot be regenerated.
+            if storage.read_research(canvas.id) is None:
+                raise HTTPException(status_code=422, detail=RETRY_PASTED_ROOT_MESSAGE)
+            storage.reset_research(canvas.id)
         box.status = "pending"
         box.reason = ""
         storage.write_body(canvas.id, box.id, "")
@@ -400,27 +501,53 @@ def _remove_box(canvas: storage.Canvas, box_id: str) -> None:
         storage.delete_merge(canvas.id, gone)
 
 
+_STREAM_HEADERS = {"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
+
+
 @app.get("/api/canvases/{canvas_id}/boxes/{box_id}/stream")
 async def stream(canvas_id: str, box_id: str) -> StreamingResponse:
     canvas = _load(canvas_id)
     box = _box(canvas, box_id)
-    prompt = context.build_prompt(canvas, box)
+    # Each stream spawns a run. A second one for the same box would be a second run
+    # writing the same file, which is what a reload in the middle of one used to do.
+    if storage.is_live(canvas.id, box.id):
+        raise HTTPException(status_code=409, detail=ALREADY_STREAMING_MESSAGE)
+
+    found = storage.read_research(canvas.id) if box.kind == "root" else None
+    if found is not None:
+        prompt = research.build_research_prompt(found["topic"], found["prompt"])
+        run = _Run(canvas.id, box.id, prompt, research=True)
+    else:
+        run = _Run(canvas.id, box.id, context.build_prompt(canvas, box))
 
     return StreamingResponse(
-        _run_and_save(canvas.id, box_id, prompt),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        _run_and_save(run), media_type="text/event-stream", headers=_STREAM_HEADERS
     )
 
 
-async def _run_and_save(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]:
+@dataclass
+class _Run:
+    """One streamed run: where it saves, what it is told, and whether it is research."""
+
+    canvas_id: str
+    box_id: str
+    prompt: str
+    research: bool = False
+
+    @property
+    def model(self) -> str:
+        return RESEARCH_MODEL if self.research else ANSWER_MODEL
+
+
+async def _run_and_save(run: _Run) -> AsyncIterator[str]:
     """Stream one answer, saving as it goes so a force-quit never loses the question."""
-    with storage.live(canvas_id, box_id):
-        async for chunk in _drive(canvas_id, box_id, prompt):
+    with storage.live(run.canvas_id, run.box_id):
+        async for chunk in _drive(run):
             yield chunk
 
 
-async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]:
+async def _drive(run: _Run) -> AsyncIterator[str]:
+    canvas_id, box_id = run.canvas_id, run.box_id
     queued = _slots.locked()
     if queued:
         _set_status(canvas_id, box_id, "queued")
@@ -428,22 +555,40 @@ async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]
 
     async with _slots:
         # Read now, not when asked: the canvas switch may have gone off while this queued.
-        web_search = _set_status(canvas_id, box_id, "running")
+        # Research is nothing without the web, so the canvas switch does not reach it.
+        web_search = _set_status(canvas_id, box_id, "running") or run.research
         yield _sse("status", {"status": "running"})
 
         collected: list[str] = []
+        activity: list[dict] = []
+        seen: list[str] = []
+        final, denied = "", False
         outcome, reason = "done", ""
         try:
-            async for event in RUN(prompt, web_search=web_search):
+            async for event in RUN(run.prompt, web_search=web_search, model=run.model):
                 if event.kind == "text":
                     collected.append(event.text)
                     yield _sse("text", {"text": event.text})
                 elif event.kind == "init":
                     yield _sse("init", {"tools": event.tools})
+                elif event.kind == "results":
+                    seen += event.urls
+                elif event.kind == "denied":
+                    denied = True
+                elif event.kind == "tool" and run.research:
+                    step = {"kind": event.tool_kind, "query": event.query, "url": event.url}
+                    activity.append(step)
+                    yield _sse("tool", step)
+                    # What the run said before reaching for a tool is narration, not
+                    # report. Drop it here and tell the browser to drop it too.
+                    if collected:
+                        collected.clear()
+                        yield _sse("reset", {})
                 elif event.kind == "failed":
                     outcome, reason = "failed", event.reason
                     break
                 elif event.kind == "done":
+                    final = event.text
                     break
         except asyncio.CancelledError:
             _finish(
@@ -454,6 +599,16 @@ async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]
             outcome, reason = "failed", f"{runner.CRASHED_REASON} ({exc})"
 
         text = "".join(collected)
+        if run.research:
+            if outcome == "failed":
+                reason = _reworded(reason, _RESEARCH_REASONS)
+            elif denied or not seen:
+                outcome, reason = "failed", RESEARCH_NO_WEB_REASON
+            yield _sse(
+                "done", _finish_research(run, final or text, outcome, reason, activity, seen)
+            )
+            return
+
         pictures = assets.remote_images(text)
         if pictures and not web_search:
             # Without search the URLs are guesses; keep them as links and fetch nothing.
@@ -470,13 +625,49 @@ async def _drive(canvas_id: str, box_id: str, prompt: str) -> AsyncIterator[str]
         yield _sse("done", {"status": outcome, "reason": reason, "html": html})
 
 
-def _finish(canvas_id: str, box_id: str, text: str, status: str, reason: str) -> str:
+def _finish_research(
+    run: _Run, report: str, status: str, reason: str, activity: list[dict], seen: list[str]
+) -> dict:
+    """Check the citations, sign the report with its sources, and save both."""
+    cited: list[str] = []
+    unverified: list[str] = []
+    title = None
+    seen = list(dict.fromkeys(seen))  # searches overlap, and the file keeps this list
+    if status == "done":
+        cited, unverified = research.verify(report, seen)
+        title = md.first_heading(report)
+        report = (
+            report.rstrip() + "\n" + research.sources_section(cited=cited, unverified=unverified)
+        )
+    found = storage.update_research(
+        run.canvas_id,
+        activity=activity,
+        seen=seen,
+        cited=cited,
+        unverified=unverified,
+        finishedAt=storage.finished_now(),
+    )
+    html = _finish(run.canvas_id, run.box_id, report, status, reason, title=title)
+    return {
+        "status": status,
+        "reason": reason,
+        "html": html,
+        "title": title,
+        "research": found,
+    }
+
+
+def _finish(
+    canvas_id: str, box_id: str, text: str, status: str, reason: str, *, title: str | None = None
+) -> str:
     storage.write_body(canvas_id, box_id, text)
     try:
         with storage.edit(canvas_id) as canvas:
             box = canvas.box(box_id)
             box.status = status
             box.reason = reason
+            if title:
+                canvas.title = title
     except (KeyError, storage.CanvasNotFound):
         return ""  # deleted mid-run; nothing to record
     return _render(canvas_id, text)
@@ -599,7 +790,7 @@ async def merge_stream(canvas_id: str, box_id: str) -> StreamingResponse:
     return StreamingResponse(
         _merge_and_save(canvas.id, box_id, proposal.prompt, _parent_body(canvas, box_id)),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        headers=_STREAM_HEADERS,
     )
 
 
@@ -861,6 +1052,7 @@ def _view(canvas: storage.Canvas) -> dict:
     # at a time, so a waiting merge does not make every canvas read carry a diff.
     waiting = set(storage.list_merges(canvas.id))
     data["merges"] = [box.id for box in canvas.boxes if box.id in waiting]
+    data["research"] = storage.read_research(canvas.id)
     return data
 
 
@@ -911,8 +1103,14 @@ def read_asset(canvas_id: str, name: str) -> FileResponse:
 
 
 @app.get("/")
-def index() -> FileResponse:
-    return FileResponse(WEB_DIR / "index.html")
+def index(request: Request) -> HTMLResponse:
+    shell = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    # A hard refresh asks with no-cache, a plain one with max-age=0. The page keeps an
+    # unfinished research draft across the second and drops it on the first.
+    if "no-cache" in request.headers.get("cache-control", ""):
+        shell = shell.replace("<html", f"<html {HARD_RELOAD_ATTR}", 1)
+    # Never cached: a revalidated copy could carry the mark of an earlier hard refresh.
+    return HTMLResponse(shell, headers={"Cache-Control": "no-store"})
 
 
 app.mount("/static", StaticFiles(directory=WEB_DIR), name="static")

@@ -50,6 +50,19 @@ VIEW_KEYS = {
     "anchors",
     "bodies",
     "merges",
+    "research",
+}
+
+# Only a canvas researched from a topic has these; a pasted one carries null.
+RESEARCH_KEYS = {
+    "topic",
+    "prompt",
+    "model",
+    "activity",
+    "seen",
+    "cited",
+    "unverified",
+    "finishedAt",
 }
 
 ASK_RESULT_KEYS = {"box", "anchor"}
@@ -63,7 +76,7 @@ PRESET_KEYS = {"label", "question"}
 
 ASK_REQUEST_KEYS = {"boxId", "question", "x", "y", "w", "webSearch", "anchor"}
 
-STREAM_EVENTS = {"status", "init", "text", "done"}
+STREAM_EVENTS = {"status", "init", "text", "tool", "reset", "done"}
 
 # --- folding an answer back into its parent -----------------------------------
 
@@ -102,6 +115,7 @@ MERGE_STATUSES = set(_CONFIG_MERGE_STATUSES)
 # keeping its own copy of a clamp, a status set, or a user-facing sentence.
 CLIENT_CONFIG_KEYS = {
     "displayName",
+    "hardReloadAttr",
     "minScale",
     "maxScale",
     "minBoxWidth",
@@ -122,6 +136,11 @@ CLIENT_CONFIG_KEYS = {
     "maxTitleChars",
     "reviewWidth",
     "reviewMargin",
+    "blankTopicMessage",
+    "briefCrashedReason",
+    "maxTopicChars",
+    "maxResearchPromptChars",
+    "researchPromptTooLongMessage",
 }
 
 BOX_STATUSES = set(_CONFIG_STATUSES)  # one definition, in config
@@ -190,6 +209,7 @@ def make_view(**over) -> dict:
             "b2": "<p>It adds the input of a sub-layer back to its output.</p>",
         },
         "merges": [],
+        "research": None,
     }
     view.update(over)
     return view

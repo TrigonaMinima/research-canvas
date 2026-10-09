@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
-from research_canvas import runner
+from research_canvas import config, runner
+
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 def test_should_pass_the_prompt_with_p():
@@ -99,3 +102,91 @@ def _delta(text: str) -> str:
             },
         }
     )
+
+
+# --- permissions: listing a tool is not the same as allowing it -----------------
+
+
+def test_should_grant_permission_for_the_web_tools_when_web_search_is_on():
+    command = runner.build_command("why?", web_search=True)
+    assert command[command.index("--allowedTools") + 1] == "WebSearch,WebFetch"
+
+
+def test_should_grant_no_permissions_when_web_search_is_off():
+    assert "--allowedTools" not in runner.build_command("why?", web_search=False)
+
+
+# --- model ----------------------------------------------------------------------
+
+
+def test_should_use_the_answer_model_by_default():
+    command = runner.build_command("why?", web_search=False)
+    assert command[command.index("--model") + 1] == config.ANSWER_MODEL
+
+
+def test_should_use_the_model_it_is_given():
+    command = runner.build_command("why?", web_search=True, model="opus")
+    assert command[command.index("--model") + 1] == "opus"
+
+
+# --- a real web run, captured from the CLI ---------------------------------------
+
+
+def test_should_report_each_tool_call_exactly_once():
+    kinds = [e.tool_kind for e in _captured("stream_research.jsonl") if e.kind == "tool"]
+    assert kinds == ["search", "fetch"]
+
+
+def test_should_carry_the_search_query():
+    search = next(e for e in _captured("stream_research.jsonl") if e.tool_kind == "search")
+    assert search.query == "current stable Python release latest version"
+
+
+def test_should_carry_the_fetched_url():
+    fetch = next(e for e in _captured("stream_research.jsonl") if e.tool_kind == "fetch")
+    assert fetch.url == "https://www.python.org/downloads/"
+
+
+def test_should_report_the_urls_a_search_returned():
+    results = [e for e in _captured("stream_research.jsonl") if e.kind == "results"]
+    assert "https://phoenixnap.com/kb/latest-python-version" in results[0].urls
+
+
+def test_should_report_a_fetched_page_as_seen():
+    results = [e for e in _captured("stream_research.jsonl") if e.kind == "results"]
+    assert results[1].urls == ["https://www.python.org/downloads/"]
+
+
+def test_should_not_count_a_page_that_failed_to_load_as_seen():
+    line = json.dumps(
+        {"type": "user", "tool_use_result": {"code": 404, "url": "https://example.org/gone"}}
+    )
+    assert list(runner.parse_stream([line])) == []
+
+
+def test_should_carry_the_final_text_on_done():
+    done = next(e for e in _captured("stream_research.jsonl") if e.kind == "done")
+    assert done.text.startswith("According to the [python.org downloads page]")
+
+
+def test_should_report_a_denied_tool_call():
+    denied = [e for e in _captured("stream_research_denied.jsonl") if e.kind == "denied"]
+    assert [e.text for e in denied] == ["WebSearch"]
+
+
+def _captured(name: str) -> list[runner.Event]:
+    return list(runner.parse_stream((FIXTURES / name).read_text().splitlines()))
+
+
+async def test_should_read_a_stream_line_longer_than_the_default_pipe_limit(tmp_path, monkeypatch):
+    """A long report arrives as one JSON line, well past asyncio's 64 KB default."""
+    report = "x" * 300_000
+    line = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": report})
+    script = tmp_path / "claude"
+    script.write_text(f"#!/bin/sh\ncat <<'END'\n{line}\nEND\n")
+    script.chmod(0o755)
+    monkeypatch.setattr(runner, "CLAUDE_BIN", str(script))
+
+    events = [event async for event in runner.run("anything", web_search=True)]
+
+    assert events[-1].text == report

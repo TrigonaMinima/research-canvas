@@ -25,6 +25,11 @@ from research_canvas.config import (
 )
 
 
+def test_should_title_a_research_canvas_on_one_line_when_the_topic_has_several(canvas_root):
+    canvas = storage.create_research_canvas("wedding outfits\n  mine and others", "a brief")
+    assert canvas.title == "wedding outfits mine and others"
+
+
 def test_should_use_first_heading_as_title(canvas_root, sample_markdown):
     canvas = storage.create_canvas(sample_markdown)
     assert canvas.title == "Attention Is All You Need"
@@ -619,3 +624,47 @@ def test_should_keep_the_box_web_search_across_a_save_and_load(canvas_root, samp
     box = storage.add_answer(canvas, parent_id=canvas.root_id, question="Why?", web_search=False)
     storage.save(canvas)
     assert storage.load(canvas.id).box(box.id).web_search is False
+
+
+# --- research canvases ----------------------------------------------------------
+
+
+def test_should_start_a_research_canvas_with_a_pending_root(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    assert canvas.box("b1").status == "pending"
+
+
+def test_should_start_a_research_canvas_with_an_empty_root_body(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    assert storage.read_body(canvas.id, "b1") == ""
+
+
+def test_should_title_a_research_canvas_after_its_topic(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    assert canvas.title == "solid state batteries"
+
+
+def test_should_cut_a_long_topic_down_to_a_title(canvas_root):
+    canvas = storage.create_research_canvas("x" * 200, "The brief.")
+    assert len(canvas.title) <= config.MAX_RESEARCH_TITLE_CHARS
+
+
+def test_should_always_search_the_web_on_a_research_canvas(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    assert canvas.box("b1").web_search is True
+
+
+def test_should_keep_the_approved_brief_beside_the_canvas(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    assert storage.read_research(canvas.id)["prompt"] == "The brief."
+
+
+def test_should_report_no_research_for_a_pasted_canvas(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    assert storage.read_research(canvas.id) is None
+
+
+def test_should_merge_new_research_fields_into_the_file(canvas_root):
+    canvas = storage.create_research_canvas("solid state batteries", "The brief.")
+    storage.update_research(canvas.id, unverified=["https://example.org/x"])
+    assert storage.read_research(canvas.id)["topic"] == "solid state batteries"

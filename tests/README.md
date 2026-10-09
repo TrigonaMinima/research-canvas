@@ -1,17 +1,18 @@
 # Tests
 
-894 tests. 891 run on every `make test`; the 3 marked `live` spend real Claude usage and
-run only on `make test-sandbox`.
+1291 tests. 1284 run on every `make test`; the 7 marked `live` spend real Claude usage and
+run only on `make test-sandbox` and `make test-research-live`.
 
 ```
-make test          unit + api + e2e          891 tests, no usage spent
-make test-unit     tests/unit                173
-make test-api      tests/api                 182  (3 live deselected)
-make test-e2e      tests/e2e                 539
-make test-sandbox  tests/api -m live           3  proves US-7 against the real CLI
+make test                unit + api + e2e          1284 tests, no usage spent
+make test-unit           tests/unit                333
+make test-api            tests/api                 289  (7 live deselected)
+make test-e2e            tests/e2e                 662
+make test-sandbox        tests/api -m live -k sandbox    5  proves US-7 against the real CLI
+make test-research-live  tests/api -m live -k research   2  one real research run
 ```
 
-Nothing in the suite calls Claude except `test-sandbox`. Everywhere else the `claude` binary
+Nothing in the suite calls Claude except `test-sandbox` and `test-research-live`. Everywhere else the `claude` binary
 is `tests/fixtures/fake_claude.py`, which speaks the real `stream-json` dialect, so the
 runner, the parser, the SSE bridge and the browser are all genuinely exercised for free.
 
@@ -20,7 +21,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
 | 1 | API function tests | `tests/unit/` | 280 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 155 |
+| 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 159 |
 | 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
 | 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
 | 5 | End-to-end, every UI element | all of `tests/e2e/` | 539 |
@@ -87,10 +88,10 @@ Each module in isolation, no HTTP, no browser.
   word-level diff here any more: the review is a diff of the whole document, drawn in the
   browser by the merge view.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 74; `test_merge_endpoints.py`, 67)
+### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 67)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
-retry, delete, and the app shell. Ten cover editing a body: the markdown source behind
+retry, delete, and the app shell, which is never cached and is marked when the browser asks for it with a hard refresh. Ten cover editing a body: the markdown source behind
 `GET …/boxes/{id}/body`, a `PUT` that saves it and hands back that one rendered body and
 nothing else, the canvas view changing with it, an anchor kept when its passage survives the edit, a blank body
 refused, and an edit refused while the box is genuinely live. Eight more cover this change:
@@ -574,12 +575,46 @@ Added with the contents list. The counts in the sections above were not re-total
 - `tests/e2e/test_standards.py` (1) — two boxes with open lists keep unique ids, named
   buttons and labelled fields.
 
+## Researching a topic
+
+Added with the "Research a topic" flow. Every layer has its share.
+
+- `tests/unit/test_research.py` (26): the brief prompt and the research prompt (the web-only
+  and cite-everything rules, the standing instructions, the sentinels), the links found in a
+  report, URL normalising (`www.`, trailing slash, fragment, tracking keys), which citations
+  match no page the run saw, and the Sources section: cited pages only, unseen ones apart.
+- `tests/unit/test_runner.py` (+13): a stream line of 300 KB read whole (a report is one line, and the default pipe limit is 64 KB), `--allowedTools` present with web search and absent
+  without, the model override, and the captured stream: each tool call once, the query, the
+  fetched URL, the pages a search returned, a 404 not counted as seen, the final text on
+  `done`, and a refused tool.
+- `tests/unit/test_storage.py` (+9): a topic of several lines titled on one line, a research canvas starts with a pending, empty root and
+  a `research.json`; reading, updating and resetting it; a pasted canvas has none.
+- `tests/unit/test_fake_claude.py` (2): the two prompt headings the stand-in CLI retypes
+  equal the ones the app writes.
+- `tests/api/test_research_api.py` (40): drafting the brief (stream events, no tools, the
+  answer model, a failure worded for a brief, 422 for a blank or long topic), starting a run (201, 422), the run itself
+  (`tool` and `reset` events, narration kept out of the report, the Sources section, the
+  unverified list, the new title, the research model), a run that never reached the web or
+  was refused its tools saved as failed, 409 for a second stream on a live box, and retry:
+  allowed on a research root, refused on a pasted document.
+- `tests/api/test_contract.py` (+1): the keys of `research` on a canvas view.
+- `tests/e2e/test_research_topic.py` (61): a blinking dot beside the status note and a second one above the brief, both shown only while the brief is written, and still under reduced motion, a brief over the length cap still taking typing, saying it is too long, refusing to start, and recovering once trimmed, a plain refresh keeping the topic, the brief (edited or cut short mid-draft), and the research tab, a hard refresh clearing all three for good, no draft left behind once research starts, the page staying where it was scrolled while the brief is still being written, the topic box and the brief box each as tall as their text (growing, shrinking back, never clipped, the top of the page still reachable under a tall brief), Shift+Enter adding a line without drafting, the brief hidden until drafted, a blank topic
+  refused, the draft about the topic and editable, Enter drafting, an emptied brief not
+  startable, the edited brief reaching the run, the live log of searches and pages, the
+  report, its Sources, the flag for a citation never seen, the canvas retitled, the failure
+  wording, "Retry research", and a reload in mid-run ending interrupted.
+- Live, `tests/api/test_sandbox.py` (+2): a real web run is refused nothing and is shown
+  search results. `tests/api/test_research_live.py` (2): a real research run reaches the
+  web and cites only pages it saw.
+
 ## Fixtures
 
 | File | What it is |
 |------|-----------|
 | `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, `[[fake:long]]` for an answer tall enough to overlap the box below it, and `[[fake:images]]` for an answer holding one picture at `FAKE_CLAUDE_IMAGE_URL`. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
 | `fixtures/images/__init__.py` | Picture bytes built in code (a valid PNG, plus GIF, JPEG and WebP headers, an SVG and an HTML page), so no binary is committed. |
+| `fixtures/stream_research.jsonl` | A real web run, captured from Claude Code 2.1.289 and cleaned of ids, usage and local paths: one search, one fetch, an answer. The parser tests read it, so the event shapes are the CLI's and not a guess. |
+| `fixtures/stream_research_denied.jsonl` | The same run before `--allowedTools` was added: the search is refused, and the run still ends in success. Kept so that case stays parsed. |
 | `fixtures/sample_doc.md` | An excerpt of *Attention Is All You Need*. The word "attention" appears exactly four times; the find tests count on it. |
 | `fixtures/math_doc.md` | One paragraph per maths case: inline, a formula in mid-sentence prose to highlight across, display `$$…$$`, a `\begin{align}` block, and a paragraph of prices that must stay prose. Every formula uses ASCII `\mathrm{…}` names, so an assertion never depends on a symbol table. |
 | `fixtures/tables_doc.md` | A 12-column table of unbreakable names that cannot fit the column, a 2-column table that can, a formula in one cell of the wide table, and a code block of one very long line. |
