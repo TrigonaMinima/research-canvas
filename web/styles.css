@@ -5,6 +5,8 @@
   --accent:#3A3E8F; --focus:var(--accent); --soft:#E7E7F4; --mark:rgba(58,62,143,.16);
   --warn:#9A3B2C; --shadow:0 1px 2px rgba(20,18,14,.06),0 14px 34px -20px rgba(20,18,14,.3);
   --chrome:rgba(253,252,250,.86);
+  /* What a raised surface casts: the ask popover, the sheet, a picture held up. */
+  --raise:0 2px 6px rgba(0,0,0,.08),0 24px 60px -26px rgba(0,0,0,.5);
   --serif:'Literata',Georgia,'Times New Roman',serif;
   --sans:'Public Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -521,7 +523,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
    Each of them then declares only its own width and placement. */
 .ask,.sheet{
   position:absolute;background:var(--paper);border:1px solid var(--line);border-radius:5px;
-  box-shadow:0 2px 6px rgba(0,0,0,.08),0 24px 60px -26px rgba(0,0,0,.5);padding:14px 16px 12px;
+  box-shadow:var(--raise);padding:14px 16px 12px;
 }
 .ask{width:392px;z-index:30}
 .ask__head,.sheet__head{display:flex;align-items:center;gap:8px;font:500 10px/1 var(--sans);letter-spacing:.13em;text-transform:uppercase;color:var(--ink2)}
@@ -629,6 +631,38 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 
 /* --- toast ---------------------------------------------------------------- */
 
+/* --- a picture, full size ---------------------------------------------------- */
+/* The dialog is the backdrop: it covers the window, so a click that misses the picture
+   lands on the dialog itself. The UA's own box and ::backdrop are cleared for that. */
+.prose img{cursor:zoom-in}
+.prose a img{cursor:pointer} /* a linked picture follows its link */
+.zoom{
+  position:fixed;inset:0;width:auto;height:auto;max-width:none;max-height:none;margin:0;padding:24px;
+  border:0;background:color-mix(in oklab,var(--desk) 88%,transparent);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;cursor:zoom-out;
+  overflow:hidden; /* a zoomed picture overflows by design, and must not scroll */
+  animation:zoom-in .18s ease-out;
+}
+.zoom::backdrop{background:transparent}
+.zoom img{
+  display:block;max-width:100%;max-height:100%;object-fit:contain;cursor:default;
+  background:var(--paper);border-radius:5px;box-shadow:var(--raise);
+  touch-action:none;user-select:none;-webkit-user-drag:none;
+}
+/* Past the fit there is something to pan, and the cursor says so. */
+.zoom[data-zoomed] img{cursor:grab}
+.zoom[data-panning] img{cursor:grabbing}
+.zoom__bar{position:absolute;top:14px;right:16px;z-index:1;display:flex;gap:8px}
+.zoom__btn{
+  width:34px;height:34px;border-radius:50%;padding:0;
+  background:var(--paper);border:1px solid var(--line);color:var(--ink2);cursor:pointer;
+  font:400 18px/1 var(--sans);
+}
+.zoom__btn:hover:not(:disabled){color:var(--ink)}
+.zoom__btn:disabled{opacity:.4;cursor:default}
+/* Opacity and scale only: neither one costs a layout. */
+@keyframes zoom-in{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+
 /* Fixed at the top level, above the desk, the empty state and the sheet alike, so
    a message is seen whichever screen raised it. */
 .toast{
@@ -641,6 +675,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
   .canvas[data-anim="1"]{transition:none}
   .box::before,.box__toc-toggle::before{transition:none}
   .dot-pulse,.runpill .dot{animation:none;opacity:1}
+  .zoom{animation:none}
   /* The ring still says where you landed; it just holds still until app.js drops it. */
   [data-box][data-flash="1"],mark[data-flash="1"]{animation:none;outline-color:var(--accent)}
 }

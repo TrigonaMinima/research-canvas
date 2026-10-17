@@ -35,6 +35,7 @@ import * as find from './find.js';
 import * as minimap from './minimap.js';
 import * as sections from './sections.js';
 import * as sourcemap from './sourcemap.js';
+import { zoomable } from './picture.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -120,6 +121,8 @@ function flash(message) {
 }
 
 const boxById = (id) => state.canvas && state.canvas.boxes.find((b) => b.id === id);
+// Boxes are children of the canvas, so the lookup stays out of their prose.
+const nodeOf = (box) => box && el.canvas.querySelector(`:scope > [data-box="${box}"]`);
 // The same two indexes both passes over the canvas need. A hundred boxes each scanning
 // a hundred anchors would be ten thousand comparisons every frame of a stream, and the
 // same goes for a pass that looks up a parent per box.
@@ -751,6 +754,76 @@ async function saveSettings() {
     // The page stays open: what is typed lives in these fields until it is accepted.
     flash(error.message);
   }
+}
+
+// --- a picture, full size -----------------------------------------------------
+// A native modal dialog: the browser makes the desk inert and keeps focus inside, so
+// nothing behind it answers a key or a click. Escape still goes through the one
+// handler that knows every overlay's order.
+
+let zoom = null; // { node, box, src } while a picture is open
+
+function openZoom(img) {
+  const node = document.createElement('dialog');
+  node.className = 'zoom';
+  node.dataset.zoom = '1';
+  // Said outright: a locator, and an older reader, should not have to infer it.
+  node.setAttribute('role', 'dialog');
+  node.setAttribute('aria-modal', 'true');
+  // `![](x)` is valid markdown, and a dialog with no name is announced as nothing.
+  node.setAttribute('aria-label', img.alt.trim() || 'Picture');
+
+  const button = (data, label, keys, text) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'zoom__btn';
+    b.dataset[data] = '1';
+    b.setAttribute('aria-label', label);
+    b.title = `${label} (${keys})`;
+    b.textContent = text;
+    return b;
+  };
+  const zoomOut = button('zoomOutStep', 'Zoom out', '−', '−');
+  const zoomIn = button('zoomInStep', 'Zoom in', '+', '+');
+  const close = button('zoomClose', 'Close', 'Esc', '×');
+  const bar = document.createElement('div');
+  bar.className = 'zoom__bar';
+  bar.append(zoomOut, zoomIn, close);
+
+  const full = document.createElement('img');
+  full.src = img.getAttribute('src');
+  full.alt = img.alt;
+  full.draggable = false; // a native image drag would swallow the pan
+
+  node.append(bar, full);
+  const view = zoomable(node, full, zoomIn, zoomOut);
+  node.addEventListener('click', (event) => {
+    if (event.target === close || view.closes(event)) closeZoom();
+  });
+  // The browser would close it on Escape by itself, behind the app's back.
+  node.addEventListener('cancel', (event) => event.preventDefault());
+
+  // The box and the source, not the node: a streaming answer rebuilds its body.
+  zoom = { node, view, box: img.closest('[data-box]')?.dataset.box, src: full.getAttribute('src') };
+  document.body.append(node);
+  node.showModal();
+  close.focus();
+}
+
+function closeZoom() {
+  if (!zoom) return;
+  const { node, view, box, src } = zoom;
+  zoom = null;
+  view.stop();
+  node.close();
+  node.remove();
+  const img = [...(nodeOf(box)?.querySelectorAll('[data-body] img') ?? [])]
+    .find((pic) => pic.getAttribute('src') === src);
+  if (!img) return;
+  // Focusable only now: a picture that took focus on every press would steal it from
+  // a text selection begun on it.
+  img.tabIndex = -1;
+  img.focus({ preventScroll: true }); // the camera owns the desk's scroll
 }
 
 function clientToCanvas(rect) {
@@ -1789,8 +1862,6 @@ function clearSelection() {
 function setFocus(id) {
   const next = boxById(id) ? id : null;
   if (state.focused === next) return;
-  // Boxes are children of the canvas, so the lookup stays out of their prose.
-  const nodeOf = (box) => box && el.canvas.querySelector(`:scope > [data-box="${box}"]`);
   const was = nodeOf(state.focused);
   const now = nodeOf(next);
   state.focused = next;
@@ -2072,7 +2143,8 @@ document.addEventListener('dblclick', (event) => {
   // A highlight and a link each already answer to a click, so a second one is not a
   // request to edit. And the first click may have flown the camera, in which case the
   // second landed on whatever slid under the pointer rather than on what was read.
-  if (event.target.closest('mark[data-anchor], a[href]')) return;
+  // A picture answers to a click as well: it opens full size.
+  if (event.target.closest('mark[data-anchor], a[href], img')) return;
   if (el.canvas.dataset.anim === '1') return;
 
   const boxEl = body.closest('[data-box]');
@@ -2116,6 +2188,16 @@ document.addEventListener('click', (event) => {
       setFocus(pressedBox);
       if (state.selected.size) clearSelection();
     }
+    return;
+  }
+
+  // After the focus, so the box the picture sits in is the box the reader is in.
+  // A linked picture follows its link, and a text drag that ends on one is a question.
+  // A picture has no children, so the tag says it all and most clicks walk no further.
+  const pic = t.tagName === 'IMG' && hit('[data-box] [data-body] img');
+  if (pic && !hit('a[href]') && !modified(event) && el.canvas.dataset.anim !== '1'
+      && window.getSelection()?.isCollapsed !== false) {
+    openZoom(pic);
     return;
   }
 
@@ -2267,7 +2349,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
     // A fold closes an open editor without saving, and every other open layer owns
     // its keys, so the arrows fold only when the desk is all there is.
-    if (!state.focused || edit || ask || rename || panel || modified(event) || typing(event)) return;
+    if (!state.focused || zoom || edit || ask || rename || panel || modified(event) || typing(event)) return;
     const box = boxById(state.focused);
     if (!box) return;
     event.preventDefault(); // the fold is the whole answer: the page must not scroll
@@ -2275,9 +2357,11 @@ document.addEventListener('keydown', (event) => {
     return;
   }
   if (event.key !== 'Escape') return;
-  // Topmost first: the sheet, then the popover, then the editor under both. The title
-  // field holds focus while it is open, so it answers before anything on the desk.
-  if (panel) closeSettings();
+  // Topmost first: the picture, the sheet, then the popover, then the editor under all
+  // of them. The title field holds focus while it is open, so it answers before
+  // anything on the desk.
+  if (zoom) closeZoom();
+  else if (panel) closeSettings();
   else if (rename) closeRename({ refocus: true });
   else if (mergeAsk) closeMergeAsk();
   else if (ask) closeAsk();

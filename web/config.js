@@ -37,6 +37,11 @@ export const UNFINISHED = new Set(served.unfinished);
 // it, not the desk.
 export const SCROLL_BLOCKS = '.table-wrap, .prose pre, .prose .math.block, .prose .math.amsmath, .prose .math.inline';
 
+// The full-size picture view: how far past its own pixels a picture may go, and how
+// far one button press or key moves it. Browser-only, so not fetched.
+export const PICTURE_MAX_ZOOM = 8;
+export const PICTURE_ZOOM_STEP = 1.5;
+
 // The stylesheet needs the chrome height as well, and cannot fetch it itself.
 // Handed over here so config.py stays the one owner of the number.
 document.documentElement.style.setProperty('--chrome-h', `${CHROME_HEIGHT}px`);

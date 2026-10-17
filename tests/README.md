@@ -558,6 +558,27 @@ The counts above were not re-totalled.
   says so and keeps the editor open. On a web-off canvas the picture host gets no request and a
   pasted picture still shows.
 
+## A picture, full size (43 tests)
+
+- `tests/e2e/test_image_zoom.py` (18) — a click on a picture in a box body opens a modal
+  dialog (`aria-modal="true"`, named after the alt text) that shows the same `src`, fits the
+  window, and takes the focus onto its Close button. Escape, a click on the backdrop and the
+  Close button each close it; a click on the picture itself does not. Focus goes back to the
+  picture, and its box stays focused. A double click on a picture never opens the editor and
+  leaves the dialog open. The arrow keys do not fold the box behind it. Every visible button is
+  named while it is open, and under reduced motion it does not animate.
+- `tests/e2e/test_image_zoom_levels.py` (25) — zooming past full size, on the 2px answer picture
+  (whose fit is its natural size) and on a 3000x2000 picture uploaded into the root box (whose
+  fit is well below it). It opens fitted to the window, and fit is the floor: the wheel stops
+  there and Zoom out is disabled. The wheel zooms past natural size, around the pointer, and
+  stops at 8x natural size, where Zoom in is disabled. Ctrl+wheel (a trackpad pinch) zooms too.
+  The buttons are named Zoom in and Zoom out and zoom around the centre; `+` and `=` zoom in,
+  `-` zooms out, and `0` resets to fit. A drag pans a zoomed picture, which shows the grab cursor
+  and cannot be panned out of view. A drag that ends on the backdrop does not close the view. A
+  double click shows actual pixels, a second one returns to fit, and a picture already at full
+  size doubles. The double click that opens a picture does not also zoom it. Rects are read as
+  the picture's own pixels, border excluded, through `tests/fixtures/zoom.py`.
+
 ## A contents list in every box (25 tests, across the layers above)
 
 Added with the contents list. The counts in the sections above were not re-totalled for it.
