@@ -51,9 +51,10 @@ Each module in isolation, no HTTP, no browser.
   file never listed as a canvas.
 - `test_anchors.py` (5) — text-offset anchors resolved against rendered plain text,
   including the nearest-occurrence fallback when the document has shifted.
-- `test_markdown.py` (30) — rendering and first-heading extraction, two on tables (a
-  table wrapped in `.table-wrap`, and no whitespace between table and wrapper, which
-  would shift every later anchor), plus twelve on
+- `test_markdown.py` (30) — rendering and first-heading extraction, five on tables (a
+  table wrapped in `.table-wrap`, no whitespace between table and wrapper, which
+  would shift every later anchor, and a local and a remote picture rendered as an `<img>`
+  inside a `<td>`, the local one resolved against the canvas), plus twelve on
   mathematics: inline `$…$` as `display="inline"`, `$$…$$` as `display="block"`, the
   single-line `$$…$$` and `\begin{align}` token types the plugins emit separately, a
   subscript and an operator macro surviving conversion, no whitespace between the MathML
@@ -354,7 +355,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   edited text being what is sent, typing by hand unchanged, chips written in Settings showing
   on the next highlight with no reload, no chip row at all once every chip is deleted, and
   eight chips at the name cap staying inside the popover with `Ask` still on screen.
-- `test_tables.py` (14) — a canvas imported from `fixtures/tables_doc.md`. A wide table
+- `test_tables.py` (19) — a canvas imported from `fixtures/tables_doc.md`. A wide table
   scrolling inside its wrapper, the body no wider than its box, a narrow table still filling
   the column, a sideways wheel scrolling the table and not the canvas, the same over a formula in a cell, the canvas panning
   once the table is at its end, a vertical wheel panning and leaving the table unscrolled,
@@ -362,6 +363,10 @@ The same browser, the real server, the real storage, the fake `claude`.
   cell following the table as it scrolls, and the table scrolling itself to a find hit in a
   hidden column and back to the passage an answer came from. One more for the arrow keys:
   an arrow pressed inside a wide table does not fold the focused box, since there it scrolls.
+  Five cover pictures in a comparison table (issue #23), a wide and a tall picture stored in
+  the canvas and both loaded in their cells: the wide one inside its cell, the tall one
+  inside its cell, no sideways scroll from the wide one, the tall one capped at 240px high,
+  and a narrow picture centred in its cell.
 - `test_box_focus.py` (24) — the one focused box, marked `data-focused="1"`. Four cover a
   plain click: body, header (which still folds), a button, and the move to another box,
   with one box marked at a time. Six cover a journey: an edge and a highlight focus the

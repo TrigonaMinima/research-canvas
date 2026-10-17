@@ -333,6 +333,10 @@ mark[data-anchor][data-merged="1"]{background:0 0;box-shadow:inset 0 -1.5px 0 va
 .prose img{display:block;max-width:100%;height:auto;margin:0 0 13px;border:1px solid var(--line);border-radius:4px;-webkit-user-drag:none}
 /* Markdown puts a picture inside a paragraph, which already spaces it. */
 .prose p > img:last-child{margin-bottom:0}
+/* A comparison table sets pictures side by side. The width already shrinks to the cell;
+   the height cap stops one tall picture making a row taller than the screen. Centred,
+   since a capped portrait picture is narrower than its cell. */
+.prose td img,.prose th img{max-height:240px;margin:0 auto}
 
 /* Maths is native MathML, rendered on the server and set in whichever maths face the
    machine already has. Nothing is fetched: the `math` generic is the browser's own. */
