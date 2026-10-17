@@ -71,6 +71,7 @@ const el = {
   prompt: $('[data-research-prompt]'),
   start: $('[data-research-start]'),
   researchNote: $('[data-research-note]'),
+  briefModel: $('[data-research-model]'),
   researchDots: document.querySelectorAll('[data-research-dot], [data-research-dot-top]'),
   list: $('[data-canvas-list]'),
   selectMode: $('[data-select-mode]'),
@@ -448,11 +449,12 @@ function listen(boxId) {
 }
 
 // How a run ended, from the stream that carried it or from the disk.
-function applyOutcome(boxId, { status, reason, html, title, research }) {
+function applyOutcome(boxId, { status, reason, html, title, research, model }) {
   const box = boxById(boxId);
   if (box) {
     box.status = status;
     box.reason = reason || '';
+    if (model) box.model = model;
   }
   // A report names itself, and says which of its citations the run never saw.
   if (title) state.canvas.title = title;
@@ -490,6 +492,7 @@ async function settle(canvasId, boxId, wait = SETTLE_FIRST_MS) {
     html: view.bodies[boxId],
     title: view.title,
     research: view.research,
+    model: fresh.model,
   });
 }
 
@@ -2386,11 +2389,19 @@ function stopDrafting() {
   drafting = null;
 }
 
+// The model that drafted the brief, beside its label and never inside it, so the
+// field keeps "Research brief" as its name.
+function showBriefModel(model) {
+  el.briefModel.textContent = model ? `Drafted by ${model}` : '';
+  el.briefModel.hidden = !model;
+}
+
 function resetResearch() {
   stopDrafting();
   el.topic.value = '';
   el.prompt.value = '';
   el.brief.hidden = true;
+  showBriefModel('');
   researchNote(RESEARCH_HINT);
   syncResearch();
 }
@@ -2404,6 +2415,7 @@ function draftBrief() {
   drafting = source;
   el.brief.hidden = false;
   el.prompt.value = '';
+  showBriefModel('');
   researchNote('Drafting the brief…');
   syncResearch();
 
@@ -2422,6 +2434,7 @@ function draftBrief() {
     const data = JSON.parse(event.data);
     if (data.status !== 'done') { finish(data.reason, true); return; }
     el.prompt.value = data.prompt;
+    showBriefModel(data.model);
     finish(BRIEF_READY_HINT, false);
   });
 

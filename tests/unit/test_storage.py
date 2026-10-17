@@ -176,6 +176,29 @@ def test_should_load_a_canvas_saved_before_pinning_existed(canvas_root, sample_m
     assert storage.load(canvas.id).box(canvas.root_id).pinned is False
 
 
+def test_should_round_trip_the_model_that_answered(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    box = storage.add_answer(canvas, parent_id=canvas.root_id, question="a")
+    box.model = "claude-sonnet-5-5"
+    storage.save(canvas)
+    assert storage.load(canvas.id).box(box.id).model == "claude-sonnet-5-5"
+
+
+def test_should_start_an_answer_with_no_model(canvas_root, sample_markdown):
+    canvas = storage.create_canvas(sample_markdown)
+    assert storage.add_answer(canvas, parent_id=canvas.root_id, question="a").model == ""
+
+
+def test_should_load_a_canvas_saved_before_the_model_was_kept(canvas_root, sample_markdown):
+    """A canvas.json written by an older build has no model key at all."""
+    canvas = storage.create_canvas(sample_markdown)
+    path = canvas_root / canvas.id / "canvas.json"
+    data = json.loads(path.read_text())
+    data["boxes"][0].pop("model", None)
+    path.write_text(json.dumps(data))
+    assert storage.load(canvas.id).box(canvas.root_id).model == ""
+
+
 # --- the per-box contents list -------------------------------------------------
 
 

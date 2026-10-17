@@ -123,6 +123,8 @@ class Box:
     # Its answer has been folded into its parent. The box stays, so the question that
     # produced it and anything asked below it survive the merge.
     merged: bool = False
+    # The model id the run reported, so the reader can tell what wrote the answer.
+    model: str = ""
     created_at: str = ""
 
     def to_dict(self) -> dict:
@@ -143,6 +145,7 @@ class Box:
             "pinned": self.pinned,
             "tocOpen": self.toc_open,
             "merged": self.merged,
+            "model": self.model,
             "createdAt": self.created_at,
         }
 
@@ -165,6 +168,7 @@ class Box:
             pinned=bool(data.get("pinned", False)),
             toc_open=bool(data.get("tocOpen", False)),
             merged=bool(data.get("merged", False)),
+            model=str(data.get("model", "")),
             created_at=data.get("createdAt", ""),
         )
 

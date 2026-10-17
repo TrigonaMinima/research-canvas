@@ -1,13 +1,13 @@
 # Tests
 
-1291 tests. 1284 run on every `make test`; the 7 marked `live` spend real Claude usage and
+1318 tests. 1311 run on every `make test`; the 7 marked `live` spend real Claude usage and
 run only on `make test-sandbox` and `make test-research-live`.
 
 ```
-make test                unit + api + e2e          1284 tests, no usage spent
-make test-unit           tests/unit                333
-make test-api            tests/api                 289  (7 live deselected)
-make test-e2e            tests/e2e                 662
+make test                unit + api + e2e          1311 tests, no usage spent
+make test-unit           tests/unit                338
+make test-api            tests/api                 300  (7 live deselected)
+make test-e2e            tests/e2e                 673
 make test-sandbox        tests/api -m live -k sandbox    5  proves US-7 against the real CLI
 make test-research-live  tests/api -m live -k research   2  one real research run
 ```
@@ -606,6 +606,27 @@ Added with the "Research a topic" flow. Every layer has its share.
 - Live, `tests/api/test_sandbox.py` (+2): a real web run is refused nothing and is shown
   search results. `tests/api/test_research_live.py` (2): a real research run reaches the
   web and cites only pages it saw.
+
+## Which model wrote it
+
+Added with the model tag (issues #38 and #39). The run names its model at `system/init`;
+the app keeps that id, or the configured alias when init names none.
+
+- `tests/unit/test_runner.py` (+2): the model id kept from `init`, and empty when init
+  names none.
+- `tests/unit/test_storage.py` (+3): a box's model round trips through disk, a new answer
+  starts with none, and a `canvas.json` written before the field existed still loads.
+- `tests/api/test_endpoints.py` (+5): the box keeps the model the run reported, falls back to
+  the answer model, sends it with `done`, keeps it on a failed answer, and drops it on retry.
+- `tests/api/test_research_api.py` (+6): the brief's `done` names the model that drafted it,
+  or the answer model; the report's model reaches `research.json`, the `done` event, the
+  root box and the canvas view.
+- `tests/fixtures/contract.py`: `model` is a box key, so `test_contract.py` checks it.
+- `tests/e2e/test_model_tag.py` (11): the answer header names its model, says "Answered by"
+  to a screen reader, keeps the id's own case, survives a reload, and is absent on a pasted
+  document; the brief names its model only once drafted and keeps "Research brief" as the
+  field's name; a researched root says "Researched by"; and an older researched root with
+  no box model falls back to the model in `research.json`.
 
 ## Fixtures
 

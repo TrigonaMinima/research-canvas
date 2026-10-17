@@ -288,11 +288,14 @@ async def _draft(prompt: str) -> AsyncIterator[str]:
         yield _sse("status", {"status": "running"})
         collected: list[str] = []
         outcome, reason = "done", ""
+        model = ANSWER_MODEL
         try:
             async for event in RUN(prompt, web_search=False, model=ANSWER_MODEL):
                 if event.kind == "text":
                     collected.append(event.text)
                     yield _sse("text", {"text": event.text})
+                elif event.kind == "init":
+                    model = event.model or model
                 elif event.kind == "failed":
                     outcome, reason = "failed", _reworded(event.reason, _BRIEF_REASONS)
                     break
@@ -302,7 +305,8 @@ async def _draft(prompt: str) -> AsyncIterator[str]:
             outcome, reason = "failed", f"{BRIEF_CRASHED_REASON} ({exc})"
         # Always a last word, even on failure: an EventSource left hanging reconnects,
         # and a reconnect here would spend a second run.
-        yield _sse("done", {"status": outcome, "reason": reason, "prompt": "".join(collected)})
+        done = {"status": outcome, "reason": reason, "prompt": "".join(collected), "model": model}
+        yield _sse("done", done)
 
 
 @app.post("/api/research", status_code=201)
@@ -444,6 +448,7 @@ def retry(canvas_id: str, box_id: str) -> dict:
             storage.reset_research(canvas.id)
         box.status = "pending"
         box.reason = ""
+        box.model = ""  # the next run names its own
         storage.write_body(canvas.id, box.id, "")
         return box.to_dict()
 
@@ -564,12 +569,15 @@ async def _drive(run: _Run) -> AsyncIterator[str]:
         seen: list[str] = []
         final, denied = "", False
         outcome, reason = "done", ""
+        # The alias until the run names the model behind it, which it does at init.
+        model = run.model
         try:
             async for event in RUN(run.prompt, web_search=web_search, model=run.model):
                 if event.kind == "text":
                     collected.append(event.text)
                     yield _sse("text", {"text": event.text})
                 elif event.kind == "init":
+                    model = event.model or model
                     yield _sse("init", {"tools": event.tools})
                 elif event.kind == "results":
                     seen += event.urls
@@ -592,7 +600,12 @@ async def _drive(run: _Run) -> AsyncIterator[str]:
                     break
         except asyncio.CancelledError:
             _finish(
-                canvas_id, box_id, "".join(collected), "interrupted", storage.INTERRUPTED_REASON
+                canvas_id,
+                box_id,
+                "".join(collected),
+                "interrupted",
+                storage.INTERRUPTED_REASON,
+                model=model,
             )
             raise
         except Exception as exc:  # noqa: BLE001 - a run must never take the server down
@@ -605,7 +618,8 @@ async def _drive(run: _Run) -> AsyncIterator[str]:
             elif denied or not seen:
                 outcome, reason = "failed", RESEARCH_NO_WEB_REASON
             yield _sse(
-                "done", _finish_research(run, final or text, outcome, reason, activity, seen)
+                "done",
+                _finish_research(run, final or text, outcome, reason, activity, seen, model),
             )
             return
 
@@ -619,14 +633,20 @@ async def _drive(run: _Run) -> AsyncIterator[str]:
                 text = await _localize(canvas_id, text, pictures)
             except asyncio.CancelledError:
                 # The answer itself is complete; keep it, with its links as they came.
-                _finish(canvas_id, box_id, text, outcome, reason)
+                _finish(canvas_id, box_id, text, outcome, reason, model=model)
                 raise
-        html = _finish(canvas_id, box_id, text, outcome, reason)
-        yield _sse("done", {"status": outcome, "reason": reason, "html": html})
+        html = _finish(canvas_id, box_id, text, outcome, reason, model=model)
+        yield _sse("done", {"status": outcome, "reason": reason, "html": html, "model": model})
 
 
 def _finish_research(
-    run: _Run, report: str, status: str, reason: str, activity: list[dict], seen: list[str]
+    run: _Run,
+    report: str,
+    status: str,
+    reason: str,
+    activity: list[dict],
+    seen: list[str],
+    model: str,
 ) -> dict:
     """Check the citations, sign the report with its sources, and save both."""
     cited: list[str] = []
@@ -646,19 +666,28 @@ def _finish_research(
         cited=cited,
         unverified=unverified,
         finishedAt=storage.finished_now(),
+        model=model,
     )
-    html = _finish(run.canvas_id, run.box_id, report, status, reason, title=title)
+    html = _finish(run.canvas_id, run.box_id, report, status, reason, title=title, model=model)
     return {
         "status": status,
         "reason": reason,
         "html": html,
         "title": title,
         "research": found,
+        "model": model,
     }
 
 
 def _finish(
-    canvas_id: str, box_id: str, text: str, status: str, reason: str, *, title: str | None = None
+    canvas_id: str,
+    box_id: str,
+    text: str,
+    status: str,
+    reason: str,
+    *,
+    model: str,
+    title: str | None = None,
 ) -> str:
     storage.write_body(canvas_id, box_id, text)
     try:
@@ -666,6 +695,7 @@ def _finish(
             box = canvas.box(box_id)
             box.status = status
             box.reason = reason
+            box.model = model
             if title:
                 canvas.title = title
     except (KeyError, storage.CanvasNotFound):

@@ -30,6 +30,7 @@ BOX_KEYS = {
     "pinned",
     "sections",
     "merged",
+    "model",
 }
 
 ANCHOR_KEYS = {"id", "box", "target", "start", "end", "quote"}
@@ -164,6 +165,7 @@ def make_box(**over) -> dict:
         "pinned": False,
         "sections": [],
         "merged": False,
+        "model": "",
     }
     box.update(over)
     return box

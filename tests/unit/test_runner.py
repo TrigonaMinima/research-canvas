@@ -91,6 +91,16 @@ def test_should_surface_the_tools_the_run_was_actually_given():
     assert next(iter(runner.parse_stream(lines))).tools == ["WebSearch"]
 
 
+def test_should_keep_the_model_the_run_reports_at_init():
+    init = {"type": "system", "subtype": "init", "tools": [], "model": "claude-sonnet-5-5"}
+    assert next(iter(runner.parse_stream([json.dumps(init)]))).model == "claude-sonnet-5-5"
+
+
+def test_should_leave_the_model_empty_when_init_names_none():
+    lines = [json.dumps({"type": "system", "subtype": "init", "tools": []})]
+    assert next(iter(runner.parse_stream(lines))).model == ""
+
+
 def _delta(text: str) -> str:
     return json.dumps(
         {

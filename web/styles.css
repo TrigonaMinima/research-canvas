@@ -90,6 +90,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box--root .box__head{gap:14px;margin:-46px -54px 26px;padding:16px 54px 14px;font-size:10.5px;letter-spacing:.14em}
 .box--answer .box__head{margin:-24px -28px 12px;padding:14px 28px 12px}
 .box__head em{font-style:normal;color:var(--accent)}
+/* A model id is a name, so it keeps its case; long ones give way to the buttons. */
+.box__model{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:400 10px/1 var(--mono);letter-spacing:0;text-transform:none;color:var(--ink2)}
 /* Every head row pushes what follows it to the right edge. */
 .spacer{margin-left:auto}
 .grip{display:inline-block;width:11px;color:var(--line);letter-spacing:-1px}
@@ -545,7 +547,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 
 .ask__foot,.sheet__foot,.box__edit-foot,.box__edit-head{display:flex;align-items:center;gap:10px;margin-top:10px}
 .box__edit-head{margin-top:0;margin-bottom:10px}
-.ask__hint,.box__hint{font:400 11.5px/1 var(--sans);color:var(--ink2);margin-left:auto}
+.ask__hint,.box__hint,.empty__model{font:400 11.5px/1 var(--sans);color:var(--ink2);margin-left:auto}
 .btn-primary{border:0;border-radius:3px;background:var(--accent);color:var(--paper);cursor:pointer;font:500 12.5px/1 var(--sans);padding:9px 13px}
 
 /* --- the settings page ------------------------------------------------------ */
@@ -611,6 +613,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 .empty__brief{margin-top:14px}
 .empty__briefhead{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .empty__brief label{display:block;font:500 12.5px/1 var(--sans);color:var(--ink2)}
+.empty__model{font-family:var(--mono)}
 .empty__brief textarea{height:auto;min-height:120px;overflow:hidden}
 
 .canvaslist{margin:16px 0 0;padding:0;list-style:none;border-top:1px solid var(--line)}

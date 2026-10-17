@@ -197,6 +197,48 @@ def test_should_keep_the_anchor_when_an_answer_fails(client, canvas, fake_answer
     assert client.get(f"/api/canvases/{canvas['id']}").json()["anchors"][0]["target"] == asked["id"]
 
 
+def _streamed_box(client, canvas, fake_answer, events) -> tuple[dict, str]:
+    fake_answer(events)
+    asked = client.post(f"/api/canvases/{canvas['id']}/ask", json=_ask()).json()["box"]
+    stream = client.get(f"/api/canvases/{canvas['id']}/boxes/{asked['id']}/stream").text
+    boxes = client.get(f"/api/canvases/{canvas['id']}").json()["boxes"]
+    return next(b for b in boxes if b["id"] == asked["id"]), stream
+
+
+def test_should_keep_the_model_the_run_reported_on_the_box(client, canvas, fake_answer):
+    event = fake_answer.Event
+    events = [event(kind="init", model="claude-sonnet-5-5"), event(kind="done", text="ok")]
+    box, _ = _streamed_box(client, canvas, fake_answer, events)
+    assert box["model"] == "claude-sonnet-5-5"
+
+
+def test_should_fall_back_to_the_answer_model_when_init_names_none(client, canvas, fake_answer):
+    box, _ = _streamed_box(client, canvas, fake_answer, [fake_answer.Event(kind="done")])
+    assert box["model"] == config.ANSWER_MODEL
+
+
+def test_should_send_the_model_with_done(client, canvas, fake_answer):
+    event = fake_answer.Event
+    events = [event(kind="init", model="claude-sonnet-5-5"), event(kind="done", text="ok")]
+    _, stream = _streamed_box(client, canvas, fake_answer, events)
+    assert '"model": "claude-sonnet-5-5"' in stream.rsplit("event: done", 1)[1]
+
+
+def test_should_keep_the_model_on_a_failed_answer(client, canvas, fake_answer):
+    event = fake_answer.Event
+    events = [event(kind="init", model="claude-sonnet-5-5"), event(kind="failed", reason="no")]
+    box, _ = _streamed_box(client, canvas, fake_answer, events)
+    assert box["model"] == "claude-sonnet-5-5"
+
+
+def test_should_clear_the_model_when_a_box_is_retried(client, canvas, fake_answer):
+    event = fake_answer.Event
+    events = [event(kind="init", model="claude-sonnet-5-5"), event(kind="failed", reason="no")]
+    box, _ = _streamed_box(client, canvas, fake_answer, events)
+    retried = client.post(f"/api/canvases/{canvas['id']}/boxes/{box['id']}/retry").json()
+    assert retried["model"] == ""
+
+
 def test_should_put_a_retried_box_back_to_pending(client, canvas, fake_answer):
     event = fake_answer.Event
     fake_answer([event(kind="failed", reason="nope")])

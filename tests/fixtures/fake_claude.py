@@ -69,6 +69,8 @@ def merge_chunks(mode: str) -> list[str]:
 EXPAND_SENTINEL = "## Topic to expand into a research brief"
 RESEARCH_SENTINEL = "## Research brief"
 
+# What every run says it is, at init. The app shows it on the box the run wrote.
+MODEL = "fake-claude"
 QUERY = "python releases overview"
 FETCHED = "https://www.python.org/downloads/"
 FOUND = "https://example.org/python-guide"
@@ -162,7 +164,7 @@ def main() -> int:
             "subtype": "init",
             "tools": sorted(tools),
             "mcp_servers": [],
-            "model": "fake-claude",
+            "model": MODEL,
             "permissionMode": "dontAsk",
         }
     )

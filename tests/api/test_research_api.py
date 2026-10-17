@@ -13,9 +13,12 @@ INVENTED = "https://example.org/never-seen"
 REPORT = f"# Python releases\n\nIt is 3.14 ([python.org]({FETCHED})). Also [this]({INVENTED}).\n"
 
 
+RESEARCH_MODEL_ID = "claude-opus-5-5"
+
+
 def _research_events(Event):
     return [
-        Event(kind="init", tools=["WebFetch", "WebSearch"]),
+        Event(kind="init", tools=["WebFetch", "WebSearch"], model=RESEARCH_MODEL_ID),
         Event(kind="text", text="Let me search for that."),
         Event(kind="tool", tool_kind="search", query="python release"),
         Event(kind="results", urls=["https://example.org/junk"]),
@@ -66,8 +69,29 @@ def test_should_end_the_draft_with_the_whole_brief(client, fake_answer):
     stream = client.get("/api/research/expand", params={"topic": "python releases"}).text
     assert _events(stream)[-1] == (
         "done",
-        {"status": "done", "reason": "", "prompt": "Scope: all of it."},
+        {
+            "status": "done",
+            "reason": "",
+            "prompt": "Scope: all of it.",
+            "model": config.ANSWER_MODEL,
+        },
     )
+
+
+def test_should_name_the_model_that_drafted_the_brief(client, fake_answer):
+    events = [
+        fake_answer.Event(kind="init", model="claude-sonnet-5-5"),
+        fake_answer.Event(kind="done"),
+    ]
+    fake_answer(events)
+    stream = client.get("/api/research/expand", params={"topic": "python releases"}).text
+    assert _events(stream)[-1][1]["model"] == "claude-sonnet-5-5"
+
+
+def test_should_fall_back_to_the_answer_model_for_the_brief(client, fake_answer):
+    fake_answer([fake_answer.Event(kind="done")])
+    stream = client.get("/api/research/expand", params={"topic": "python releases"}).text
+    assert _events(stream)[-1][1]["model"] == config.ANSWER_MODEL
 
 
 def test_should_end_a_failed_draft_with_a_done_event(client, fake_answer):
@@ -201,6 +225,24 @@ def test_should_send_the_new_title_with_done(finished):
 
 def test_should_send_the_verification_with_done(finished):
     assert finished["events"][-1][1]["research"]["unverified"] == [INVENTED]
+
+
+def test_should_record_the_model_that_wrote_the_report(finished):
+    assert storage.read_research(finished["id"])["model"] == RESEARCH_MODEL_ID
+
+
+def test_should_send_the_report_model_with_done(finished):
+    assert finished["events"][-1][1]["research"]["model"] == RESEARCH_MODEL_ID
+
+
+def test_should_keep_the_report_model_on_the_root_box(client, finished):
+    root = client.get(f"/api/canvases/{finished['id']}").json()["boxes"][0]
+    assert root["model"] == RESEARCH_MODEL_ID
+
+
+def test_should_show_the_report_model_on_the_canvas_view(client, finished):
+    view = client.get(f"/api/canvases/{finished['id']}").json()
+    assert view["research"]["model"] == RESEARCH_MODEL_ID
 
 
 def test_should_mark_the_root_done(client, finished):

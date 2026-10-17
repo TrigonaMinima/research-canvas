@@ -43,6 +43,7 @@ class Event:
     query: str = ""
     url: str = ""
     urls: list[str] = field(default_factory=list)  # pages a tool call put in front of the run
+    model: str = ""  # on "init": the full model id behind the alias the run was given
 
 
 def build_command(prompt: str, *, web_search: bool, model: str = ANSWER_MODEL) -> list[str]:
@@ -111,7 +112,8 @@ def _parse_line(line: str) -> list[Event]:
 
     if kind == "system":
         if data.get("subtype") == "init":
-            return [Event(kind="init", tools=list(data.get("tools") or []))]
+            tools = list(data.get("tools") or [])
+            return [Event(kind="init", tools=tools, model=str(data.get("model") or ""))]
         if data.get("subtype") == "permission_denied":
             return [Event(kind="denied", text=data.get("tool_name", ""))]
         return []

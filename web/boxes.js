@@ -95,6 +95,7 @@ function create(box) {
     <header class="box__head" data-drag>
       <span class="grip" aria-hidden="true">···</span>
       <span data-label></span>
+      <span class="box__model" data-model hidden></span>
       <span class="spacer"></span>
       <em data-status-label></em>
       <button type="button" class="chrome-btn" data-edit hidden>Edit</button>
@@ -191,6 +192,23 @@ function showToc(el, box, hide) {
   strip.hidden = hide || !list.childElementCount;
 }
 
+// A researched root saved before boxes kept their model still has the one its run used.
+// The verb is in the text for a screen reader; the stylesheet hides it from the eye.
+function showModel(tag, box, research) {
+  const model = box.model || research?.model || '';
+  // update() runs per streamed chunk; touch the tag only when the model changes.
+  if (tag.dataset.model === model) return;
+  tag.dataset.model = model;
+  tag.hidden = !model;
+  if (!model) { tag.replaceChildren(); tag.title = ''; return; }
+  const verb = box.kind === 'root' ? 'Researched by' : 'Answered by';
+  const hint = document.createElement('span');
+  hint.className = 'sr-only';
+  hint.textContent = `${verb} `;
+  tag.replaceChildren(hint, model);
+  tag.title = `${verb} ${model}`;
+}
+
 export function update(el, box, {
   html, anchors, inbound, parent, liveText, waitDetail, queuedAhead, editing, selected, focused,
   merging, reviewing, mergedTargets, research = null, activity = [],
@@ -211,6 +229,7 @@ export function update(el, box, {
   if (box.merged) el.dataset.merged = '1';
   else delete el.dataset.merged;
   el.querySelector('[data-status-label]').textContent = STATUS[box.status] || box.status;
+  showModel(el.querySelector('[data-model]'), box, research);
 
   // Folded state is one attribute and no more: the stylesheet does the hiding, and
   // edges.js and find.js both read this same signal.
