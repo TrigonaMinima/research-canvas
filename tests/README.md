@@ -1,17 +1,17 @@
 # Tests
 
-1378 tests. 650 run on every headless `make test`, 721 more need a browser and run on
+1386 tests. 658 run on every headless `make test`, 721 more need a browser and run on
 `make test-e2e`; the 7 marked `live` spend real Claude usage and run only on
 `make test-sandbox` and `make test-research-live`.
 
 ```
-make test                functional + regression, unit + api   650  no browser, no usage
-make test-unit           tests/{functional,regression}/unit    350
+make test                functional + regression, unit + api   658  no browser, no usage
+make test-unit           tests/{functional,regression}/unit    358
 make test-api            tests/{functional,regression}/api     300  (7 live deselected)
 make test-e2e            tests/{functional,regression}/e2e     721
 make test-stress         tests/stress                            0  suite lands with #63
 make test-chaos          tests/chaos                             0  suite lands with #64
-make test-all            all of tests/                        1371  (7 live deselected)
+make test-all            all of tests/                        1379  (7 live deselected)
 make coverage            make test, with line coverage of research_canvas
 make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
 make test-research-live  tests/functional/api -m live -k research   2  one real research run
@@ -44,6 +44,37 @@ Nothing in the suite calls Claude except `test-sandbox` and `test-research-live`
 is `tests/fixtures/fake_claude.py`, which speaks the real `stream-json` dialect, so the
 runner, the parser, the SSE bridge and the browser are all genuinely exercised for free.
 
+## Regression
+
+Each spec guards one fixed bug and names it in a `# Guards <commit>` comment at the top.
+`tests/functional/unit/test_regression_refs.py` (8) fails if a listed fix loses its spec or
+a spec loses its reference. Unit and api specs run in headless `make test`, e2e specs in
+`make test-e2e`.
+
+| Spec | Guards | Tests |
+|------|--------|-------|
+| `unit/test_source_line_marks.py` | `2679763` keep the reader's place when edit mode opens and closes | 7 |
+| `unit/test_table_cell_picture_markup.py` | `ebccccc` (#23) keep pictures in table cells to a sensible height | 3 |
+| `api/test_anchor_offset_correction.py` | `662ef1d` follow a passage's offset through an edit | 4 |
+| `e2e/test_highlight_word_snap.py` | `daeb753` snap a highlight out to whole words | 10 |
+| `e2e/test_edge_from_highlight_end.py` | `133e024` leave an edge from the end of the highlight | 2 |
+| `e2e/test_anchor_offset_follows_edit.py` | `662ef1d` follow a passage's offset through an edit | 7 |
+| `e2e/test_enter_saves_in_list_or_quote.py` | `06d893b` save from inside a list or a quote | 4 |
+| `e2e/test_edit_mode_keeps_place.py` | `2679763` keep the reader's place when edit mode opens and closes | 8 |
+| `e2e/test_crumb_ctrl_click.py` | `1a76b08` open the canvas list in a new tab on a modified crumb click | 3 |
+| `e2e/test_table_cell_pictures.py` | `ebccccc` (#23) keep pictures in table cells to a sensible height | 5 |
+
+- `test_highlight_word_snap.py` (10) — a highlight covers whole words, whatever the mouse
+  landed on. Six read the popover quote: a start inside a word, an end inside a word, both at
+  once, an edge already on a boundary left alone, and neither edge reaching past the word it
+  repairs. Four follow one repaired selection to the stored anchor, the marks in the source
+  box, the quote on the answer box, and the spaces a drag brought in, dropped. The boundary
+  case over a canned body stays in `functional/e2e/test_mocked_api.py`.
+- `test_anchor_offset_follows_edit.py` (7) — the offset stored when a passage is highlighted,
+  moved when the document is edited, every passage moved in one pass, the answers re-seated
+  where their passages are now, the same correction inside an answer body and inside a folded
+  box, and the corrected number still on disk after a reload.
+
 ## The nine required layers
 
 | # | Layer | Where | Tests |
@@ -51,7 +82,7 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 | 1 | API function tests | `tests/functional/unit/` | 280 |
 | 2 | API endpoint tests | `tests/functional/api/test_endpoints.py`, `test_merge_endpoints.py` | 159 |
 | 3 | Frontend, mocked API | `tests/functional/e2e/test_mocked_api.py` | 17 |
-| 4 | Frontend, real API | `tests/functional/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
+| 4 | Frontend, real API | `tests/functional/e2e/test_canvas.py`, `test_select.py`, `test_help.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
 | 5 | End-to-end, every UI element | all of `tests/functional/e2e/` | 539 |
 | 6 | Data / persistence | `tests/functional/unit/test_storage.py` | 68 |
 | 7 | Auth & authorization | `tests/functional/unit/test_server.py`, `tests/functional/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
@@ -90,7 +121,8 @@ Each module in isolation, no HTTP, no browser.
   that matters most in prose: `It costs $5 and $10 to run.` is not mathematics. Seven cover
   the source lines edit mode opens by: `data-line` on a paragraph, a heading, a list item,
   a fenced block and a display maths block, `data-line-end` on a paragraph of several
-  lines, and no text added to the body, so anchor offsets stay where they were.
+  lines, and no text added to the body, so anchor offsets stay where they were (now in
+  `tests/regression/unit/test_source_line_marks.py`).
 - `test_context.py` (25) — path-only prompt assembly (US-3): root + ancestors + the highlight
   + the question, and never a sibling branch. Two assert the preamble names the maths
   delimiters, so an answer can carry formulas the same way the document does. Six cover the
@@ -140,7 +172,8 @@ starting unpinned, a `pinned` patch saved, and `pinned: false` saved too, since 
 layout have the box back has to travel like any other value. Four cover a corrected anchor
 offset, which is the browser telling the server where a passage moved to in an edit: the new
 numbers saved, the quote left alone because the quote is what finds the passage next time, a
-correction for an anchor that is already gone accepted quietly, and a negative offset refused.
+correction for an anchor that is already gone accepted quietly, and a negative offset refused
+(now in `tests/regression/api/test_anchor_offset_correction.py`).
 Eleven cover the question chips: the built-in set served on a fresh home, a written set saved
 and served back, the chips surviving a canvas being created and deleted, a 422 with the
 message Settings shows for each refusal the storage layer makes, and a 422 on the read as
@@ -205,7 +238,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   so it can never strike through the words it runs past. One more follows a highlight that
   wraps over several lines, which measures as the box around all of them: the right edge of
   that box belongs to the widest line, so the edge used to leave beside the passage rather
-  than from the end of it. Forty-three cover editing a box: the Edit button on the document
+  than from the end of it (now in `tests/regression/e2e/test_edge_from_highlight_end.py`). Forty-three cover editing a box: the Edit button on the document
   and on an answer, the markdown source rather than the rendered HTML, the whole document
   reachable by panning to it with no scrollbar inside the editor, the caret landing on the
   first line, the `aria-label` on the editing surface, `Tab` indenting, `Enter` saving, `Shift+Enter` opening a new line and carrying a list marker onto it, the Save
@@ -213,7 +246,8 @@ The same browser, the real server, the real storage, the fake `claude`.
   surviving a reload, a mark and its edge still there when the passage survives, and no Edit
   button at all while an answer is still running. Sixteen of those cover this change. Four
   pin `Enter` saving from inside a bullet list, a numbered list, a nested list and a
-  blockquote, which markdown's own keymap used to swallow. Six pin a Save button at each
+  blockquote, which markdown's own keymap used to swallow (now in
+  `tests/regression/e2e/test_enter_saves_in_list_or_quote.py`). Six pin a Save button at each
   end of the editor: one above the editing surface, one below it, the top one still on
   screen when the source runs past the window, the top one saving, the Edit button
   hidden while the editor is open, and the desk holding still while a long document is
@@ -221,7 +255,7 @@ The same browser, the real server, the real storage, the fake `claude`.
   will move and would otherwise carry the whole canvas away with it. Fourteen pin double click
   to edit: on the body it opens the editor, it never leaves the ask popover behind, inside the editor it keeps the unsaved
   text, on a highlight it still jumps to the answer and opens nothing, on a link it follows
-  the link, and on an answer that is still running it does nothing at all. Eight of those keep the reader's place: the caret lands on the line of the double clicked word and inside the word, that line stays at the height of the pointer, the right twin is picked when the word repeats in a block, a click on a list item lands on that item, the block is back where it was after `Escape` and after Save, and the Edit button moves nothing. Thirty-six cover this change: the left
+  the link, and on an answer that is still running it does nothing at all. Eight of those keep the reader's place: the caret lands on the line of the double clicked word and inside the word, that line stays at the height of the pointer, the right twin is picked when the word repeats in a block, a click on a list item lands on that item, the block is back where it was after `Escape` and after Save, and the Edit button moves nothing (now in `tests/regression/e2e/test_edit_mode_keeps_place.py`). Thirty-six cover this change: the left
   handle widening a box, stopping at the minimum, and surviving a reload; minimising a box
   down to its header, the `data-collapsed` flag, expanding it again, `aria-expanded` and the
   label tracking the fold, the fold surviving a reload, the outgoing edge still drawn and
@@ -269,13 +303,6 @@ The same browser, the real server, the real storage, the fake `claude`.
   the fold reaching the server in one patch and surviving a reload, an open editor closing
   on the way down, and the stack closing its gaps in one pass whether an editor was open or
   not.
-- `test_anchors.py` (7) — an offset that follows its passage through an edit. An anchor
-  stores the character offset its quote sat at, and the seating pass reads that number, so an
-  edit that moves the text has to move the number with it. The offset stored when a passage is
-  highlighted, moved when the document is edited, every passage in the document moved in the
-  one pass, the answers re-seated where their passages are now rather than where they were,
-  the same correction inside an answer body and inside a folded box, and the corrected number
-  still on disk after a reload.
 - `test_select.py` (31) — more than one box held at once. Seven cover cmd+click: a box ringed,
   a second click letting it go, the document never selected, a second box joining the first,
   and the three gestures a modifier must not set off underneath it, which are the camera
@@ -297,26 +324,20 @@ The same browser, the real server, the real storage, the fake `claude`.
   names them, panning and clicking a highlight left off because a reader finds those in the
   first minute, a drag on the card leaving the desk where it was, and the card kept off the
   first screen, where there is no canvas to work on.
-- `test_highlight_snap.py` (10) — a highlight covers whole words, whatever the mouse landed
-  on, since a caret hit-test lands between glyphs and a press past the middle of a letter
-  used to cost that letter for good. Six read the popover quote: a start inside a word, an
-  end inside a word, both at once, an edge already on a boundary left alone, and neither edge
-  reaching past the word it repairs. Four follow one repaired selection downstream, to the
-  stored anchor and its offset, the marks in the source box, the quote on the answer box, and
-  the space a drag brought in, dropped — that one read off the stored quote, because rendered
-  text hides it.
 - `test_math.py` (11) — a canvas imported from `fixtures/math_doc.md`: inline math as
   `<math>`, display math as a block, an `align` block, prices left as prose, a quote stored
   across a formula that matches its own offsets, that highlight restored after a reload, a
   formula-only selection wrapped in one mark, its edge drawn and leaving from the formula
   rather than the box edge, and math rendered in an answer body. One more covers a display
   formula, where the block `<math>` inside an inline mark leaves a slim empty fragment below
-  it: the edge belongs on the formula, not on that fragment at the left margin.
+  it: the edge belongs on the formula, not on that fragment at the left margin (now in
+  `tests/regression/e2e/test_edge_from_highlight_end.py`).
 - `test_chrome.py` (21) — find with its `N/M` counter and prev/next, the zoom group and its
   clamps, fit, the theme toggle and its persistence, the minimap and clicking it, the run
   pill, the breadcrumb home, and the new-canvas button. Three cover the breadcrumb as a real
   link: it has an `href` to the list, and Ctrl or Cmd+click opens the list in a new tab while
-  the canvas stays open in this one. Two cover the Collapse all and
+  the canvas stays open in this one (now in
+  `tests/regression/e2e/test_crumb_ctrl_click.py`). Two cover the Collapse all and
   Expand all pair: both buttons sit with the other view controls, and a narrowed window
   leaves them at full width with no label clipped. The bar is one flex row with no wrap, so
   something has to give; it is the title, which ellipsises. The fold itself is proved in
@@ -400,7 +421,8 @@ The same browser, the real server, the real storage, the fake `claude`.
   Five cover pictures in a comparison table (issue #23), a wide and a tall picture stored in
   the canvas and both loaded in their cells: the wide one inside its cell, the tall one
   inside its cell, no sideways scroll from the wide one, the tall one capped at 240px high,
-  and a narrow picture centred in its cell.
+  and a narrow picture centred in its cell (now in
+  `tests/regression/e2e/test_table_cell_pictures.py`).
 - `test_box_focus.py` (24) — the one focused box, marked `data-focused="1"`. Four cover a
   plain click: body, header (which still folds), a button, and the move to another box,
   with one box marked at a time. Six cover a journey: an edge and a highlight focus the
@@ -710,6 +732,7 @@ Added when each page a research run reads became a link.
 | `fixtures/contract.py` | The API shape both sides agree on, plus `make_view()` / `make_box()`. |
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
+| `fixtures/maths.py` | `MATH_DOC` and `highlight_the_formula()`, which selects exactly one `<math>` element the way a drag across it does. Shared by the maths spec and its regression spec. |
 | `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
 | `fixtures/sections.py` | `chevron()`, the fold button of one section, and `THREE_HEADINGS`, the smallest markdown that earns a contents list. Shared by the section, contents-list and standards specs. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. `answer_from_root()` asks about a passage in the document and waits for the answer to land. |

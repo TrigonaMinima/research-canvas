@@ -11,20 +11,19 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import expect
 
-from tests.fixtures.e2e_app import FIXTURES, canvas_from
+from tests.fixtures.e2e_app import canvas_from
 from tests.fixtures.editor import SAVE_TOP, edit
+from tests.fixtures.maths import MATH_DOC, highlight_the_formula
 from tests.fixtures.selection import SELECT, find_offsets, plain_text, send_question
 from tests.fixtures.viewport import (
     box_rect,
     edge_start,
-    line_rects_of,
     rect_of,
     stored_anchor,
 )
 
 pytestmark = pytest.mark.e2e
 
-MATH_DOC = (FIXTURES / "math_doc.md").read_text(encoding="utf-8")
 
 BODY = '[data-box="b1"] [data-body]'
 
@@ -32,43 +31,12 @@ BODY = '[data-box="b1"] [data-body]'
 BEFORE_FORMULA = "divides by"
 AFTER_FORMULA = "before the softmax"
 
-# The formula highlighted on its own. Its rendered text is long enough to clear
-# MIN_SELECTION_CHARS, so the ask popover opens the way prose opens it.
-FORMULA_TOKEN = "Divisor"
-
-# The display formula on its own line. A block formula inside an inline mark leaves
-# empty fragments above and below itself, which is what the edge must not measure.
-DISPLAY_TOKEN = "Attention"
-
 QUESTION = "What does this mean?"
 
 # An answer box body written through the editor, because the fake `claude` cannot
 # emit math. It lands through the same server-side render the answer stream uses.
 # No brackets: CodeMirror closes those for you, which would rewrite the source.
 ANSWER_WITH_MATH = "The bound is $Bound = 2n$ for every step."
-
-# Select exactly one formula: both edges land inside the <math> element, which is
-# where a reader's drag across a formula leaves them.
-SELECT_FORMULA = """([box, token]) => {
-  const body = document.querySelector('[data-box="' + box + '"] [data-body]');
-  const math = [...body.querySelectorAll('math')].find(
-    (m) => m.textContent.includes(token));
-  if (!math) return null; // say what is missing instead of throwing from a walker
-  const walker = document.createTreeWalker(math, NodeFilter.SHOW_TEXT);
-  const nodes = [];
-  let node;
-  while ((node = walker.nextNode())) nodes.push(node);
-  const last = nodes[nodes.length - 1];
-  const range = document.createRange();
-  range.setStart(nodes[0], 0);
-  range.setEnd(last, last.nodeValue.length);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  document.querySelector('[data-viewport]').dispatchEvent(
-    new MouseEvent('mouseup', {bubbles: true, clientX: 500, clientY: 400}));
-  return range.toString();
-}"""
 
 
 @pytest.fixture
@@ -81,11 +49,6 @@ def highlight_across_the_formula(page) -> None:
     start, _ = find_offsets(page, "b1", BEFORE_FORMULA)
     _, end = find_offsets(page, "b1", AFTER_FORMULA)
     page.evaluate(SELECT, ["b1", start, end])
-
-
-def highlight_the_formula(page, token: str = FORMULA_TOKEN) -> None:
-    quoted = page.evaluate(SELECT_FORMULA, ["b1", token])
-    assert quoted, f"no <math> element carrying {token!r} in box b1"
 
 
 # --- formulas render ------------------------------------------------------
@@ -169,23 +132,6 @@ def test_should_leave_that_edge_from_the_formula_not_the_box_edge(math_canvas):
     box = box_rect(math_canvas, "b1")
     assert start["x"] < box["x"] + box["w"] - 1, "the edge left the box, not the formula"
     assert abs(start["x"] - (mark["x"] + mark["w"])) <= 2
-
-
-def test_should_leave_a_display_formula_edge_from_the_formula_not_its_empty_tail(math_canvas):
-    """A display formula is a block inside an inline mark, so the mark reports a slim
-    empty fragment under the formula. The edge belongs on the formula."""
-    highlight_the_formula(math_canvas, DISPLAY_TOKEN)
-    send_question(math_canvas, QUESTION)
-    math_canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
-
-    formula = rect_of(math_canvas, '[data-box="b1"] mark[data-anchor-edge] > math')
-    fragments = line_rects_of(math_canvas, '[data-box="b1"] mark[data-anchor-edge]')
-    # The fragments are the reason this test exists: the last one is not the formula.
-    assert len(fragments) > 1
-
-    start = edge_start(math_canvas, "b2")
-    assert abs(start["x"] - (formula["x"] + formula["w"])) <= 2
-    assert formula["y"] - 2 <= start["y"] <= formula["y"] + formula["h"] + 2
 
 
 # --- math in an answer ----------------------------------------------------

@@ -23,14 +23,6 @@ from tests.fixtures.editor import (
     open_editor,
     source_of,
 )
-from tests.fixtures.place import (
-    caret_in_line,
-    cursor_y,
-    dblclick_word,
-    list_doc,
-    long_doc,
-    repeat_doc,
-)
 from tests.fixtures.selection import (
     QUOTE,
     SELECT,
@@ -38,7 +30,6 @@ from tests.fixtures.selection import (
     ask,
     find_offsets,
     highlight,
-    send_question,
 )
 from tests.fixtures.viewport import (
     box_rect,
@@ -46,7 +37,6 @@ from tests.fixtures.viewport import (
     drag_header_by,
     drag_popover,
     edge_start,
-    line_rects_of,
     rect_of,
     settled,
     to_client,
@@ -225,26 +215,6 @@ def test_the_lead_line_leaves_from_the_underline_not_through_the_words(canvas):
     start = edge_start(canvas, "b2")
     assert abs(start["y"] - (mark["y"] + mark["h"])) <= 2
     assert start["y"] > mark["y"] + mark["h"] / 2
-
-
-def test_a_wrapped_highlight_keeps_its_lead_line_attached(canvas):
-    """A wrapped mark measures as the union of all its lines, not the last one it ends on."""
-    start, _ = find_offsets(canvas, "b1", "The dominant sequence transduction models")
-    _, end = find_offsets(canvas, "b1", "an encoder and a decoder.")
-    canvas.evaluate(SELECT, ["b1", start, end])
-    send_question(canvas, "What does this passage describe?")
-    canvas.wait_for_selector('[data-box="b2"][data-status="done"]', timeout=20000)
-
-    lines = line_rects_of(canvas, "mark[data-anchor-edge]")
-    last_line = lines[-1]
-    # Preconditions: the mark really does wrap, and its widest line really does end
-    # well right of its last one, so no font or box width can make this vacuous.
-    assert len(lines) >= 2
-    widest = max(line["x"] + line["w"] for line in lines)
-    assert widest - (last_line["x"] + last_line["w"]) >= 40
-
-    start_x = edge_start(canvas, "b2")["x"]
-    assert abs(start_x - (last_line["x"] + last_line["w"])) <= 2
 
 
 def test_you_can_ask_again_inside_an_answer(canvas):
@@ -508,43 +478,6 @@ def test_a_running_box_cannot_be_edited(canvas):
     expect(canvas.locator(EDIT_BUTTON.format(box="b2"))).to_be_hidden()
 
 
-# --- Enter saves, wherever the caret is -----------------------------------
-
-# Markdown's own keymap used to bind Enter at a precedence the app's binding could not
-# reach, and its command only claims the key where a list or a quote is being continued.
-# So Enter saved in prose and did nothing anywhere else. One case per context it claimed.
-
-
-def test_enter_saves_from_inside_a_list(canvas):
-    edit(canvas, "b1", "# Kept\n\n- first item")
-    canvas.keyboard.press("Enter")
-    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    expect(canvas.locator('[data-box="b1"] [data-body] li')).to_have_text("first item")
-
-
-def test_enter_saves_from_inside_a_numbered_list(canvas):
-    edit(canvas, "b1", "# Kept\n\n1. first item")
-    canvas.keyboard.press("Enter")
-    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    expect(canvas.locator('[data-box="b1"] [data-body] ol li')).to_have_text("first item")
-
-
-def test_enter_saves_from_inside_a_nested_list(canvas):
-    edit(canvas, "b1", "# Kept\n\n- outer\n  - inner")
-    canvas.keyboard.press("Enter")
-    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    expect(canvas.locator('[data-box="b1"] [data-body] li li')).to_have_text("inner")
-
-
-def test_enter_saves_from_inside_a_blockquote(canvas):
-    edit(canvas, "b1", "# Kept\n\n> A quoted line")
-    canvas.keyboard.press("Enter")
-    expect(canvas.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    expect(canvas.locator('[data-box="b1"] [data-body] blockquote')).to_contain_text(
-        "A quoted line"
-    )
-
-
 # --- a Save button at each end --------------------------------------------
 
 # The editor never scrolls inside itself, so a long document makes a tall box. One Save
@@ -660,87 +593,6 @@ def test_double_clicking_an_unfinished_answer_does_not_open_the_editor(canvas):
     body.dblclick()
     canvas.wait_for_timeout(500)  # long enough for the editor's fetch to have landed
     expect(canvas.locator(EDITOR.format(box="b2"))).to_have_count(0)
-
-
-# The reader double clicks where they are reading; the editor has to open there. The
-# camera is a transform and nothing scrolls, so "there" is a screen point.
-
-LATE_PARAGRAPH = '[data-box="b1"] [data-body] p:has-text("zeppelin")'
-LINE_TOLERANCE = 24  # about one editor line
-BLOCK_TOLERANCE = 30  # about one rendered line: a block's top against a caret's middle
-
-
-def test_should_put_the_caret_on_the_line_of_the_double_clicked_word(app):
-    page = canvas_from(app, long_doc())
-    dblclick_word(page, "b1", "zeppelin")
-    assert "zeppelin" in caret_in_line(page, "b1")["text"]
-
-
-def test_should_put_the_caret_inside_the_double_clicked_word(app):
-    """Offsets, not pixels: the caret's place in its line against the word's place."""
-    page = canvas_from(app, long_doc())
-    dblclick_word(page, "b1", "zeppelin")
-    caret = caret_in_line(page, "b1")
-    start = caret["text"].find("zeppelin")
-    assert start >= 0 and start <= caret["offset"] <= start + len("zeppelin")
-
-
-def test_should_keep_the_double_clicked_word_under_the_pointer(app):
-    """Read after the frames have run, so a pan that drifted late would show."""
-    page = canvas_from(app, long_doc())
-    _, clicked = dblclick_word(page, "b1", "zeppelin")
-    settled(page)
-    assert abs(cursor_y(page, "b1") - clicked) <= LINE_TOLERANCE
-
-
-def test_should_pick_the_right_occurrence_when_the_word_repeats_in_a_block(app):
-    """Three `lantern`s on three rendered lines; the third click must not land on the first."""
-    page = canvas_from(app, repeat_doc())
-    dblclick_word(page, "b1", "lantern", nth=2)
-    caret = caret_in_line(page, "b1")
-    assert caret["text"][: caret["offset"]].count("lantern") == 2
-
-
-def test_should_land_on_the_block_when_the_click_is_on_a_list_item(app):
-    page = canvas_from(app, list_doc())
-    dblclick_word(page, "b1", "pelicans")
-    assert "third item about pelicans" in caret_in_line(page, "b1")["text"]
-
-
-def test_should_keep_the_edited_block_in_place_after_escape(app):
-    """Without it the box reflows under a camera that did not move, and the reader is
-    looking at some other paragraph."""
-    page = canvas_from(app, long_doc())
-    dblclick_word(page, "b1", "zeppelin")
-    settled(page)
-    caret_at = cursor_y(page, "b1")
-    page.keyboard.press("Escape")
-    expect(page.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    settled(page)
-    top = page.locator(LATE_PARAGRAPH).bounding_box()["y"]
-    assert abs(top - caret_at) <= BLOCK_TOLERANCE
-
-
-def test_should_keep_the_edited_block_in_place_after_save(app):
-    page = canvas_from(app, long_doc())
-    dblclick_word(page, "b1", "zeppelin")
-    settled(page)
-    caret_at = cursor_y(page, "b1")
-    page.keyboard.press("End")
-    page.keyboard.insert_text(" Edited.")
-    page.click(SAVE_TOP.format(box="b1"))
-    expect(page.locator(EDITOR.format(box="b1"))).to_be_hidden()
-    settled(page)
-    top = page.locator(LATE_PARAGRAPH).bounding_box()["y"]
-    assert abs(top - caret_at) <= BLOCK_TOLERANCE
-
-
-def test_should_not_move_the_camera_when_the_edit_button_opens_the_editor(canvas):
-    """A guard: the button path has no point to keep, so the camera stays put."""
-    before = transform_of(canvas)
-    open_editor(canvas, "b1")
-    settled(canvas)
-    assert transform_of(canvas) == before
 
 
 # --- folding, framing, and finding your way back --------------------------

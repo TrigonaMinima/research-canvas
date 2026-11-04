@@ -10,6 +10,8 @@ The boundary the snap must not cross needs a body whose blocks touch, which mark
 never renders. It is pinned in `test_mocked_api.py`, over a canned body.
 """
 
+# Guards daeb753 (fix: snap a highlight out to whole words).
+
 from __future__ import annotations
 
 import pytest

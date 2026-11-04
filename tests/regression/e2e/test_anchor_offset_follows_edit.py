@@ -6,6 +6,8 @@ drawn by finding the quote again, but the stored offset is what reading order so
 by, so it has to move too, in the document and in every answer box under it.
 """
 
+# Guards 662ef1d (fix: follow a passage's offset through an edit).
+
 from __future__ import annotations
 
 import pytest
