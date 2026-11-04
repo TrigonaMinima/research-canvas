@@ -213,6 +213,13 @@ Each module in isolation, no HTTP, no browser.
   change with the section it lands in and steps over fenced code on the way. There is no
   word-level diff here any more: the review is a diff of the whole document, drawn in the
   browser by the merge view.
+- `test_fetch_guard.py` (18, #54) — every branch of the picture fetch guard. A host that
+  will not resolve, or resolves to no address, is refused before any request is sent; an
+  IPv4-mapped private address (`::ffff:127.0.0.1`) is not public, and a mapped routable one
+  is; a URL or a redirect location that will not parse, and a redirect with no location,
+  are refused. The whole-fetch deadline stops a body that drips in quick pieces, which no
+  per-read timeout would. The size cap holds on a streamed body with no `Content-Length`,
+  and reading stops at the first chunk past it.
 
 ### 2 — API endpoint tests (`tests/functional/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 74)
 
