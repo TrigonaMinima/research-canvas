@@ -2377,6 +2377,12 @@ document.addEventListener('keydown', (event) => {
 el.findInput.addEventListener('input', runFind);
 $('[data-find-next]').addEventListener('click', () => stepFind(1));
 $('[data-find-prev]').addEventListener('click', () => stepFind(-1));
+// Enter steps to the next match and Shift+Enter to the previous, as in a browser's own find.
+el.findInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  stepFind(event.shiftKey ? -1 : 1);
+});
 $('[data-zoom-in]').addEventListener('click', () => { camera.zoomIn(); render(); });
 $('[data-zoom-out]').addEventListener('click', () => { camera.zoomOut(); render(); });
 $('[data-zoom-fit]').addEventListener('click', () => camera.fit(state.geometry.boxes));
