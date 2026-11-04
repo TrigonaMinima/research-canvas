@@ -83,7 +83,8 @@ export function capture(event, bodyEl) {
 export function offsetIn(source, place) {
   if (!place) return 0;
   let from = skip(source, 0, place.line);
-  if (from === -1) from = source.lastIndexOf('\n') + 1; // past the end: the last line
+  // Past the end: the last line. A final newline ends that line, it does not open one.
+  if (from === -1) from = source.replace(/\n$/, '').lastIndexOf('\n') + 1;
   const to = skip(source, from, place.lineEnd - place.line);
   const word = plain(place.word);
   if (!word) return from;

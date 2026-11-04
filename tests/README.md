@@ -883,6 +883,14 @@ Added when each page a research run reads became a link.
 
 - `tests/functional/e2e/test_research_topic.py` (+8): a page read links to its address, opens in a new tab with `noopener`, opens a new tab on a plain click and on a Ctrl/Cmd click, a Ctrl/Cmd click neither selects the box nor moves the canvas tab away, and a search stays plain text. The new tab is answered by a route, so the suite stays offline.
 
+## The JS helpers, called directly (functional, #57)
+
+`tests/functional/e2e/test_js_helpers.py` (35) imports the shipped ES modules inside `page.evaluate`, so the browser runs the real code and no Node toolchain is needed.
+
+- `anchors.js` `resolve()` (12): a stale offset on a repeated quote picks the nearest copy before or after it, the first or last copy for an offset off either end, the end moves with the start, a missing or too-short quote is null, and four cases (nearest, an exact tie, overlapping matches, a shift) agree with the server's `anchors.resolve`.
+- `sourcemap.js` `offsetIn()` (14): a word is found across straight and curly single, double and apostrophe quotes in either direction, the nth twin too; a line past the end lands on the last line, with or without a final newline; a block past the end searches to the end; no place is the top.
+- `geom.js` `bounds()` and `minimap.js` `toCanvas()` (9): exact bounds with and without padding and at negative coordinates, and exact minimap-to-canvas points on a wide box set and a tall one, so swapped axes or a wrong scale fail, plus a round trip through the projection.
+
 ## Fixtures
 
 | File | What it is |
