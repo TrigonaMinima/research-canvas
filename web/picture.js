@@ -47,7 +47,9 @@ export function zoomable(node, img, zoomIn, zoomOut) {
     zoomIn.disabled = s >= ceiling() - EPS;
     zoomOut.disabled = !zoomed;
     // A button that disables itself under the focus would drop it on the inert desk.
-    if (document.activeElement === node || !node.contains(document.activeElement)) {
+    // Chromium still reports it as the active element until its next rendering update.
+    const held = document.activeElement;
+    if (held === node || !node.contains(held) || held.disabled) {
       (zoomIn.disabled ? zoomOut : zoomIn).focus();
     }
   }

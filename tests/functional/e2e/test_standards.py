@@ -7,6 +7,7 @@ from playwright.sync_api import expect
 
 from tests.fixtures.e2e_app import FIXTURES, canvas_from
 from tests.fixtures.editor import SAVE_TOP, edit
+from tests.fixtures.keyboard import tab_stops
 from tests.fixtures.rename import FIELD, start_rename
 from tests.fixtures.sections import THREE_HEADINGS
 from tests.fixtures.selection import answer_from_root
@@ -101,8 +102,10 @@ def test_the_tabs_use_the_tab_pattern(app):
 
 
 def test_the_canvas_is_reachable_by_keyboard(canvas):
-    canvas.keyboard.press("Tab")
-    assert canvas.evaluate("() => document.activeElement.tagName") != "BODY"
+    # The whole walk, not one step: into a box, then on through the chrome bar.
+    stops = tab_stops(canvas, whole_cycle=True)
+    assert "b1" in {s["box"] for s in stops}
+    assert "data-crumb-home" in {s["stop"] for s in stops}
 
 
 def test_the_toast_announces_itself(canvas):

@@ -66,6 +66,7 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 | `api/test_stream_run_guards.py` | #48 never start a second run on a box that has one | 20 |
 | `e2e/test_merge_stream_reconnect.py` | #48 close a dropped merge stream rather than reconnect | 1 |
 | `e2e/test_minimap_follows_camera.py` | #58 the minimap viewport follows a pan, a zoom and a resize | 7 |
+| `e2e/test_zoom_step_keeps_focus.py` | #60 a zoom step button that disables itself hands the focus to the other one | 2 |
 
 - `test_highlight_word_snap.py` (10) — a highlight covers whole words, whatever the mouse
   landed on. Six read the popover quote: a start inside a word, an end inside a word, both at
@@ -901,6 +902,14 @@ Added when each page a research run reads became a link.
 
 `tests/functional/e2e/test_control_rows.py` (66) reads each control's bounding box in every toolbar and form row, at 375 and 1280 px wide, and asserts one height and one bottom edge within 1 px. Each row also asserts its control count, so a row whose controls vanish at a width cannot pass empty. Rows: `.tools` (the find box and zoom group count as one control each) and `.findbox` in the chrome bar, both `.empty__row`s and `.empty__foot` on the first screen, `.ask__foot` on the ask popover and on the merge guidance, `.sheet__foot` and `.preset-row` in Settings, `.box__edit-foot` in the editor, and `.zoom__bar` in the picture view. Three rows failed and were fixed in `styles.css`: the find field stood 8 px shorter than its arrows, the ask popover's Web toggle wrapped to two lines and stood 11 px taller than Ask, and a chip's remove button stood 17 px shorter than its fields.
 
+## Keyboard reach (#60)
+
+Added when every box action became reachable from the keyboard. The counts above were not re-totalled for it.
+
+- `tests/functional/e2e/test_keyboard.py` (21): Tab into a control in a box and that box is the focused box, marked current, folded by Left and unfolded by Right even after the fold hides the control, with the camera left where it was. Tab on the chrome bar focuses no box, and a Cmd click on a box button still does not. The tab order is the desk, its boxes, then the chrome bar in reading order. Enter in Find steps to the next match and Shift+Enter to the previous one, the same as the buttons, keeping the query and the focus. The contents toggle opens on Enter and on Space, closes on a second Enter, keeps the focus, leads by Tab to its first entry, and an entry pressed with Enter pans to its heading.
+- `tests/functional/e2e/test_standards.py`: the keyboard check walks the whole tab cycle, into a box and through the chrome bar, instead of one Tab.
+- `tests/regression/e2e/test_zoom_step_keeps_focus.py` (2): Enter on Zoom in until it disables leaves the focus on Zoom out, and the reverse.
+
 ## Fixtures
 
 | File | What it is |
@@ -918,6 +927,7 @@ Added when each page a research run reads became a link.
 | `fixtures/editor.py` | Driving edit mode: every selector it is reached by, CodeMirror's own included, with the two Save buttons named apart (`SAVE_TOP`, `SAVE_BOTTOM`) because Playwright is strict about a selector that matches twice, plus opening it, reading the source back, and replacing it with `insert_text`, which never sends an Enter key. The editor is a CodeMirror view, so there is no `.value` to fill. |
 | `fixtures/place.py` | Keeping the reader's place across edit mode: documents long enough that the clicked word is far from the top (`long_doc()`), with a word repeated in one block (`repeat_doc()`), and with a list (`list_doc()`), plus `dblclick_word()` to double click one occurrence of a word, `caret_in_line()` to read where the caret sits in its source line, and `cursor_y()` for its height on screen. |
 | `fixtures/maths.py` | `MATH_DOC` and `highlight_the_formula()`, which selects exactly one `<math>` element the way a drag across it does. Shared by the maths spec and its regression spec. |
+| `fixtures/keyboard.py` | `tab_stops()` walks the page with Tab and names each stop by its first data attribute and its box, either until a box holds the focus or for the whole cycle. |
 | `fixtures/rename.py` | Renaming a canvas: the title button and its field, one copy of each selector, plus opening the field. Shared by the four browser files that rename. |
 | `fixtures/sections.py` | `chevron()`, the fold button of one section, and `THREE_HEADINGS`, the smallest markdown that earns a contents list. Shared by the section, contents-list and standards specs. |
 | `fixtures/selection.py` | Highlighting a passage by its offsets in rendered plain text, shared by every browser test that asks a question. `answer_from_root()` asks about a passage in the document and waits for the answer to land. |

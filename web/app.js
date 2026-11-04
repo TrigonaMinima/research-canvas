@@ -1904,6 +1904,13 @@ function setFocus(id) {
   if (now) boxes.markFocused(now, true);
 }
 
+// Tab is the keyboard's way into a box, so the arrows have something to fold. Only a
+// keyboard focus counts: a click has already decided, and a Cmd click must not move it.
+el.canvas.addEventListener('focusin', (event) => {
+  const within = event.target.closest('[data-box]');
+  if (within && event.target.matches(':focus-visible')) setFocus(within.dataset.box);
+});
+
 // Where a click sends the focus: to the box at the far end of a journey, and otherwise
 // to the box it landed in. Decided before any branch runs, so focus never visits a box
 // on its way. Bare desk is the one case not here: it has to know the press was no drag.
@@ -2410,6 +2417,12 @@ document.addEventListener('keydown', (event) => {
 });
 
 el.findInput.addEventListener('input', runFind);
+// The same steps as the two buttons beside the field, so a reader never leaves it.
+el.findInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' || event.isComposing) return;
+  event.preventDefault();
+  stepFind(event.shiftKey ? -1 : 1);
+});
 $('[data-find-next]').addEventListener('click', () => stepFind(1));
 $('[data-find-prev]').addEventListener('click', () => stepFind(-1));
 $('[data-zoom-in]').addEventListener('click', () => { camera.zoomIn(); render(); });
