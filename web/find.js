@@ -3,6 +3,36 @@
 
 const HIGHLIGHT = 'find';
 
+// Elements that start a new line of text. Inline markup between them joins up.
+const BLOCK = 'p, li, dt, dd, td, th, caption, figcaption, pre, blockquote, '
+  + 'h1, h2, h3, h4, h5, h6, div, section, article, header, footer, ol, ul, table, tr';
+
+// Each match in the joined text of `nodes`, mapped back to the nodes it starts and ends in.
+function matchRun(nodes, needle, ranges) {
+  if (!nodes.length) return;
+  const starts = [];
+  let hay = '';
+  for (const n of nodes) {
+    starts.push(hay.length);
+    hay += n.nodeValue;
+  }
+  hay = hay.toLowerCase();
+  // The node holding offset `at`. An end offset belongs to the node it closes.
+  const locate = (at, end) => {
+    let i = nodes.length - 1;
+    while (i > 0 && (end ? starts[i] >= at : starts[i] > at)) i--;
+    return [nodes[i], at - starts[i]];
+  };
+  let at = hay.indexOf(needle);
+  while (at !== -1) {
+    const range = document.createRange();
+    range.setStart(...locate(at, false));
+    range.setEnd(...locate(at + needle.length, true));
+    ranges.push(range);
+    at = hay.indexOf(needle, at + needle.length);
+  }
+}
+
 export function search(root, query) {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
@@ -21,18 +51,22 @@ export function search(root, query) {
       return NodeFilter.FILTER_SKIP; // skip still descends, so only text comes back
     },
   );
+  // A word half in <em> is still one word to a reader, so the text of one block is
+  // searched as a whole. A block ends where a heading or paragraph does, so a match
+  // never runs from one into the next.
+  let run = [];
+  let block = null;
   let node;
   while ((node = walker.nextNode())) {
-    const hay = node.nodeValue.toLowerCase();
-    let at = hay.indexOf(needle);
-    while (at !== -1) {
-      const range = document.createRange();
-      range.setStart(node, at);
-      range.setEnd(node, at + needle.length);
-      ranges.push(range);
-      at = hay.indexOf(needle, at + needle.length);
+    const owner = node.parentElement && node.parentElement.closest(BLOCK);
+    if (owner !== block) {
+      matchRun(run, needle, ranges);
+      run = [];
+      block = owner;
     }
+    run.push(node);
   }
+  matchRun(run, needle, ranges);
   return ranges;
 }
 

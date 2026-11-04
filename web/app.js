@@ -113,6 +113,10 @@ el.desk.addEventListener('scroll', () => {
 // --- small helpers ------------------------------------------------------------
 
 let toastTimer = null;
+// Up here, not beside find: render() reads them, and it can run before that code does.
+const FIND_SETTLE_MS = 150;
+let findTimer = null;
+let findForced = false;
 function flash(message) {
   el.toast.textContent = message;
   el.toast.hidden = false;
@@ -223,6 +227,7 @@ function render() {
   if (busy.length) {
     el.runLabel.textContent = `${boxes.plural(busy.length, 'answer')} running`;
   }
+  scheduleFind();
   requestAnimationFrame(measure);
 }
 
@@ -481,6 +486,7 @@ function applyOutcome(boxId, { status, reason, html, title, research, model }) {
   state.live.delete(boxId);
   state.activity.delete(boxId);
   render();
+  scheduleFind(true); // an answer brings matches the last search never saw
   scheduleRestack();
 }
 
@@ -1804,7 +1810,38 @@ function runFind() {
   el.findCount.textContent = find.label(0, state.find.ranges.length);
 }
 
+// A range follows its node out of the tree by collapsing, so a body rebuilt under a
+// search leaves matches that no longer span the query.
+function findStale() {
+  const needle = el.findInput.value.trim().toLowerCase();
+  return state.find.ranges.some((r) => r.toString().toLowerCase() !== needle);
+}
+
+// Search again, but stay on the same match number where there still is one.
+function refreshFind() {
+  if (!el.findInput.value.trim()) return;
+  const { index } = state.find;
+  state.find.ranges = find.search(el.canvas, el.findInput.value);
+  state.find.index = Math.min(index, Math.max(state.find.ranges.length - 1, 0));
+  find.paint(state.find.ranges);
+  el.findCount.textContent = find.label(state.find.index, state.find.ranges.length);
+}
+
+// A beat after the last render, so a streaming answer costs one search per pause in
+// the stream, not one per chunk.
+function scheduleFind(force = false) {
+  if (!force && !state.find.ranges.length) return;
+  findForced ||= force;
+  clearTimeout(findTimer);
+  findTimer = setTimeout(() => {
+    const forced = findForced;
+    findForced = false;
+    if (forced || findStale()) refreshFind();
+  }, FIND_SETTLE_MS);
+}
+
 function stepFind(delta) {
+  if (findStale()) refreshFind();
   const total = state.find.ranges.length;
   if (!total) return;
   state.find.index = (state.find.index + delta + total) % total;

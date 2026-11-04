@@ -67,6 +67,7 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 | `e2e/test_merge_stream_reconnect.py` | #48 close a dropped merge stream rather than reconnect | 1 |
 | `e2e/test_minimap_follows_camera.py` | #58 the minimap viewport follows a pan, a zoom and a resize | 7 |
 | `e2e/test_zoom_step_keeps_focus.py` | #60 a zoom step button that disables itself hands the focus to the other one | 2 |
+| `e2e/test_find_across_nodes.py` | #62 find matches a phrase that runs into bold text, never joins two blocks, and searches again when a body rebuilds under it or an answer lands | 7 |
 
 - `test_highlight_word_snap.py` (10) — a highlight covers whole words, whatever the mouse
   landed on. Six read the popover quote: a start inside a word, an end inside a word, both at
@@ -916,6 +917,14 @@ Added with the coverage pass on picture input. The counts above were not re-tota
 
 - `tests/functional/e2e/test_picture_input.py` (13): a wheel that reports lines zooms, and further than the same delta in pixels. `_` zooms out, and back at fit Zoom out is disabled again. With Ctrl, Cmd or Alt held, `+` is left unclaimed and the picture keeps its size, while a plain `+` is still claimed. A `pointercancel` mid-pan ends the pan, and later moves with the button still down do not move the picture.
 - `tests/functional/e2e/test_editor_uploads.py` (15): a dropped picture becomes `![name](assets/…)` and the rest of the source stays. Brackets leave the alt text, and a file with no name, or only brackets, is alt "image". Two pictures pasted at once get two placeholders on two lines, numbered apart even with one name, and both swap in when they land. An upload the server refuses, 413 for one byte past `MAX_IMAGE_BYTES` and 415 for bytes that are not a picture, takes its placeholder and its line break away, leaves the source as it was, and says why in the toast.
+
+## Box, contents list, find and research edges (#62)
+
+Added with the coverage pass on the less travelled UI paths. The counts above were not re-totalled for it.
+
+- `tests/functional/e2e/test_box_edges.py` (13): the box past `MAX_CONCURRENT_RUNS` is queued and says how many answers run ahead of it. The run pill reads "1 answer running", then "2 answers running", and hides once all are done. A picture whose bytes land after the render grows its box, and the box below moves down a gap away instead of overlapping. An edit down to two headings hides the contents list, and headings in a quote or a list stay out of it. The toast is still up short of its 2600 ms timer, gone after it, and a second toast restarts the timer.
+- `tests/functional/e2e/test_research_edges.py` (12): New on a running research canvas asks first; Cancel stays on the canvas and OK leaves it. A plain canvas leaves without asking. A refused start shows the server's reason as a refusal, enables Start again, and keeps the brief. The topic field carries `maxlength` = `MAX_TOPIC_CHARS` and stops typing there. A redraft replaces a brief the reader edited, with one about the new topic.
+- `tests/regression/e2e/test_find_across_nodes.py` (7): see the regression table.
 
 ## Fixtures
 
