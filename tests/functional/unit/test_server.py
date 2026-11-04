@@ -68,6 +68,8 @@ def _launch(argv, tmp_path, monkeypatch):
     calls = []
     record = tmp_path / "session.port"
     monkeypatch.setattr(server, "port_file", lambda: record)
+    # Else the run writes, then deletes, the real session's pid file.
+    monkeypatch.setattr(server, "pid_file", lambda: tmp_path / "session.pid")
     monkeypatch.setattr(server, "DEV_DIR", tmp_path / ".dev")
     monkeypatch.setattr(server, "CANVAS_ROOT", tmp_path / "canvases")
     monkeypatch.setattr(server.uvicorn, "run", lambda *a, **kw: calls.append(kw))

@@ -220,6 +220,17 @@ Each module in isolation, no HTTP, no browser.
   are refused. The whole-fetch deadline stops a body that drips in quick pieces, which no
   per-read timeout would. The size cap holds on a streamed body with no `Content-Length`,
   and reading stops at the first chunk past it.
+- `test_runner_branches.py` (27, #55) — the `stream-json` lines the parser skips or maps: JSON
+  that is not an object, system lines other than `init`, deltas that are not text, a
+  `stream_event` that is not a delta, a non-string result (done with empty text), tool
+  names it does not track, blocks that are not tools, and an error result reported as a crash.
+- `test_lead_sentence.py` (10, #55) — the first sentence of a passage: ended at `.`, `?` or
+  `!` but not at a decimal point or a stop in the first few characters, spaces flattened, a
+  passage with no sentence end kept whole or capped, the cap at and past its edge, and blank
+  text giving empty.
+- `test_server_stop.py` (16, #55) — `--stop` signals only the pid this session wrote, and only
+  when that pid still listens on the recorded port. A stale port now held by another process
+  is left alone and reported as a stale record; the port and pid files are removed either way.
 
 ### 2 — API endpoint tests (`tests/functional/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 74)
 
@@ -270,6 +281,10 @@ as well: the child removed with its anchor, its own deeper answers and its propo
 document still written, the child kept when the accept does not ask, and the whole thing
 still refused while the run is going. Reject drops the proposal and leaves the document alone; deleting a box takes its
 proposal with it; and `view.merges` carries the ids a reload reopens the reviews from.
+
+`test_run_models.py` (7, #55) — the model a run reports, through every ending: kept on a box
+whose run is cancelled, kept on a failed research run in `research.json` and on the root,
+reset to the research default on retry, and cleared on an answer that is retried.
 
 ### 3 — Frontend against a mocked API (`tests/functional/e2e/test_mocked_api.py`, 17)
 

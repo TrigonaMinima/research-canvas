@@ -12,7 +12,16 @@ import sys
 
 import uvicorn
 
-from .config import CANVAS_ROOT, DEV_DIR, DISPLAY_NAME, HOST, PACKAGE_DIR, dev_id, port_file
+from .config import (
+    CANVAS_ROOT,
+    DEV_DIR,
+    DISPLAY_NAME,
+    HOST,
+    PACKAGE_DIR,
+    dev_id,
+    pid_file,
+    port_file,
+)
 
 
 def pick_free_port() -> int:
@@ -40,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
     port = pick_free_port()
     record = port_file()
     record.write_text(f"{port}\n", encoding="utf-8")
+    owner = pid_file()
+    owner.write_text(f"{os.getpid()}\n", encoding="utf-8")
 
     url = f"http://{HOST}:{port}/"
     print(f"{DISPLAY_NAME} — {url}")
@@ -64,6 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         # Only ever clean up our own file. Parallel sessions own their own servers.
         with contextlib.suppress(OSError):
             record.unlink()
+        with contextlib.suppress(OSError):
+            owner.unlink()
     return 0
 
 
@@ -97,13 +110,28 @@ def _stop() -> int:
         print(f"no server recorded for session {dev_id()}")
         return 0
 
-    for pid in _listeners(port):
+    # Only the process that wrote the record, and only while it still holds the port.
+    # After a crash the port can belong to anything, and that is not ours to stop.
+    owner = _recorded_pid()
+    ours = owner is not None and owner in _listeners(port)
+    if ours:
         with contextlib.suppress(ProcessLookupError, PermissionError):
-            os.kill(pid, signal.SIGTERM)
-    with contextlib.suppress(OSError):
-        port_file().unlink()
-    print(f"stopped session {dev_id()} on port {port}")
+            os.kill(owner, signal.SIGTERM)
+    for path in (port_file(), pid_file()):
+        with contextlib.suppress(OSError):
+            path.unlink()
+    if ours:
+        print(f"stopped session {dev_id()} on port {port}")
+    else:
+        print(f"cleared a stale record for session {dev_id()}; nothing of ours on port {port}")
     return 0
+
+
+def _recorded_pid() -> int | None:
+    try:
+        return int(pid_file().read_text().strip())
+    except (OSError, ValueError):
+        return None
 
 
 def _listeners(port: int) -> list[int]:

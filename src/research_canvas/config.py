@@ -74,6 +74,12 @@ def port_file() -> Path:
     return DEV_DIR / f"{dev_id()}.port"
 
 
+# Beside the port file, not in it: the port file stays one number for whatever reads it.
+# `--stop` signals this pid only, so a stale port taken by another process is left alone.
+def pid_file() -> Path:
+    return DEV_DIR / f"{dev_id()}.pid"
+
+
 def _safe(name: str) -> str:
     return "".join(c if c.isalnum() or c in "-_." else "-" for c in name)
 
