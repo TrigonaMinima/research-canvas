@@ -10,7 +10,7 @@ make test-unit           tests/{functional,regression}/unit    358
 make test-api            tests/{functional,regression}/api     300  (7 live deselected)
 make test-e2e            tests/{functional,regression}/e2e     721
 make test-stress         tests/stress                            0  suite lands with #63
-make test-chaos          tests/chaos                            36  browser, needs the e2e server
+make test-chaos          tests/chaos                            69  browser, needs the e2e server
 make test-all            all of tests/                        1379  (7 live deselected)
 make coverage            make test, with line coverage of research_canvas
 make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
@@ -162,6 +162,27 @@ page, so the shared session server stays healthy. Helpers are in `tests/fixtures
   switch put back after a failed save, a failed delete (the box stays), a failed retry (the
   box stays failed), the editor source failing (no editor opens, and it opens on the next
   try), and the passage still askable after a failed ask is closed.
+
+### Two tabs, a killed server, double submits and reloads (33, #64)
+
+- **Two tabs on one canvas** (`e2e/test_two_tabs.py`, 8): questions and anchors asked from
+  both tabs are all kept; an edit survives a rename from the stale tab and the other way
+  round; a web switch flipped in a tab that never saw an answer keeps the answer; edits to
+  two boxes from two tabs both land; a tab refused the stream another tab drives still shows
+  the answer once it lands, and the answer runs once. Two tabs editing the same body is last
+  write wins, by design.
+- **Server killed mid-run** (`e2e/test_server_kill.py`, 8): a research run reads Interrupted
+  after a force-quit and restart, keeps its brief, offers Retry, and runs to done on it; a
+  merge says `INTERRUPTED_MERGE_REASON`, leaves the document as it was, keeps the answer, and
+  can be rejected.
+- **Double submit** (`e2e/test_double_submit.py`, 9): two clicks in one task, or two Enters,
+  make one answer box, one canvas, one research run, one merge, and one save, with no error
+  toast. A refused import can still be sent again. The import made two canvases on a double
+  click: the button is now disabled while the import is out.
+- **Reload and Back** (`e2e/test_reload.py`, 8): a reload during a save leaves the old body or
+  the new one, never a cut one, and the canvas opens; a reload during an ask adds at most one
+  box and leaves nothing running; Back mid-run lands on the list with the new box counted,
+  and Forward shows the question once, Interrupted, not running.
 
 ## The nine required layers
 

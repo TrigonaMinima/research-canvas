@@ -2610,15 +2610,21 @@ el.start.addEventListener('click', async () => {
 });
 restoreResearch();
 
-$('[data-create]').addEventListener('click', async () => {
+// Disabled while the import is out, so a double click makes one canvas, not two.
+const createBtn = $('[data-create]');
+createBtn.addEventListener('click', async () => {
+  if (createBtn.disabled) return;
   const markdown = el.paste.value;
   el.note.removeAttribute('data-refused');
+  createBtn.disabled = true;
   try {
     const view = await api.createCanvas(markdown, startWeb);
     await open(view.id, { fresh: true, loaded: view });
   } catch (error) {
     el.note.textContent = error.message;
     el.note.dataset.refused = '1';
+  } finally {
+    createBtn.disabled = false;
   }
 });
 
