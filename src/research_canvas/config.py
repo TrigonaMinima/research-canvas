@@ -246,7 +246,7 @@ EDIT_WHILE_RUNNING_MESSAGE = "That box is still running — edit once it is done
 BLANK_BODY_MESSAGE = "A box cannot be empty — write something or press Escape"
 MERGE_ROOT_MESSAGE = "The document has no parent to merge into — merge an answer instead"
 MERGE_WHILE_RUNNING_MESSAGE = "That box is still running — merge once it is done"
-MERGE_PARENT_RUNNING_MESSAGE = "The box being merged into is still running — merge once it is done"
+MERGE_PARENT_RUNNING_MESSAGE = "The box being merged into has not finished — merge once it is done"
 ALREADY_MERGED_MESSAGE = "That answer is already merged into its parent"
 MERGE_IN_PROGRESS_MESSAGE = (
     "That box already has a merge waiting for review — accept or reject it first"

@@ -214,7 +214,7 @@ Each module in isolation, no HTTP, no browser.
   word-level diff here any more: the review is a diff of the whole document, drawn in the
   browser by the merge view.
 
-### 2 — API endpoint tests (`tests/functional/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 67)
+### 2 — API endpoint tests (`tests/functional/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 74)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell, which is never cached and is marked when the browser asks for it with a hard refresh. Ten cover editing a body: the markdown source behind
@@ -238,9 +238,10 @@ and served back, the chips surviving a canvas being created and deleted, a 422 w
 message Settings shows for each refusal the storage layer makes, and a 422 on the read as
 well when `presets.json` on disk is corrupt, so the reader is told rather than shown a 500.
 
-`test_merge_endpoints.py` (67) covers folding an answer into its parent, keyed throughout by
+`test_merge_endpoints.py` (74) covers folding an answer into its parent, keyed throughout by
 the child box even though the review renders in the parent. The guards first: the document
-has no parent to merge into, an answer that is not finished, a parent that is not finished,
+has no parent to merge into, an answer that is not finished, a parent that is not finished
+(failed, interrupted, or still running, each a 409 with its sentence, #51),
 a child already merged, and a second proposal for a parent that is already under review, plus
 a `PUT …/body` refused underneath one, because an edit there would leave every change in the
 review pointing at text that has moved. Then the run: the `edit` event per parsed line, a
@@ -256,7 +257,8 @@ reload. Then accepting: exactly the document the reader reviewed written, change
 more than one part of it, text outside them byte-identical, a review that reads exactly like
 the document refused, the child folded and marked merged with its deeper answers untouched,
 the proposal dropped afterwards, and the anchor re-pointed only when the passage it named is
-genuinely gone. Seven more cover the other ending, where the accept asks for the answer to go
+genuinely gone, falling back to the first change that landed when the reader's own edit
+removed the passage and no change names it (#51). Seven more cover the other ending, where the accept asks for the answer to go
 as well: the child removed with its anchor, its own deeper answers and its proposal, the
 document still written, the child kept when the accept does not ask, and the whole thing
 still refused while the run is going. Reject drops the proposal and leaves the document alone; deleting a box takes its
@@ -558,8 +560,8 @@ below zero, and 422 for standing
 instructions over the cap, with the message the panel shows, and 422 for each way a question
 chip can be refused: too many, a blank name, a blank question, or either field over its cap.
 A merge adds its own: the
-document box refused because it was asked from nothing, an unfinished answer, a second merge
-into a parent already under review, an edit of a parent with a merge waiting, an answer merged
+document box refused because it was asked from nothing, an unfinished answer, a parent that is not finished, a
+second merge into a parent already under review, an edit of a parent with a merge waiting, an answer merged
 twice, a review saved while its run is still going, a review carrying no document, an accept
 that would change nothing, a run whose output holds no change at all, and a 404 for a merge
 that was never started. Every refusal is paired with a test of the sentence it refuses with,
@@ -576,6 +578,10 @@ asked from a box that is gone gives 404 "No such box.". Deleting a box takes the
 asked below it, their files, and their anchors. Once all 999 folder names for one title are
 taken, a paste is refused at the storage layer and over the API, and a research start is
 refused with the same `TOO_MANY_TITLES_MESSAGE` rather than a 500.
+
+`tests/functional/e2e/test_merge_errors.py` (5, #51) answers each merge call with an error
+through `page.route` and checks the toast shows the server's sentence: opening the merge, reading
+the document under review, saving a reworded proposal, accepting, and rejecting.
 
 ### 9 — Contract / schema (`tests/functional/api/test_contract.py`, 24)
 

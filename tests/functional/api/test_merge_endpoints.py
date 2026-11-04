@@ -7,13 +7,17 @@ the parent. One answer is what is being folded in; the parent is where it lands.
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 
-from research_canvas import storage
+import pytest
+
+from research_canvas import anchors, storage
 from research_canvas.config import (
     ALREADY_MERGED_MESSAGE,
     CANVAS_FILE,
     EDIT_WHILE_MERGING_MESSAGE,
     MERGE_IN_PROGRESS_MESSAGE,
+    MERGE_PARENT_RUNNING_MESSAGE,
     MERGE_ROOT_MESSAGE,
     MERGE_UNREADABLE_MESSAGE,
     MERGE_WHILE_RUNNING_MESSAGE,
@@ -90,6 +94,41 @@ def test_should_send_the_readers_guidance_to_the_merge_run(client, canvas, fake_
     child = answer(client, canvas, fake_answer)
     run_merge(client, canvas, child, fake_answer, guidance="Keep it to one sentence.")
     assert "Keep it to one sentence." in fake_answer.prompts[-1]
+
+
+# --- merging into a parent that is not finished ------------------------------
+#
+# b3 is a finished answer asked from b2, then b2 is put in each state that is not done.
+# `pending` reads back as interrupted unless this process holds the run, so the running
+# case is `pending` inside `live`.
+
+PARENT_STATES = ["failed", "interrupted", "running"]
+
+
+@pytest.fixture(params=PARENT_STATES)
+def unfinished_parent(request, client, canvas, fake_answer):
+    parent = answer(client, canvas, fake_answer)
+    child = answer(client, canvas, fake_answer, box_id=parent, quote="parallel")
+    with storage.edit(canvas["id"]) as held:
+        box = next(b for b in held.boxes if b.id == parent)
+        box.status = "failed" if request.param == "failed" else "pending"
+    held_run = storage.live(canvas["id"], parent) if request.param == "running" else nullcontext()
+    with held_run:
+        yield child
+
+
+def test_should_refuse_to_merge_into_a_parent_that_is_not_finished(
+    client, canvas, unfinished_parent
+):
+    response = open_merge(client, canvas, unfinished_parent, "Fold it in.")
+    assert response.status_code == 409
+
+
+def test_should_explain_why_a_parent_that_is_not_finished_takes_no_merge(
+    client, canvas, unfinished_parent
+):
+    response = open_merge(client, canvas, unfinished_parent, "Fold it in.")
+    assert response.json()["detail"] == MERGE_PARENT_RUNNING_MESSAGE
 
 
 # --- reading the run ----------------------------------------------------------
@@ -535,6 +574,20 @@ def test_should_leave_an_anchor_the_merge_did_not_touch(client, canvas, fake_ans
     view = client.post(f"/api/canvases/{canvas['id']}/boxes/{child}/merge/accept").json()
     anchor = next(a for a in view["anchors"] if a["target"] == child)
     assert anchor["quote"] == "neural networks"
+
+
+def test_should_move_an_anchor_the_reader_wrote_away_to_the_first_change(
+    client, canvas, fake_answer
+):
+    # No change names "Transformer", so the reader's own edit removed it, and the anchor
+    # falls back to the first change that landed.
+    child = answer(client, canvas, fake_answer)
+    run_merge(client, canvas, child, fake_answer)
+    reviewed = _proposed(client, canvas, child).replace("Transformer", "model")
+    client.patch(f"/api/canvases/{canvas['id']}/boxes/{child}/merge", json={"proposed": reviewed})
+    view = client.post(f"/api/canvases/{canvas['id']}/boxes/{child}/merge/accept").json()
+    anchor = next(a for a in view["anchors"] if a["target"] == child)
+    assert anchor["quote"] == anchors.lead_sentence(EDITS[0]["replace"])
 
 
 # --- rejecting, and getting out of the way ------------------------------------
