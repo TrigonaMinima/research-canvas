@@ -10,7 +10,7 @@ make test-unit           tests/{functional,regression}/unit    358
 make test-api            tests/{functional,regression}/api     300  (7 live deselected)
 make test-e2e            tests/{functional,regression}/e2e     721
 make test-stress         tests/stress                            0  suite lands with #63
-make test-chaos          tests/chaos                             0  suite lands with #64
+make test-chaos          tests/chaos                            36  browser, needs the e2e server
 make test-all            all of tests/                        1379  (7 live deselected)
 make coverage            make test, with line coverage of research_canvas
 make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
@@ -133,6 +133,35 @@ The disk is the database, so a broken file costs that one canvas and never the l
   Save fails after the reader pressed it: the toast says `SAVE_FAILED_MESSAGE`, the editor
   stays open with the typed text, the file on disk is unchanged, and Save works again once
   the folder is writable.
+
+## Chaos
+
+Each spec breaks one thing under a real page and checks the reader is told, keeps what they
+typed, and can try again. Browser specs live in `tests/chaos/e2e/` and route only their own
+page, so the shared session server stays healthy. Helpers are in `tests/fixtures/network.py`.
+
+### The browser when the network fails (`e2e/test_network.py`, 36, #56)
+
+- **A reply that is not JSON** (1): a proxy's 502 HTML page is named by its status text.
+- **A dropped fetch and offline** (4): an aborted ask says so and keeps the question; a save
+  made offline keeps the editor open, and saves once the browser is back online.
+- **A dropped stream** (3): the box settles from the disk instead of staying "running"; the
+  looks at the disk back off (each wait longer than the last); one failed look does not stop
+  them. That last one was a bug: a failed read ended the polling for good.
+- **A 5xx on save, ask and rename** (7): each shows the server's detail in a toast; the editor
+  text, the question and the typed title all survive; the kept question sends once the
+  server answers again. Before the fix the ask popover closed before the request, so a
+  failed ask lost the question.
+- **The research brief** (3): a run that finishes with a failure shows its reason, a broken
+  stream shows `BRIEF_CRASHED_REASON`, and Draft is usable again after it.
+- **Boot** (7): a failed or dropped `/api/config` shows a message, not a blank page (bug: the
+  top-level await threw and nothing rendered); a failed canvas list shows a toast, throws
+  nothing (bug: unhandled rejection) and leaves the import usable; a `?c=` id that is gone
+  falls through to the list and drops out of the address.
+- **Toasts no spec reached** (11): Settings failing to load (and no page opens), the web
+  switch put back after a failed save, a failed delete (the box stays), a failed retry (the
+  box stays failed), the editor source failing (no editor opens, and it opens on the next
+  try), and the passage still askable after a failed ask is closed.
 
 ## The nine required layers
 

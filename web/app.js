@@ -313,7 +313,14 @@ async function showEmpty() {
   el.empty.hidden = false;
   fitResearch(); // a draft restored behind a canvas has not been measured yet
 
-  const canvases = await api.listCanvases();
+  let canvases;
+  try {
+    canvases = await api.listCanvases();
+  } catch (error) {
+    // The import and research tabs work without the list, so they stay usable.
+    flash(error.message);
+    return;
+  }
   el.list.replaceChildren();
   for (const item of canvases) {
     const li = document.createElement('li');
@@ -484,8 +491,9 @@ async function settle(canvasId, boxId, wait = SETTLE_FIRST_MS) {
   const view = await api.readCanvas(canvasId).catch(() => null);
   if (!state.canvas || state.canvas.id !== canvasId) return;
   const fresh = view && view.boxes.find((b) => b.id === boxId);
-  if (!fresh) return;
-  if (UNFINISHED.has(fresh.status)) {
+  if (view && !fresh) return; // the box was deleted meanwhile
+  // A look that failed says nothing about the run, so it is the same as one still running.
+  if (!fresh || UNFINISHED.has(fresh.status)) {
     settle(canvasId, boxId, Math.min(wait * 2, SETTLE_SLOWEST_MS));
     return;
   }
@@ -1129,7 +1137,7 @@ function scheduleRestack(extra) {
 el.canvas.addEventListener(boxes.GREW, () => scheduleRestack());
 
 async function submitAsk() {
-  if (!ask) return;
+  if (!ask || ask.sending) return;
   const node = el.askLayer.querySelector('.ask');
   const question = node.querySelector('[data-ask-input]').value.trim();
   if (!question) { flash('Ask a question before sending.'); return; }
@@ -1148,15 +1156,25 @@ async function submitAsk() {
     webSearch: ask.webSearch,
     anchor: { start: ask.offsets.start, end: ask.offsets.end, quote: ask.offsets.quote },
   };
-  closeAsk();
-  window.getSelection().removeAllRanges();
+  // The popover stays up until the server has the question, so a failed send keeps
+  // what the reader typed. `sending` makes a second Enter or click a no-op meanwhile.
+  const pending = ask;
+  pending.sending = true;
+  node.setAttribute('aria-busy', 'true');
 
   let result;
   try {
     result = await api.ask(state.canvas.id, payload);
   } catch (error) {
+    pending.sending = false;
+    node.removeAttribute('aria-busy');
     flash(error.message);
     return;
+  }
+  // A reader who has picked a new passage meanwhile keeps it and its popover.
+  if (ask === pending) {
+    closeAsk();
+    window.getSelection().removeAllRanges();
   }
 
   state.canvas.boxes.push(result.box);

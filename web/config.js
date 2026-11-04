@@ -1,7 +1,28 @@
 // The values the server and the browser must agree on, fetched rather than retyped.
 // Top-level await, so every importer sees them resolved before any app code runs.
 
-const served = await fetch('/api/config').then((r) => r.json());
+// Browser-only, since it is shown exactly when the server cannot be asked for anything.
+const BOOT_FAILED_MESSAGE = 'The app could not reach its server. Check that it is running, then reload.';
+
+async function fetchConfig() {
+  const res = await fetch('/api/config');
+  if (!res.ok) throw new Error(res.statusText);
+  return res.json();
+}
+
+let served;
+try {
+  served = await fetchConfig();
+} catch (error) {
+  // Without these values no module can run, so the page says so instead of staying blank.
+  const note = document.createElement('p');
+  note.className = 'boot-failed';
+  note.dataset.bootFailed = '';
+  note.setAttribute('role', 'alert');
+  note.textContent = BOOT_FAILED_MESSAGE;
+  document.body.replaceChildren(note);
+  throw error;
+}
 
 export const DISPLAY_NAME = served.displayName;
 export const HARD_RELOAD_ATTR = served.hardReloadAttr;

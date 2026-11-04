@@ -50,6 +50,8 @@ def find_offsets(page, box: str, needle: str) -> tuple[int, int]:
 
 
 def highlight(page, box: str, needle: str) -> None:
+    # A question still on its way holds its popover, and a new one opens only after it.
+    page.wait_for_selector('[data-ask][aria-busy="true"]', state="detached")
     start, end = find_offsets(page, box, needle)
     page.evaluate(SELECT, [box, start, end])
 

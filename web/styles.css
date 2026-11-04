@@ -673,6 +673,8 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
   box-shadow:0 12px 30px -14px rgba(0,0,0,.6);z-index:70;max-width:min(90vw,560px);text-align:center;
 }
 
+.boot-failed{max-width:560px;margin:18vh auto 0;padding:0 16px;font:500 15px/1.5 var(--sans);color:var(--ink)}
+
 @media (prefers-reduced-motion:reduce){
   .canvas[data-anim="1"]{transition:none}
   .box::before,.box__toc-toggle::before{transition:none}
