@@ -22,3 +22,7 @@ playwright-report/
 # build-time only; the built bundle in web/vendor/ is committed.
 # package-lock.json is not ignored: `make vendor` runs `npm ci` against it.
 vendor/node_modules/
+
+# Coverage
+.coverage
+htmlcov/

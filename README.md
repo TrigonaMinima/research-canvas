@@ -279,7 +279,7 @@ GET    /                                                  (the app shell)
 ```
 
 `docs_url` and `redoc_url` are off, so there is no generated API page to browse. Read
-`api.py`, or `tests/api/test_contract.py` for the response shapes.
+`api.py`, or `tests/functional/api/test_contract.py` for the response shapes.
 
 ### Frontend, `web/`
 
@@ -301,7 +301,7 @@ Plain ES modules, loaded directly by the browser.
 
 `GET /` returns `web/index.html`, and `/static` is mounted over `web/`. The fonts are
 self-hosted woff2 files in `web/fonts/`. Nothing is fetched from a CDN, and
-`tests/e2e/test_standards.py` asserts it.
+`tests/functional/e2e/test_standards.py` asserts it.
 
 ### The vendored editor
 
@@ -332,10 +332,14 @@ discards.
 ## Tests
 
 ```bash
-make test           # unit, api, and browser layers. Spends no Claude usage
+make test           # functional + regression, unit and api, headless. Spends no Claude usage
 make test-unit      # storage, anchors, markdown, context assembly
 make test-api       # real requests against the FastAPI app, live runs excluded
 make test-e2e       # Playwright over every UI element, plus web-standards checks
+make test-stress    # behaviour at and past the limits
+make test-chaos     # behaviour when a dependency fails
+make test-all       # every category, e2e included
+make coverage       # make test, with line coverage
 make test-sandbox   # opt-in. Spends real Claude usage
 ```
 
@@ -355,7 +359,7 @@ persistence, auth and authorization, validation and error paths, and contract an
 `tests/README.md` maps each layer to its files and says what every test asserts.
 
 Playwright has no JavaScript config. It runs through `pytest-playwright`, and the fixtures
-live in `tests/e2e/conftest.py`. That file starts its own server with `DEV_ID=e2e-test` and
+live in `tests/fixtures/e2e_app.py`. That file starts its own server with `DEV_ID=e2e-test` and
 a temporary `RESEARCH_CANVAS_HOME`, so the browser suite never touches your real research
 and never collides with a running `make dev`. Any test that logs a console error fails.
 
@@ -368,7 +372,7 @@ make help        # list every target
 1. Fork the repo and branch from `main`. Name the branch `feat/<short-description>` or
    `fix/<short-description>`. Never commit to `main`.
 2. Write the tests first. They should fail before the implementation exists.
-3. Run `make fmt`, then `make lint`, then `make test`. All three must pass.
+3. Run `make fmt`, then `make lint`, then `make test` and `make test-e2e`. All must pass.
 4. Add your new tests to `tests/README.md`.
 5. Open a pull request that says what problem existed and how the change solves it.
 

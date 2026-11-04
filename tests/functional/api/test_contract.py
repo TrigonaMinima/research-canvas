@@ -1,0 +1,198 @@
+"""Layer 9: the real API answers in the shape the frontend reads."""
+
+from __future__ import annotations
+
+from research_canvas import api, config
+from tests.fixtures.contract import (
+    ANCHOR_KEYS,
+    ASK_REQUEST_KEYS,
+    ASK_RESULT_KEYS,
+    BOX_KEYS,
+    BOX_STATUSES,
+    CAMERA_KEYS,
+    CLIENT_CONFIG_KEYS,
+    INSTRUCTIONS_KEYS,
+    MERGE_ACCEPT_KEYS,
+    MERGE_ACK_KEYS,
+    MERGE_CHANGE_KEYS,
+    MERGE_KEYS,
+    MERGE_PATCH_KEYS,
+    MERGE_REQUEST_KEYS,
+    MERGE_STATUSES,
+    MERGE_STREAM_EVENTS,
+    PRESET_KEYS,
+    PRESETS_KEYS,
+    RESEARCH_KEYS,
+    STREAM_EVENTS,
+    SUMMARY_KEYS,
+    VIEW_KEYS,
+)
+from tests.fixtures.merging import answer, run_merge
+
+
+def test_a_canvas_view_carries_every_documented_field(canvas):
+    assert set(canvas) == VIEW_KEYS
+
+
+def test_a_box_carries_every_documented_field(canvas):
+    assert set(canvas["boxes"][0]) == BOX_KEYS
+
+
+def test_the_camera_carries_every_documented_field(canvas):
+    assert set(canvas["camera"]) == CAMERA_KEYS
+
+
+def test_every_box_reports_a_known_status(canvas):
+    assert {b["status"] for b in canvas["boxes"]} <= BOX_STATUSES
+
+
+def test_a_body_is_rendered_for_every_box(canvas):
+    assert set(canvas["bodies"]) == {b["id"] for b in canvas["boxes"]}
+
+
+def test_a_summary_carries_every_documented_field(client, canvas):
+    assert set(client.get("/api/canvases").json()[0]) == SUMMARY_KEYS
+
+
+def test_asking_answers_in_the_documented_shape(client, canvas):
+    result = client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={
+            "boxId": "b1",
+            "question": "What is a residual connection?",
+            "x": 900,
+            "y": 80,
+            "webSearch": True,
+            "anchor": {"start": 0, "end": 9, "quote": "Attention"},
+        },
+    ).json()
+    assert set(result) == ASK_RESULT_KEYS
+    assert set(result["box"]) == BOX_KEYS
+    assert set(result["anchor"]) == ANCHOR_KEYS
+
+
+def test_the_ask_payload_accepts_every_documented_field():
+    assert set(api.AskBody.model_fields) == ASK_REQUEST_KEYS
+
+
+def test_the_stream_only_sends_documented_events(client, canvas, fake_answer):
+    event = fake_answer.Event
+    fake_answer(
+        [event(kind="init", tools=["WebSearch"]), event(kind="text", text="ok"), event(kind="done")]
+    )
+    client.post(
+        f"/api/canvases/{canvas['id']}/ask",
+        json={"boxId": "b1", "question": "Why?", "x": 900, "y": 80},
+    )
+    body = client.get(f"/api/canvases/{canvas['id']}/boxes/b2/stream").text
+    sent = {
+        line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
+    }
+    assert sent <= STREAM_EVENTS
+
+
+def test_the_instructions_payload_carries_the_field_the_browser_reads(client):
+    assert set(client.get("/api/instructions").json()) == INSTRUCTIONS_KEYS
+
+
+def test_the_saved_instructions_come_back_in_the_same_shape(client):
+    saved = client.put("/api/instructions", json={"markdown": "Be brief."})
+    assert set(saved.json()) == INSTRUCTIONS_KEYS
+
+
+def test_the_chips_payload_carries_the_field_the_browser_reads(client):
+    assert set(client.get("/api/presets").json()) == PRESETS_KEYS
+
+
+def test_every_chip_carries_the_two_fields_the_popover_needs(client):
+    for chip in client.get("/api/presets").json()["presets"]:
+        assert set(chip) == PRESET_KEYS
+
+
+def test_the_saved_chips_come_back_in_the_same_shape(client):
+    chips = {"presets": [{"label": "Explain", "question": "Explain this."}]}
+    saved = client.put("/api/presets", json=chips)
+    assert set(saved.json()) == PRESETS_KEYS
+    assert set(saved.json()["presets"][0]) == PRESET_KEYS
+
+
+# --- the served config: what keeps the browser from re-declaring these ---------
+
+
+def test_the_client_config_carries_every_value_the_browser_imports(client):
+    assert set(client.get("/api/config").json()) == CLIENT_CONFIG_KEYS
+
+
+def test_the_client_config_serves_the_same_values_python_uses(client):
+    served = client.get("/api/config").json()
+    assert served["minScale"] == config.MIN_SCALE
+    assert served["maxScale"] == config.MAX_SCALE
+    assert served["minBoxWidth"] == config.MIN_BOX_WIDTH
+    assert served["maxBoxWidth"] == config.MAX_BOX_WIDTH
+    assert served["minSelectionChars"] == config.MIN_SELECTION_CHARS
+    assert served["chromeHeight"] == config.CHROME_HEIGHT
+    assert served["boxGap"] == config.BOX_GAP
+    assert served["anchorLead"] == config.ANCHOR_LEAD
+    assert served["dragSlop"] == config.DRAG_SLOP
+    assert served["stillRunningMessage"] == config.STILL_RUNNING_MESSAGE
+    assert served["maxInstructionsChars"] == config.MAX_INSTRUCTIONS_CHARS
+    assert served["maxPresets"] == config.MAX_PRESETS
+    assert served["maxPresetLabelChars"] == config.MAX_PRESET_LABEL_CHARS
+    assert served["maxPresetQuestionChars"] == config.MAX_PRESET_QUESTION_CHARS
+    assert served["maxTitleChars"] == config.MAX_TITLE_CHARS
+    assert set(served["unfinished"]) == set(config.UNFINISHED)
+
+
+def test_the_client_config_serves_the_contents_list_thresholds(client):
+    served = client.get("/api/config").json()
+    assert (served["minTocHeadings"], served["tocMaxLevel"]) == (3, 3)
+
+
+# --- folding an answer back into its parent -----------------------------------
+
+
+def test_a_merge_carries_every_documented_field(reviewed):
+    assert set(reviewed) == MERGE_KEYS
+
+
+def test_a_change_carries_every_documented_field(reviewed):
+    assert set(reviewed["changes"][0]) == MERGE_CHANGE_KEYS
+
+
+def test_a_merge_reports_a_known_status(reviewed):
+    assert reviewed["status"] in MERGE_STATUSES
+
+
+def test_the_merge_payload_accepts_every_documented_field():
+    assert set(api.MergeBody.model_fields) == MERGE_REQUEST_KEYS
+
+
+def test_the_review_payload_accepts_every_documented_field():
+    assert set(api.MergePatch.model_fields) == MERGE_PATCH_KEYS
+
+
+def test_the_accept_payload_accepts_every_documented_field():
+    assert set(api.AcceptBody.model_fields) == MERGE_ACCEPT_KEYS
+
+
+def test_the_merge_stream_only_sends_documented_events(client, canvas, fake_answer):
+    child = answer(client, canvas, fake_answer)
+    body = run_merge(client, canvas, child, fake_answer)
+    sent = {
+        line.removeprefix("event: ") for line in body.splitlines() if line.startswith("event: ")
+    }
+    assert sent <= MERGE_STREAM_EVENTS
+
+
+def test_saving_a_review_answers_in_the_documented_shape(client, canvas, reviewed):
+    patched = client.patch(
+        f"/api/canvases/{canvas['id']}/boxes/{reviewed['childId']}/merge",
+        json={"proposed": reviewed["proposed"]},
+    ).json()
+    assert set(patched) == MERGE_ACK_KEYS
+
+
+def test_a_research_canvas_carries_the_documented_research_keys(client):
+    body = {"topic": "python releases", "prompt": "Find the latest."}
+    view = client.post("/api/research", json=body).json()
+    assert set(view["research"]) == RESEARCH_KEYS

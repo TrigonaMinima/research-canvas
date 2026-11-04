@@ -21,6 +21,7 @@ research-canvas = "research_canvas.server:main"
 dev = [
     "pytest>=8.3",
     "pytest-asyncio>=0.24",
+    "pytest-cov>=7.1.0",
     "pytest-playwright>=0.5",
     "ruff>=0.7",
 ]

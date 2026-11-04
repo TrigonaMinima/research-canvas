@@ -1,16 +1,44 @@
 # Tests
 
-1318 tests. 1311 run on every `make test`; the 7 marked `live` spend real Claude usage and
-run only on `make test-sandbox` and `make test-research-live`.
+1369 tests. 641 run on every headless `make test`, 721 more need a browser and run on
+`make test-e2e`; the 7 marked `live` spend real Claude usage and run only on
+`make test-sandbox` and `make test-research-live`.
 
 ```
-make test                unit + api + e2e          1311 tests, no usage spent
-make test-unit           tests/unit                338
-make test-api            tests/api                 300  (7 live deselected)
-make test-e2e            tests/e2e                 673
-make test-sandbox        tests/api -m live -k sandbox    5  proves US-7 against the real CLI
-make test-research-live  tests/api -m live -k research   2  one real research run
+make test                functional + regression, unit + api   641  no browser, no usage
+make test-unit           tests/{functional,regression}/unit    341
+make test-api            tests/{functional,regression}/api     300  (7 live deselected)
+make test-e2e            tests/{functional,regression}/e2e     721
+make test-stress         tests/stress                            0  suite lands with #63
+make test-chaos          tests/chaos                             0  suite lands with #64
+make test-all            all of tests/                        1362  (7 live deselected)
+make coverage            make test, with line coverage of research_canvas
+make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
+make test-research-live  tests/functional/api -m live -k research   2  one real research run
 ```
+
+## Categories
+
+```
+tests/
+├── functional/   unit, api, e2e: does it do what the spec says?
+├── regression/   unit, api, e2e: does a fixed bug stay fixed?
+├── stress/       does it hold at and past limits?
+└── chaos/        does it survive failures?
+```
+
+All four apply.
+
+- **Functional**: always. The nine layers below live here.
+- **Regression**: always. Each spec names the commit or issue it guards.
+- **Stress**: the canvas grows without bound (20,000-word documents, hundreds of answers),
+  and answers stream concurrently. Suite tracked in #63.
+- **Chaos**: every run is a subprocess, pictures come over the network, and canvases live on
+  disk. Suite tracked in #64.
+
+Each category folder splits by layer where it needs to, so headless `make test` picks the
+`unit` and `api` folders and `make test-e2e` picks the `e2e` ones. Every folder is a
+package, so two files may share a basename across layers.
 
 Nothing in the suite calls Claude except `test-sandbox` and `test-research-live`. Everywhere else the `claude` binary
 is `tests/fixtures/fake_claude.py`, which speaks the real `stream-json` dialect, so the
@@ -20,17 +48,17 @@ runner, the parser, the SSE bridge and the browser are all genuinely exercised f
 
 | # | Layer | Where | Tests |
 |---|-------|-------|-------|
-| 1 | API function tests | `tests/unit/` | 280 |
-| 2 | API endpoint tests | `tests/api/test_endpoints.py`, `test_merge_endpoints.py` | 159 |
-| 3 | Frontend, mocked API | `tests/e2e/test_mocked_api.py` | 17 |
-| 4 | Frontend, real API | `tests/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
-| 5 | End-to-end, every UI element | all of `tests/e2e/` | 539 |
-| 6 | Data / persistence | `tests/unit/test_storage.py` | 68 |
-| 7 | Auth & authorization | `tests/unit/test_server.py`, `tests/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
-| 8 | Validation & error paths | `tests/api/test_endpoints.py`, `test_merge_endpoints.py`, `tests/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 52 |
-| 9 | Contract / schema | `tests/api/test_contract.py` | 24 |
+| 1 | API function tests | `tests/functional/unit/` | 280 |
+| 2 | API endpoint tests | `tests/functional/api/test_endpoints.py`, `test_merge_endpoints.py` | 159 |
+| 3 | Frontend, mocked API | `tests/functional/e2e/test_mocked_api.py` | 17 |
+| 4 | Frontend, real API | `tests/functional/e2e/test_canvas.py`, `test_anchors.py`, `test_select.py`, `test_help.py`, `test_highlight_snap.py`, `test_math.py`, `test_chrome.py`, `test_empty_state.py`, `test_instructions.py`, `test_sections.py`, `test_settings.py`, `test_ask_presets.py`, `test_tables.py`, `test_header_fold.py`, `test_header_press.py`, `test_box_focus.py`, `test_box_keys.py`, `test_merge.py`, `test_toc.py` | 467 |
+| 5 | End-to-end, every UI element | all of `tests/functional/e2e/` | 539 |
+| 6 | Data / persistence | `tests/functional/unit/test_storage.py` | 68 |
+| 7 | Auth & authorization | `tests/functional/unit/test_server.py`, `tests/functional/api/test_sandbox.py`, `test_standards.py` | 3 + 3 live |
+| 8 | Validation & error paths | `tests/functional/api/test_endpoints.py`, `test_merge_endpoints.py`, `tests/functional/e2e/test_failures.py`, `test_instructions.py`, `test_settings.py` | 52 |
+| 9 | Contract / schema | `tests/functional/api/test_contract.py` | 24 |
 
-### 1 — API function tests (`tests/unit/`)
+### 1 — API function tests (`tests/functional/unit/`)
 
 Each module in isolation, no HTTP, no browser.
 
@@ -89,7 +117,7 @@ Each module in isolation, no HTTP, no browser.
   word-level diff here any more: the review is a diff of the whole document, drawn in the
   browser by the merge view.
 
-### 2 — API endpoint tests (`tests/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 67)
+### 2 — API endpoint tests (`tests/functional/api/test_endpoints.py`, 78; `test_merge_endpoints.py`, 67)
 
 Real requests through `TestClient`: import, list, read, patch camera and boxes, ask, stream,
 retry, delete, and the app shell, which is never cached and is marked when the browser asks for it with a hard refresh. Ten cover editing a body: the markdown source behind
@@ -136,7 +164,7 @@ document still written, the child kept when the accept does not ask, and the who
 still refused while the run is going. Reject drops the proposal and leaves the document alone; deleting a box takes its
 proposal with it; and `view.merges` carries the ids a reload reopens the reviews from.
 
-### 3 — Frontend against a mocked API (`tests/e2e/test_mocked_api.py`, 17)
+### 3 — Frontend against a mocked API (`tests/functional/e2e/test_mocked_api.py`, 17)
 
 Playwright with `page.route` answering the canvas, ask, and stream calls from canned
 payloads. No storage, no runner. Covers rendering (title, boxes, questions, status, anchors,
@@ -392,13 +420,13 @@ The same browser, the real server, the real storage, the fake `claude`.
   `config.DRAG_SLOP`: a press one pixel short of it folds, and a press that reaches it moves
   the box and does not fold it.
 
-### 5 — End-to-end over every UI element (all of `tests/e2e/`, 539)
+### 5 — End-to-end over every UI element (all of `tests/functional/e2e/`, 539)
 
 Layers 3, 4, 7, 8 and the release criteria all run in a real browser against a real server
 started on a fresh random port. `test_standards.py` (18) holds the web-standards and
 accessibility checks: the language, the title, the single `h1`, unique ids, the tab pattern,
 a name on every visible button, a label on every visible field, and a name and a destination
-on every visible link. `tests/e2e/test_release.py` (6) covers the PRD's release criteria
+on every visible link. `tests/functional/e2e/test_release.py` (6) covers the PRD's release criteria
 directly:
 
 - a pending box on screen within 300ms of asking;
@@ -407,7 +435,7 @@ directly:
 - **US-18** — three answers running, the server force-quit with `SIGKILL`, restarted, and all
   three boxes read `Interrupted` with their questions, anchors and edges intact.
 
-### 6 — Data / persistence (`tests/unit/test_storage.py`, 57)
+### 6 — Data / persistence (`tests/functional/unit/test_storage.py`, 57)
 
 The on-disk format is the database: `canvas.json` plus one markdown file per box. Covered
 above in layer 1. Three cover the pin a reader puts on a box: an answer starting unpinned, a
@@ -426,7 +454,7 @@ boundary the PRD actually draws, and that is tested:
 - `test_standards.py::test_nothing_is_fetched_from_the_network` and
   `test_the_fonts_are_served_from_this_machine` — no request leaves the machine while the
   app runs. "Local only · nothing leaves this machine" is a checked assertion.
-- `tests/api/test_sandbox.py` (3, `live`) — against the real CLI: a planted instruction in a
+- `tests/functional/api/test_sandbox.py` (3, `live`) — against the real CLI: a planted instruction in a
   project config never reaches a run, a web-search run gets exactly `WebFetch` and
   `WebSearch` with no MCP servers, and a run with web search off gets no tools at all.
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
@@ -452,7 +480,7 @@ because the reader reads the sentence, not the status code. In the browser,
 `test_failures.py` (6) covers a usage-limit stop, a crashed run, the retry button, and the
 rule that a failed answer keeps its question and its anchor.
 
-### 9 — Contract / schema (`tests/api/test_contract.py`, 24)
+### 9 — Contract / schema (`tests/functional/api/test_contract.py`, 24)
 
 Every field name the frontend reads, asserted against what the real API returns: the canvas
 view, a box, the camera, the box statuses, one rendered body per box, a canvas summary, the
@@ -482,45 +510,45 @@ side now fails here rather than silently disagreeing in the browser.
 
 Added with the rename feature. The counts in the sections above were not re-totalled for it.
 
-- `tests/unit/test_storage.py` (11) — `clean_title` trims, turns a line break into a space,
+- `tests/functional/unit/test_storage.py` (11) — `clean_title` trims, turns a line break into a space,
   refuses a blank or whitespace-only title and one over the cap, and accepts exactly the cap.
   The id is today's date plus the slug: whole when it fits, cut at `MAX_SLUG_CHARS` when it
   does not, with no dash left at the cut, and the cut follows the configured size.
-- `tests/api/test_endpoints.py` (14) — a `PATCH` with `title` is stored, returned and listed,
+- `tests/functional/api/test_endpoints.py` (14) — a `PATCH` with `title` is stored, returned and listed,
   trimmed, and never changes the id. A blank title and one over the cap give 422 with the
   sentence from `config.py` and keep the old title. An unknown canvas gives 404, and a patch
   without a title leaves it alone. Each success test reads the stored title back, because a
   200 alone proved nothing before the field existed.
-- `tests/api/test_contract.py` and `tests/fixtures/contract.py` — `maxTitleChars` is one of the
+- `tests/functional/api/test_contract.py` and `tests/fixtures/contract.py` — `maxTitleChars` is one of the
   keys the browser imports, and equals `MAX_TITLE_CHARS` (asserted inside the two existing
   `/api/config` tests).
-- `tests/e2e/test_rename.py` (24) — the title in the bar is a button that opens a field
+- `tests/functional/e2e/test_rename.py` (24) — the title in the bar is a button that opens a field
   holding the current title, focused. Enter renames the header and the tab, keeps the URL and
   the id, survives a reload, and shows in the canvas list. An unchanged title sends nothing.
   Escape and blur discard. A blank title shows the toast and keeps the field open. The
   keyboard alone can do all of it, and the field carries the cap.
-- `tests/e2e/test_mocked_api.py` (3) — the rename sends `{"title": …}`, and a refused one
+- `tests/functional/e2e/test_mocked_api.py` (3) — the rename sends `{"title": …}`, and a refused one
   shows the server's sentence and keeps the field open.
-- `tests/e2e/test_standards.py` (4) — the button and the field have their accessible names,
+- `tests/functional/e2e/test_standards.py` (4) — the button and the field have their accessible names,
   and every visible button and field is still named while the rename is open.
-- `tests/e2e/test_chrome.py` (1) — the rename field does not push the view controls off a
+- `tests/functional/e2e/test_chrome.py` (1) — the rename field does not push the view controls off a
   narrow bar.
 
 ## Web search switches (73 new tests)
 
-- `tests/unit/test_storage.py` (+11) — a canvas defaults to web search on, keeps `webSearch`
+- `tests/functional/unit/test_storage.py` (+11) — a canvas defaults to web search on, keeps `webSearch`
   through `canvas.json`, reads an old file without it as on, and gives it to the root box. An
   answer inherits the canvas value and can turn it off for itself.
-- `tests/unit/test_runner.py` (+3) — with web search on, `--tools` and `--allowedTools` name
+- `tests/functional/unit/test_runner.py` (+3) — with web search on, `--tools` and `--allowedTools` name
   exactly the web tools; off, `--tools ""`, no `--allowedTools`, and the sandbox flags stay.
-- `tests/unit/test_context.py` (+4) — the prompt says search is off when the question or the
+- `tests/functional/unit/test_context.py` (+4) — the prompt says search is off when the question or the
   canvas has it off, and only then. The maths rule stays.
-- `tests/api/test_web_search.py` (26) — create and PATCH set `webSearch`, it shows on the
+- `tests/functional/api/test_web_search.py` (26) — create and PATCH set `webSearch`, it shows on the
   canvas and every box, a non-boolean PATCH gives 422. An ask inherits the canvas value, can
   opt out, and is clamped off when the canvas is off. The runner gets `web_search` from the
   canvas read when the run starts, so a canvas switched off while a question waits runs without
   search.
-- `tests/e2e/test_web_search.py` (29) — one start-card toggle shared by both tabs, sent on
+- `tests/functional/e2e/test_web_search.py` (29) — one start-card toggle shared by both tabs, sent on
   create. The chrome-bar switch reflects the canvas, PATCHes it, and survives a reload. The ask
   toggle starts at the canvas value, flips one question only, and is disabled with "off for
   this canvas" when the switch is off, following the switch while open.
@@ -529,7 +557,7 @@ Added with the rename feature. The counts in the sections above were not re-tota
 
 The counts above were not re-totalled.
 
-- `tests/unit/test_assets.py` — `sniff` names PNG, JPEG, GIF and WebP by their bytes and
+- `tests/functional/unit/test_assets.py` — `sniff` names PNG, JPEG, GIF and WebP by their bytes and
   refuses SVG, HTML and empty input. `is_public` refuses loopback, private, link-local,
   unspecified, reserved and multicast addresses. `save` names a file by its hash, writes it
   once, and refuses an unsupported type and an oversize one. `fetch_image` refuses non-http
@@ -539,20 +567,20 @@ The counts above were not re-totalled.
   URL once, stops at the cap, and leaves code blocks, local pictures and plain text alone.
   `as_links` turns every remote picture into a plain link, saves no file, and leaves a local
   picture alone.
-- `tests/api/test_assets.py` — upload gives 201 and a path, 415 for SVG or text, 413 over the
+- `tests/functional/api/test_assets.py` — upload gives 201 and a path, 415 for SVG or text, 413 over the
   cap, 404 for an unknown canvas. Serving gives the right type, `nosniff` and an immutable
   cache, and 404 for a bad name, a traversal or an unknown canvas. Every rendered body points
   `assets/…` at the canvas route. A finished run is saved with local pictures, its `done` HTML
   uses them, and a "pictures" status event comes first.
-- `tests/api/test_web_search.py` (+9) — the picture rule is in the prompt only with web search
+- `tests/functional/api/test_web_search.py` (+9) — the picture rule is in the prompt only with web search
   on. A web-off answer keeps remote pictures as links, in the saved body and in the `done`
   event, and never calls the downloader, even when the canvas is switched off while it waits.
   An upload still works on a web-off canvas.
-- `tests/unit/test_context.py` (+8), `test_markdown.py`, `test_storage.py` — with web search on
+- `tests/functional/unit/test_context.py` (+8), `test_markdown.py`, `test_storage.py` — with web search on
   the preamble asks for sources and for pictures by URL, never invented; off, it says not to
   embed pictures. `render(base=)` rewrites only local pictures and marks every one lazy and
   async. `asset_path` accepts only a hash name.
-- `tests/e2e/test_images.py` — an answer with a picture shows it, loaded from
+- `tests/functional/e2e/test_images.py` — an answer with a picture shows it, loaded from
   `/api/canvases/…`, and the page never contacts the picture's host. A pasted picture becomes
   `![…](assets/…)` in the source and shows after Save. Save while a picture is still uploading
   says so and keeps the editor open. On a web-off canvas the picture host gets no request and a
@@ -560,14 +588,14 @@ The counts above were not re-totalled.
 
 ## A picture, full size (43 tests)
 
-- `tests/e2e/test_image_zoom.py` (18) — a click on a picture in a box body opens a modal
+- `tests/functional/e2e/test_image_zoom.py` (18) — a click on a picture in a box body opens a modal
   dialog (`aria-modal="true"`, named after the alt text) that shows the same `src`, fits the
   window, and takes the focus onto its Close button. Escape, a click on the backdrop and the
   Close button each close it; a click on the picture itself does not. Focus goes back to the
   picture, and its box stays focused. A double click on a picture never opens the editor and
   leaves the dialog open. The arrow keys do not fold the box behind it. Every visible button is
   named while it is open, and under reduced motion it does not animate.
-- `tests/e2e/test_image_zoom_levels.py` (25) — zooming past full size, on the 2px answer picture
+- `tests/functional/e2e/test_image_zoom_levels.py` (25) — zooming past full size, on the 2px answer picture
   (whose fit is its natural size) and on a 3000x2000 picture uploaded into the root box (whose
   fit is well below it). It opens fitted to the window, and fit is the floor: the wheel stops
   there and Zoom out is disabled. The wheel zooms past natural size, around the pointer, and
@@ -583,14 +611,14 @@ The counts above were not re-totalled.
 
 Added with the contents list. The counts in the sections above were not re-totalled for it.
 
-- `tests/unit/test_storage.py` (2) — an open list survives the disk round trip, and a canvas
+- `tests/functional/unit/test_storage.py` (2) — an open list survives the disk round trip, and a canvas
   saved before the field existed loads with the list closed.
-- `tests/api/test_endpoints.py` (2) — a `PATCH` with `tocOpen` is stored, and `false` travels
+- `tests/functional/api/test_endpoints.py` (2) — a `PATCH` with `tocOpen` is stored, and `false` travels
   back as well as `true`. The pinned tests now share the same `_flag_after()` helper.
-- `tests/api/test_contract.py` and `tests/fixtures/contract.py` — `tocOpen` is a box key, and
+- `tests/functional/api/test_contract.py` and `tests/fixtures/contract.py` — `tocOpen` is a box key, and
   `minTocHeadings` / `tocMaxLevel` are served config keys (asserted in one new test and the
   existing key-set tests).
-- `tests/e2e/test_toc.py` (19) — a canvas imported from `fixtures/toc_doc.md`. The strip shows
+- `tests/functional/e2e/test_toc.py` (19) — a canvas imported from `fixtures/toc_doc.md`. The strip shows
   with three h1 to h3 headings, not with two, and an h4 does not count. It shows on first
   render, starts closed with its list hidden, names its list in `aria-controls`, and counts
   only listed headings. Entries come in document order and nest by level. The open state
@@ -598,39 +626,39 @@ Added with the contents list. The counts in the sections above were not re-total
   section first. The strip hides when the box folds and while the editor is open, and an edit
   that adds headings rebuilds it. The body's plain text keeps each heading once, Find does not
   count the list, and the strip cannot be selected.
-- `tests/e2e/test_standards.py` (1) — two boxes with open lists keep unique ids, named
+- `tests/functional/e2e/test_standards.py` (1) — two boxes with open lists keep unique ids, named
   buttons and labelled fields.
 
 ## Researching a topic
 
 Added with the "Research a topic" flow. Every layer has its share.
 
-- `tests/unit/test_research.py` (26): the brief prompt and the research prompt (the web-only
+- `tests/functional/unit/test_research.py` (26): the brief prompt and the research prompt (the web-only
   and cite-everything rules, the standing instructions, the sentinels), the links found in a
   report, URL normalising (`www.`, trailing slash, fragment, tracking keys), which citations
   match no page the run saw, and the Sources section: cited pages only, unseen ones apart.
-- `tests/unit/test_runner.py` (+13): a stream line of 300 KB read whole (a report is one line, and the default pipe limit is 64 KB), `--allowedTools` present with web search and absent
+- `tests/functional/unit/test_runner.py` (+13): a stream line of 300 KB read whole (a report is one line, and the default pipe limit is 64 KB), `--allowedTools` present with web search and absent
   without, the model override, and the captured stream: each tool call once, the query, the
   fetched URL, the pages a search returned, a 404 not counted as seen, the final text on
   `done`, and a refused tool.
-- `tests/unit/test_storage.py` (+9): a topic of several lines titled on one line, a research canvas starts with a pending, empty root and
+- `tests/functional/unit/test_storage.py` (+9): a topic of several lines titled on one line, a research canvas starts with a pending, empty root and
   a `research.json`; reading, updating and resetting it; a pasted canvas has none.
-- `tests/unit/test_fake_claude.py` (2): the two prompt headings the stand-in CLI retypes
+- `tests/functional/unit/test_fake_claude.py` (2): the two prompt headings the stand-in CLI retypes
   equal the ones the app writes.
-- `tests/api/test_research_api.py` (40): drafting the brief (stream events, no tools, the
+- `tests/functional/api/test_research_api.py` (40): drafting the brief (stream events, no tools, the
   answer model, a failure worded for a brief, 422 for a blank or long topic), starting a run (201, 422), the run itself
   (`tool` and `reset` events, narration kept out of the report, the Sources section, the
   unverified list, the new title, the research model), a run that never reached the web or
   was refused its tools saved as failed, 409 for a second stream on a live box, and retry:
   allowed on a research root, refused on a pasted document.
-- `tests/api/test_contract.py` (+1): the keys of `research` on a canvas view.
-- `tests/e2e/test_research_topic.py` (61): a blinking dot beside the status note and a second one above the brief, both shown only while the brief is written, and still under reduced motion, a brief over the length cap still taking typing, saying it is too long, refusing to start, and recovering once trimmed, a plain refresh keeping the topic, the brief (edited or cut short mid-draft), and the research tab, a hard refresh clearing all three for good, no draft left behind once research starts, the page staying where it was scrolled while the brief is still being written, the topic box and the brief box each as tall as their text (growing, shrinking back, never clipped, the top of the page still reachable under a tall brief), Shift+Enter adding a line without drafting, the brief hidden until drafted, a blank topic
+- `tests/functional/api/test_contract.py` (+1): the keys of `research` on a canvas view.
+- `tests/functional/e2e/test_research_topic.py` (61): a blinking dot beside the status note and a second one above the brief, both shown only while the brief is written, and still under reduced motion, a brief over the length cap still taking typing, saying it is too long, refusing to start, and recovering once trimmed, a plain refresh keeping the topic, the brief (edited or cut short mid-draft), and the research tab, a hard refresh clearing all three for good, no draft left behind once research starts, the page staying where it was scrolled while the brief is still being written, the topic box and the brief box each as tall as their text (growing, shrinking back, never clipped, the top of the page still reachable under a tall brief), Shift+Enter adding a line without drafting, the brief hidden until drafted, a blank topic
   refused, the draft about the topic and editable, Enter drafting, an emptied brief not
   startable, the edited brief reaching the run, the live log of searches and pages, the
   report, its Sources, the flag for a citation never seen, the canvas retitled, the failure
   wording, "Retry research", and a reload in mid-run ending interrupted.
-- Live, `tests/api/test_sandbox.py` (+2): a real web run is refused nothing and is shown
-  search results. `tests/api/test_research_live.py` (2): a real research run reaches the
+- Live, `tests/functional/api/test_sandbox.py` (+2): a real web run is refused nothing and is shown
+  search results. `tests/functional/api/test_research_live.py` (2): a real research run reaches the
   web and cites only pages it saw.
 
 ## Which model wrote it
@@ -638,17 +666,17 @@ Added with the "Research a topic" flow. Every layer has its share.
 Added with the model tag (issues #38 and #39). The run names its model at `system/init`;
 the app keeps that id, or the configured alias when init names none.
 
-- `tests/unit/test_runner.py` (+2): the model id kept from `init`, and empty when init
+- `tests/functional/unit/test_runner.py` (+2): the model id kept from `init`, and empty when init
   names none.
-- `tests/unit/test_storage.py` (+3): a box's model round trips through disk, a new answer
+- `tests/functional/unit/test_storage.py` (+3): a box's model round trips through disk, a new answer
   starts with none, and a `canvas.json` written before the field existed still loads.
-- `tests/api/test_endpoints.py` (+5): the box keeps the model the run reported, falls back to
+- `tests/functional/api/test_endpoints.py` (+5): the box keeps the model the run reported, falls back to
   the answer model, sends it with `done`, keeps it on a failed answer, and drops it on retry.
-- `tests/api/test_research_api.py` (+6): the brief's `done` names the model that drafted it,
+- `tests/functional/api/test_research_api.py` (+6): the brief's `done` names the model that drafted it,
   or the answer model; the report's model reaches `research.json`, the `done` event, the
   root box and the canvas view.
 - `tests/fixtures/contract.py`: `model` is a box key, so `test_contract.py` checks it.
-- `tests/e2e/test_model_tag.py` (11): the answer header names its model, says "Answered by"
+- `tests/functional/e2e/test_model_tag.py` (11): the answer header names its model, says "Answered by"
   to a screen reader, keeps the id's own case, survives a reload, and is absent on a pasted
   document; the brief names its model only once drafted and keeps "Research brief" as the
   field's name; a researched root says "Researched by"; and an older researched root with
@@ -658,7 +686,7 @@ the app keeps that id, or the configured alias when init names none.
 
 Added when each page a research run reads became a link.
 
-- `tests/e2e/test_research_topic.py` (+8): a page read links to its address, opens in a new tab with `noopener`, opens a new tab on a plain click and on a Ctrl/Cmd click, a Ctrl/Cmd click neither selects the box nor moves the canvas tab away, and a search stays plain text. The new tab is answered by a route, so the suite stays offline.
+- `tests/functional/e2e/test_research_topic.py` (+8): a page read links to its address, opens in a new tab with `noopener`, opens a new tab on a plain click and on a Ctrl/Cmd click, a Ctrl/Cmd click neither selects the box nor moves the canvas tab away, and a search stays plain text. The new tab is answered by a route, so the suite stays offline.
 
 ## Fixtures
 
@@ -682,4 +710,4 @@ Added when each page a research run reads became a link.
 | `fixtures/viewport.py` | `transform_of()` and `scale_of()` — reading the canvas transform, shared by every test that checks whether the camera moved. `box_rect()` reads one box's rect in canvas pixels, which is what the layout tests compare, `canvas_id_of()` reads the open canvas's id out of the query string, and `zoom_to_fit()` fits every box on screen and waits for the camera to flip `data-anim` rather than sleeping. `wait_for_camera()` is that wait on its own, for the tests that set the camera going some other way. `drag_header_by()` moves a box by a distance in canvas pixels, `drag_popover()` moves a popover by its header in screen pixels, and `fold_help()` puts the shortcuts card away first, so a drag or a click near the top-right corner reaches the desk. `press_header()` presses a header on its label, moves a few screen pixels and lets go, for the tests that tell a click from a drag. `settled()` gives the restack pass its frames before a rect is read, and `answer_in_reach()` asks for the first answer and brings its header on screen. |
 | `fixtures/merging.py` | The edit list a merge run returns, deliberately mixed: two changes that land in different paragraphs of the document, far enough apart that the diff reads them as separate chunks and one can be dropped without the other, and a third naming text the document has never contained. A second list holds two changes on adjacent lines of one paragraph, which the diff cannot separate: one chunk, one arrow, two changes. Shared by the API tests, the fake binary and the browser tests, so all three move together. Also the selectors a review is driven by, which name the **parent** box, since that is where the review renders. |
 | `fixtures/big_canvas.py` | Seeds the release-criteria canvas (20,000 words, 100 answers) straight onto disk. |
-| `e2e/conftest.py` | `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. A loopback server hands out the fixture PNG, and the app is started with `RESEARCH_CANVAS_ALLOW_PRIVATE_FETCH=1` so it may fetch from it; `picture_hits` records who asked. |
+| `fixtures/e2e_app.py` | Loaded as a plugin by `tests/conftest.py`, so every e2e folder shares one session server. `start_server()` / `stop_server()`, each with its own `DEV_ID`, its own random port and its own canvas root under tmp, so the suite can never touch real research or collide with a running dev server. The `app` fixture fails a test that logs a console or page error. A loopback server hands out the fixture PNG, and the app is started with `RESEARCH_CANVAS_ALLOW_PRIVATE_FETCH=1` so it may fetch from it; `picture_hits` records who asked. |

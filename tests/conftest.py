@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pytest
 
+# The browser fixtures live in a plugin so every e2e folder shares one session server.
+pytest_plugins = ["tests.fixtures.e2e_app"]
+
 
 @pytest.fixture
 def canvas_root(tmp_path, monkeypatch):
