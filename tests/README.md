@@ -1,17 +1,17 @@
 # Tests
 
-1386 tests. 658 run on every headless `make test`, 721 more need a browser and run on
-`make test-e2e`; the 7 marked `live` spend real Claude usage and run only on
-`make test-sandbox` and `make test-research-live`.
+1958 tests. 865 run on every headless `make test`, 928 more need a browser and run on
+`make test-e2e`, 32 run on `make test-stress` and 126 on `make test-chaos`; the 7 marked
+`live` spend real Claude usage and run only on `make test-sandbox` and `make test-research-live`.
 
 ```
-make test                functional + regression, unit + api   658  no browser, no usage
-make test-unit           tests/{functional,regression}/unit    358
-make test-api            tests/{functional,regression}/api     300  (7 live deselected)
-make test-e2e            tests/{functional,regression}/e2e     721
-make test-stress         tests/stress                            0  suite lands with #63
-make test-chaos          tests/chaos                            69  browser, needs the e2e server
-make test-all            all of tests/                        1379  (7 live deselected)
+make test                functional + regression, unit + api   865  no browser, no usage
+make test-unit           tests/{functional,regression}/unit    469
+make test-api            tests/{functional,regression}/api     396  (7 live deselected)
+make test-e2e            tests/{functional,regression}/e2e     928
+make test-stress         tests/stress                           32  budgets in config.py
+make test-chaos          tests/chaos                           126  e2e in a second run
+make test-all            all of tests/                        1951  (7 live deselected)
 make coverage            make test, with line coverage of research_canvas
 make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
 make test-research-live  tests/functional/api -m live -k research   2  one real research run
@@ -32,9 +32,9 @@ All four apply.
 - **Functional**: always. The nine layers below live here.
 - **Regression**: always. Each spec names the commit or issue it guards.
 - **Stress**: the canvas grows without bound (20,000-word documents, hundreds of answers),
-  and answers stream concurrently. Suite tracked in #63.
+  and answers stream concurrently. See Stress below.
 - **Chaos**: every run is a subprocess, pictures come over the network, and canvases live on
-  disk. Suite tracked in #64.
+  disk. See Chaos below.
 
 Each category folder splits by layer where it needs to, so headless `make test` picks the
 `unit` and `api` folders and `make test-e2e` picks the `e2e` ones. Every folder is a
@@ -43,6 +43,24 @@ package, so two files may share a basename across layers.
 Nothing in the suite calls Claude except `test-sandbox` and `test-research-live`. Everywhere else the `claude` binary
 is `tests/fixtures/fake_claude.py`, which speaks the real `stream-json` dialect, so the
 runner, the parser, the SSE bridge and the browser are all genuinely exercised for free.
+
+## Stress
+
+`make test-stress`, headless, under a minute. Every count and budget is a `STRESS_*` or
+`*_MS` constant in `src/research_canvas/config.py`; each budget is about five times what an
+idle laptop takes. Concurrency comes from threads released together on a barrier, through
+the real `TestClient`, so the per-canvas lock and the run semaphore are the real ones.
+
+| Spec | What it holds | Tests |
+|------|---------------|-------|
+| `test_concurrent_writes.py` | 16 threads on `storage.edit`, racing PATCHes on separate boxes, readers beside writers: no change lost, every answer 200, no torn file | 4 |
+| `test_run_queue.py` | `MAX_CONCURRENT_RUNS` + 2 streams: never more than the slot count running, exactly the extras queued, each queued one runs once a slot frees, all end `done` | 4 |
+| `api/test_run_queue.py` | #49: one stream past `MAX_CONCURRENT_RUNS`, every run held: the extra box is `queued` on disk, its run does not start while the slots are full, its stream opens with a `queued` status, and every box ends `done` once the runs drain | 4 |
+| `test_concurrent_merges.py` | Two merges opened into one parent at once (one 200, one 409, one proposal left), two merges streamed and accepted at once on one canvas, an ask racing an accept (both land) | 5 |
+| `test_large_inputs.py` | A 20,000-word paste (there is no paste cap; this is the PRD's release size), a picture at exactly the 8 MB cap and one byte over, 300 canvases listed, a 50-deep tree of answers in the prompt and streamed | 10 |
+| `test_latency.py` | p95 budgets for `GET /api/canvases` over 300 canvases, a load and two kinds of save on the release-size canvas, and concurrent loads with no 5xx | 5 |
+
+Removing the per-canvas lock in `storage._lock_for` fails six of these.
 
 ## Regression
 
@@ -96,13 +114,14 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
   its centre; halving the window width halves its width. The pan and zoom cases failed
   before the fix, since `measure()` redrew the minimap only when the boxes moved.
 
-## Stress
-
-- `api/test_run_queue.py` (4) — one stream past `MAX_CONCURRENT_RUNS`, with every run held:
-  the extra box is marked `queued` on disk, its run does not start while the slots are full,
-  its stream opens with a `queued` status, and every box ends `done` once the runs drain.
-
 ## Chaos
+
+`make test-chaos` runs `tests/chaos/`, split by layer like the other categories. Each spec
+breaks one thing and checks the reader is told, keeps what they typed, and can try again.
+Browser specs live in `tests/chaos/e2e/` and route only their own page, so the shared session
+server stays healthy. Helpers are in `tests/fixtures/network.py`.
+
+### Runs that fail, hang or are cut off (#49)
 
 - `unit/test_runner_failures.py` (5) — the runner over `tests/fixtures/stub_claude.py`, a CLI
   that misbehaves on purpose: a run that exits with no `result` fails, closing the generator
@@ -115,10 +134,6 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
   so do a brief and a merge. A box deleted mid-run leaves no body file and its stream still
   ends, a box gone before its run leaves no body file, and a box deleted mid-merge leaves no
   proposal.
-
-## Chaos
-
-`make test-chaos` runs `tests/chaos/`, split by layer like the other categories.
 
 ### Bad files on disk (#50)
 
@@ -142,11 +157,6 @@ The disk is the database, so a broken file costs that one canvas and never the l
   stays open with the typed text, the file on disk is unchanged, and Save works again once
   the folder is writable.
 
-## Chaos
-
-Each spec breaks one thing under a real page and checks the reader is told, keeps what they
-typed, and can try again. Browser specs live in `tests/chaos/e2e/` and route only their own
-page, so the shared session server stays healthy. Helpers are in `tests/fixtures/network.py`.
 
 ### The browser when the network fails (`e2e/test_network.py`, 36, #56)
 

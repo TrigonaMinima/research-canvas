@@ -333,3 +333,27 @@ RETRY_WHILE_RUNNING_MESSAGE = "That box is still running — retry once it is do
 PRESETS_UNREADABLE_MESSAGE = (
     f"{PRESETS_FILE} could not be read — fix the file, or delete it for the default chips"
 )
+
+# --- stress budgets (tests/stress, make test-stress) --------------------------
+# How hard the stress suite pushes, and what it must hold to. Sized so the whole suite
+# stays a pre-merge run, not a soak.
+
+STRESS_WRITERS = 16
+STRESS_WRITES_PER_WRITER = 10
+# Streams started past MAX_CONCURRENT_RUNS, which must queue and then drain.
+STRESS_EXTRA_RUNS = 2
+# Long enough that every stream has started before the first slot frees.
+STRESS_RUN_SECONDS = 0.3
+STRESS_ROUNDS = 5
+STRESS_CANVASES = 300
+STRESS_TREE_DEPTH = 50
+STRESS_SAMPLES = 20
+
+# p95 wall times on the release-size canvas (a 20,000-word root, 100 answers), about
+# five times what an idle laptop takes, so a loaded one still passes and a regression
+# that makes the canvas feel slow does not.
+LIST_CANVASES_P95_MS = 300  # STRESS_CANVASES of them
+LOAD_CANVAS_P95_MS = 600  # every body rendered to HTML
+SAVE_P95_MS = 300
+IMPORT_BUDGET_MS = 500
+PROMPT_BUILD_BUDGET_MS = 100  # STRESS_TREE_DEPTH ancestors
