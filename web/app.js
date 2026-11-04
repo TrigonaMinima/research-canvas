@@ -227,6 +227,7 @@ function render() {
 }
 
 let lastGeometry = '';
+let lastView = ''; // the minimap's viewport rect moves with the camera, not with the boxes
 function measure() {
   if (!state.canvas) return;
   // The camera moves the editor by transform and a drag moves it by `left`, neither
@@ -237,10 +238,17 @@ function measure() {
   el.zoomLevel.textContent = `${Math.round(camera.scale * 100)}%`;
   const next = edges.collect(camera, el.canvas);
   const signature = JSON.stringify(next);
-  if (signature === lastGeometry) return;
-  lastGeometry = signature;
-  state.geometry = next;
-  edges.render(el.edges, next.edges, next.boxes);
+  // Edges live in canvas coordinates, so a pan or zoom leaves them alone and redraws
+  // only the minimap.
+  const view = `${camera.tx},${camera.ty},${camera.scale},${window.innerWidth},${window.innerHeight}`;
+  const moved = signature !== lastGeometry;
+  if (!moved && view === lastView) return;
+  lastView = view;
+  if (moved) {
+    lastGeometry = signature;
+    state.geometry = next;
+    edges.render(el.edges, next.edges, next.boxes);
+  }
   minimap.render(el.miniSvg, next.boxes, camera);
 }
 

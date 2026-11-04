@@ -65,6 +65,7 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 | `e2e/test_table_cell_pictures.py` | `ebccccc` (#23) keep pictures in table cells to a sensible height | 5 |
 | `api/test_stream_run_guards.py` | #48 never start a second run on a box that has one | 20 |
 | `e2e/test_merge_stream_reconnect.py` | #48 close a dropped merge stream rather than reconnect | 1 |
+| `e2e/test_minimap_follows_camera.py` | #58 the minimap viewport follows a pan, a zoom and a resize | 7 |
 
 - `test_highlight_word_snap.py` (10) — a highlight covers whole words, whatever the mouse
   landed on. Six read the popover quote: a start inside a word, an end inside a word, both at
@@ -87,6 +88,11 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
   starts.
 - `test_merge_stream_reconnect.py` (1) — a merge stream that ends without `done` is opened
   once; the browser is never left to reconnect it into a second run.
+- `test_minimap_follows_camera.py` (7) — the `[data-mini-viewport]` rect follows the camera.
+  A wheel pan moves it right and down by the pan over the scale, times the minimap's own
+  scale, and keeps its size; a zoom shrinks its width and height by the zoom ratio and keeps
+  its centre; halving the window width halves its width. The pan and zoom cases failed
+  before the fix, since `measure()` redrew the minimap only when the boxes moved.
 
 ## Stress
 
