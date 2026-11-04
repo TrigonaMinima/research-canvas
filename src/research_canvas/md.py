@@ -20,6 +20,17 @@ from .config import ASSET_DIR
 _md = MarkdownIt("commonmark", {"html": False, "linkify": True, "typographer": True})
 _md.enable(["table", "strikethrough", "linkify"])
 
+_validate_link = _md.validateLink
+
+
+# markdown-it already drops javascript:, vbscript: and file:, but keeps raster data:
+# pictures. Those skip the sniffed-bytes check every kept picture passes, so they go too.
+def _safe_link(url: str) -> bool:
+    return not url.strip().lower().startswith("data:") and _validate_link(url)
+
+
+_md.validateLink = _safe_link
+
 # allow_space is off so a price in prose stays prose: with it on, "It costs $5 and $10
 # to run." parses "5 and " as a formula. The cost is that "$ E = mc^2 $", padded inside
 # the delimiters, is no longer maths, which is pandoc's rule too. Do not turn it back

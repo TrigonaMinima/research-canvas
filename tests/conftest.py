@@ -8,6 +8,14 @@ import pytest
 pytest_plugins = ["tests.fixtures.e2e_app"]
 
 
+@pytest.fixture(autouse=True)
+def _testclient_host(monkeypatch):
+    # TestClient sends Host "testserver". Allowed here only, never in the app itself.
+    from research_canvas import config
+
+    monkeypatch.setattr(config, "ALLOWED_HOSTS", (*config.ALLOWED_HOSTS, "testserver"))
+
+
 @pytest.fixture
 def canvas_root(tmp_path, monkeypatch):
     root = tmp_path / "canvases"

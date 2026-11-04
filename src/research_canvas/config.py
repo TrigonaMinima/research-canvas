@@ -48,6 +48,11 @@ RESEARCH_FILE = "research.json"
 # The port is chosen fresh at launch and written here. Nothing hardcodes a port.
 DEV_DIR = REPO_ROOT / ".dev"
 HOST = "127.0.0.1"  # US-7: connections from this computer only.
+# The bind address keeps other machines out; the Host check keeps out a page on another
+# site whose name resolves to 127.0.0.1. The tests add Starlette's "testserver".
+ALLOWED_HOSTS = ("127.0.0.1", "localhost")
+FOREIGN_HOST_MESSAGE = "This app answers on 127.0.0.1 or localhost only"
+FOREIGN_ORIGIN_MESSAGE = "Refused a request sent by another site"
 
 
 def dev_id() -> str:

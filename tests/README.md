@@ -548,6 +548,26 @@ boundary the PRD actually draws, and that is tested:
   `WebSearch` with no MCP servers, and a run with web search off gets no tools at all.
   `make test-sandbox` prints the `system/init` event so the empty `mcp_servers` list is
   visible rather than merely asserted.
+- `tests/functional/api/test_boundary.py` (47, #53) — the bind address is not the whole
+  boundary. A Host other than `127.0.0.1` or `localhost` is refused with 400, on the API and
+  on the app shell; any port is fine. A request whose `Origin` is not the app's own, another
+  local port and `null` included, is refused with 403 on every write, on an upload, and on
+  the stream GET that starts a run, and writes nothing; no `Origin` at all is a client that
+  is not a page, and is let through. Encoded `..` in a canvas id, a box id or an asset name
+  is a 404 and leaves no file outside the canvas root. A chunked upload with no
+  `Content-Length` is refused with 413, and the server stops reading the moment the count
+  passes the cap (driven over raw ASGI, since `TestClient` reads a body in full first).
+  Last, the rule for pictures in the reader's own text: a pasted or edited body is kept as
+  written and nothing is fetched for it; only an answer's pictures are localised.
+  The root `tests/conftest.py` adds `testserver` to `ALLOWED_HOSTS` for every test.
+- `tests/functional/unit/test_boundary.py` (40, #53) — no `href` for `javascript:`,
+  `vbscript:`, `file:` or `data:` links, in any case or padding, and no bare `javascript:`
+  linkified; no `<img>` for any `data:` source, raster ones included, since those skip the
+  sniffed-bytes check; `http(s)`, `mailto:` and `assets/` kept. Box ids that try to leave
+  the canvas (`..`, `../x`, a leading dot or dash, empty) refused by `write_body`,
+  `read_body`, `delete_body` and `delete_merge` before any file is touched.
+- `tests/functional/e2e/test_boundary.py` (2, #53) — the app's own page still saves, opened
+  on `127.0.0.1` and on `localhost`, so the Origin check never refuses the real browser.
 
 ### 8 — Validation & error paths (51)
 

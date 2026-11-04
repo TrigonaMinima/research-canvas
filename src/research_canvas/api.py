@@ -12,6 +12,8 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
+from starlette.datastructures import Headers
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from . import anchors, assets, config, context, md, merge, research, runner, storage
 from .anchors import Anchor
@@ -31,6 +33,8 @@ from .config import (
     DRAG_SLOP,
     EDIT_WHILE_MERGING_MESSAGE,
     EDIT_WHILE_RUNNING_MESSAGE,
+    FOREIGN_HOST_MESSAGE,
+    FOREIGN_ORIGIN_MESSAGE,
     HARD_RELOAD_ATTR,
     IMAGE_TYPES,
     MAX_BOX_WIDTH,
@@ -87,6 +91,36 @@ async def _unreadable(_request: Request, exc: Exception) -> JSONResponse:
 async def _save_failed(_request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=507)
 
+
+class LocalOnly:
+    """Refuse a request that names another host, or that another site's page sent.
+
+    Pure ASGI rather than BaseHTTPMiddleware, which would wrap every answer stream and
+    change how a closed tab reaches the run.
+    """
+
+    def __init__(self, inner: ASGIApp) -> None:
+        self.inner = inner
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            headers = Headers(scope=scope)
+            host = headers.get("host", "").lower()
+            # Read at call time, so the tests can add their own client's name.
+            if host.split(":")[0] not in config.ALLOWED_HOSTS:
+                await JSONResponse({"detail": FOREIGN_HOST_MESSAGE}, 400)(scope, receive, send)
+                return
+            # A browser names the page behind every write, and behind a cross-site GET.
+            # No Origin is a client that is not a web page. A stream is a GET that spends
+            # usage, so every method is checked, not only the writes.
+            origin = headers.get("origin")
+            if origin is not None and origin.lower() != f"{scope['scheme']}://{host}":
+                await JSONResponse({"detail": FOREIGN_ORIGIN_MESSAGE}, 403)(scope, receive, send)
+                return
+        await self.inner(scope, receive, send)
+
+
+app.add_middleware(LocalOnly)
 
 # Swapped out in tests so nothing spends real usage.
 RUN = runner.run
@@ -1166,7 +1200,15 @@ async def upload_asset(canvas_id: str, request: Request) -> dict:
         # Refused before the body is read. Through the module so tests can lower the cap.
         if declared.isdigit() and int(declared) > config.MAX_IMAGE_BYTES:
             raise assets.ImageTooLarge(declared)
-        data = await request.body()
+        # Counted as it arrives: a chunked body declares no length to refuse it by.
+        chunks: list[bytes] = []
+        size = 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > config.MAX_IMAGE_BYTES:
+                raise assets.ImageTooLarge(f"over {config.MAX_IMAGE_BYTES} bytes")
+            chunks.append(chunk)
+        data = b"".join(chunks)
         # Hashing and writing up to 8 MB would stall every answer stream on the loop.
         return {"path": await asyncio.to_thread(assets.save, canvas_id, data)}
     except assets.ImageTooLarge as exc:
