@@ -897,6 +897,10 @@ Added when each page a research run reads became a link.
 - `sourcemap.js` `offsetIn()` (14): a word is found across straight and curly single, double and apostrophe quotes in either direction, the nth twin too; a line past the end lands on the last line, with or without a final newline; a block past the end searches to the end; no place is the top.
 - `geom.js` `bounds()` and `minimap.js` `toCanvas()` (9): exact bounds with and without padding and at negative coordinates, and exact minimap-to-canvas points on a wide box set and a tall one, so swapped axes or a wrong scale fail, plus a round trip through the projection.
 
+## Control rows line up (functional, #59)
+
+`tests/functional/e2e/test_control_rows.py` (66) reads each control's bounding box in every toolbar and form row, at 375 and 1280 px wide, and asserts one height and one bottom edge within 1 px. Each row also asserts its control count, so a row whose controls vanish at a width cannot pass empty. Rows: `.tools` (the find box and zoom group count as one control each) and `.findbox` in the chrome bar, both `.empty__row`s and `.empty__foot` on the first screen, `.ask__foot` on the ask popover and on the merge guidance, `.sheet__foot` and `.preset-row` in Settings, `.box__edit-foot` in the editor, and `.zoom__bar` in the picture view. Three rows failed and were fixed in `styles.css`: the find field stood 8 px shorter than its arrows, the ask popover's Web toggle wrapped to two lines and stood 11 px taller than Ask, and a chip's remove button stood 17 px shorter than its fields.
+
 ## Fixtures
 
 | File | What it is |

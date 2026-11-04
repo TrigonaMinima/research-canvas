@@ -453,6 +453,8 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 .findbox input{width:150px;border:0;outline:0;background:transparent;font:400 13px/1 var(--sans);color:var(--ink)}
 .findbox .count{font:400 11.5px/1 var(--sans);color:var(--ink2);min-width:42px;text-align:right}
 .findbox button{border:0;background:transparent;color:var(--ink2);cursor:pointer;font:400 13px/1 var(--sans);padding:6px 3px}
+/* The field and its arrows fill the box top to bottom, so all three share one edge. */
+.findbox input,.findbox button{align-self:stretch}
 .zoomgroup{display:flex;align-items:center;border:1px solid var(--line);border-radius:3px;background:var(--paper);height:31px}
 .zoomgroup button{border:0;background:transparent;color:var(--ink);cursor:pointer;font:400 14px/1 var(--sans);padding:8px 10px}
 .zoomgroup .level{font:500 11.5px/1 var(--sans);color:var(--ink2);min-width:38px;text-align:center}
@@ -555,6 +557,8 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 
 .ask__foot,.sheet__foot,.box__edit-foot,.box__edit-head{display:flex;align-items:center;gap:10px;margin-top:10px}
 .box__edit-head{margin-top:0;margin-bottom:10px}
+/* The hint wraps instead of the toggle: a two-line toggle stands taller than Ask. */
+.ask__foot .webtoggle{flex:0 0 auto;white-space:nowrap}
 .ask__hint,.box__hint,.empty__model{font:400 11.5px/1 var(--sans);color:var(--ink2);margin-left:auto}
 .btn-primary{border:0;border-radius:3px;background:var(--accent);color:var(--paper);cursor:pointer;font:500 12.5px/1 var(--sans);padding:9px 13px}
 
@@ -584,7 +588,7 @@ mark[data-flash="1"]{outline-width:1.5px;outline-offset:1px}
 }
 .preset-row__name{flex:0 0 132px;font-weight:500}
 .preset-row input:focus{border-color:var(--accent)}
-.preset-row .ask__close{flex:0 0 auto;margin:0;color:var(--ink2)}
+.preset-row .ask__close{flex:0 0 auto;align-self:stretch;margin:0;color:var(--ink2)}
 .preset-row .ask__close:hover{color:var(--warn)}
 [data-preset-add][disabled]{opacity:.45;cursor:not-allowed}
 
