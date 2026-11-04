@@ -301,6 +301,15 @@ BRIEF_USAGE_LIMIT_REASON = (
     "Usage limit reached on your Claude plan. Draft the brief once the limit resets."
 )
 RETRY_PASTED_ROOT_MESSAGE = "A pasted document has no run to retry"
+# A file on disk that is there but broken. Named, so the reader knows which one to fix.
+RESEARCH_UNREADABLE_MESSAGE = (
+    f"{RESEARCH_FILE} could not be read — fix the file to research this topic again"
+)
+INSTRUCTIONS_UNREADABLE_MESSAGE = (
+    f"{INSTRUCTIONS_FILE} could not be read — fix the file, or delete it to run without one"
+)
+SAVE_FAILED_MESSAGE = "The change could not be saved to disk — free some space and try again"
+BODY_MISSING_REASON = "This box's text is missing from disk, so there is nothing to show."
 ALREADY_STREAMING_MESSAGE = "That run is already streaming in another window"
 RUN_FINISHED_MESSAGE = "That run has already ended — retry it to run it again"
 MERGE_FINISHED_MESSAGE = "That merge has already run — review it, or reject it and merge again"

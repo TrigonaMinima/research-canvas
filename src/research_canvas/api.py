@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -74,6 +74,19 @@ from .config import (
 )
 
 app = FastAPI(title=DISPLAY_NAME, docs_url=None, redoc_url=None)
+
+
+# One handler for every route that reads these files, so a broken one is named, not a 500.
+@app.exception_handler(storage.ResearchUnreadable)
+@app.exception_handler(storage.InstructionsUnreadable)
+async def _unreadable(_request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=422)
+
+
+@app.exception_handler(storage.SaveFailed)
+async def _save_failed(_request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=507)
+
 
 # Swapped out in tests so nothing spends real usage.
 RUN = runner.run
@@ -1132,7 +1145,10 @@ def _view(canvas: storage.Canvas) -> dict:
     # at a time, so a waiting merge does not make every canvas read carry a diff.
     waiting = set(storage.list_merges(canvas.id))
     data["merges"] = [box.id for box in canvas.boxes if box.id in waiting]
-    data["research"] = storage.read_research(canvas.id)
+    try:
+        data["research"] = storage.read_research(canvas.id)
+    except storage.ResearchUnreadable:
+        data["research"] = None  # the canvas still opens; a run on it says what broke
     return data
 
 

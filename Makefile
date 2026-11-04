@@ -45,8 +45,10 @@ test-e2e: ## Playwright over every UI element, plus web-standards checks
 test-stress: ## Behaviour at and past the limits
 	$(PY) pytest tests/stress -q -m "not live"; $(ALLOW_EMPTY)
 
+# Two runs: the browser specs leave a sync Playwright loop that breaks the async ones.
 test-chaos: ## Behaviour when a dependency fails
-	$(PY) pytest tests/chaos -q -m "not live"; $(ALLOW_EMPTY)
+	$(PY) pytest tests/chaos/unit tests/chaos/api -q -m "not live"
+	$(PY) pytest tests/chaos/e2e -q -m "not live"
 
 # One pytest per target: the sync Playwright loop left running after e2e breaks async tests.
 test-all: test test-e2e test-stress test-chaos ## Every category, e2e included (live runs excluded)

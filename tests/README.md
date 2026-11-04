@@ -108,6 +108,32 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
   ends, a box gone before its run leaves no body file, and a box deleted mid-merge leaves no
   proposal.
 
+## Chaos
+
+`make test-chaos` runs `tests/chaos/`, split by layer like the other categories.
+
+### Bad files on disk (#50)
+
+The disk is the database, so a broken file costs that one canvas and never the list.
+
+- `api/test_bad_files.py` (32) — a `canvas.json` missing a key (top level or in a box),
+  holding a non-string date, not parsing, or not UTF-8: left out of `GET /api/canvases`
+  while the healthy canvas beside it stays listed, and a 404 on load. A body that is not
+  UTF-8 still opens, with the bad byte replaced. A finished answer or document whose file
+  is gone shows as `failed` with `BODY_MISSING_REASON`, without writing to disk on the read;
+  an unfinished box with no file yet is left alone. A `research.json` that does not parse
+  or has no topic refuses the stream and the retry with `RESEARCH_UNREADABLE_MESSAGE`
+  (not the pasted-document sentence), keeps the broken file as it was, and still lets the
+  canvas open. `presets.json` with no `presets` key, as a bare list, or not UTF-8 gives 422
+  with `PRESETS_UNREADABLE_MESSAGE`. An `instructions.md` that is a folder gives 422 with
+  `INSTRUCTIONS_UNREADABLE_MESSAGE` on the read, on an answer stream, and on a brief draft.
+  A save on a full disk answers 507 with `SAVE_FAILED_MESSAGE` as JSON, keeps the old body,
+  and leaves no temp file.
+- `e2e/test_save_fails.py` (5) — the canvas folder made read-only under the real server, so
+  Save fails after the reader pressed it: the toast says `SAVE_FAILED_MESSAGE`, the editor
+  stays open with the typed text, the file on disk is unchanged, and Save works again once
+  the folder is writable.
+
 ## The nine required layers
 
 | # | Layer | Where | Tests |

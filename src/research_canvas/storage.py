@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from itertools import count
 
-from . import md
+from . import config, md
 from .anchors import Anchor
 from .config import (
     ASSET_DIR,
@@ -84,6 +84,18 @@ class PresetsInvalid(ValueError):
 
 class TitleInvalid(ValueError):
     """The new name for a canvas was blank, or too long to show on one line."""
+
+
+class ResearchUnreadable(ValueError):
+    """research.json is there but broken, so the topic and brief behind a root are lost."""
+
+
+class InstructionsUnreadable(ValueError):
+    """instructions.md is there but cannot be read, so no run may go without it."""
+
+
+class SaveFailed(OSError):
+    """A write did not reach the disk. The file it meant to replace is untouched."""
 
 
 @dataclass
@@ -271,8 +283,8 @@ class Canvas:
         return cls(
             id=data["id"],
             title=data["title"],
-            created_at=data["createdAt"],
-            updated_at=data["updatedAt"],
+            created_at=_stamp(data["createdAt"]),
+            updated_at=_stamp(data["updatedAt"]),
             theme=data.get("theme", "light"),
             web_search=bool(data.get("webSearch", True)),
             root_id=data.get("rootId", ROOT_BOX_ID),
@@ -366,10 +378,18 @@ _NO_FINDINGS = {
 
 
 def read_research(canvas_id: str) -> dict | None:
+    """None for a pasted canvas. A broken file is not that: it is a researched canvas."""
     try:
-        return json.loads((_dir(canvas_id) / RESEARCH_FILE).read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError):
+        data = json.loads((_dir(canvas_id) / RESEARCH_FILE).read_text(encoding="utf-8"))
+    except FileNotFoundError:
         return None
+    except (OSError, ValueError) as exc:
+        raise ResearchUnreadable(config.RESEARCH_UNREADABLE_MESSAGE) from exc
+    if not isinstance(data, dict) or not all(
+        isinstance(data.get(key), str) for key in ("topic", "prompt")
+    ):
+        raise ResearchUnreadable(config.RESEARCH_UNREADABLE_MESSAGE)
+    return data
 
 
 def write_research(canvas_id: str, data: dict) -> None:
@@ -496,20 +516,44 @@ def is_live(canvas_id: str, box_id: str) -> bool:
 
 
 def load(canvas_id: str) -> Canvas:
-    path = _dir(canvas_id) / CANVAS_FILE
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
-        raise CanvasNotFound(canvas_id) from exc
+    canvas = _read_canvas(_dir(canvas_id))
+    if canvas is None:
+        raise CanvasNotFound(canvas_id)
 
-    canvas = Canvas.from_dict(data)
+    on_disk = _bodies_on_disk(canvas.id)
     for box in canvas.boxes:
         # A run cannot outlive the process that started it. Runs this process is
         # still driving are the exception: they are not orphans.
         if box.status in UNFINISHED and not is_live(canvas.id, box.id):
             box.status = "interrupted"
             box.reason = INTERRUPTED_REASON
+        # A finished run always wrote its text, so a missing file is a lost answer, and
+        # showing it as an empty box would hide that.
+        elif box.status == "done" and box.id not in on_disk:
+            box.status = "failed"
+            box.reason = config.BODY_MISSING_REASON
     return canvas
+
+
+def _read_canvas(folder) -> Canvas | None:
+    """The canvas in a folder, or None when its file is missing, unparseable, or short."""
+    try:
+        return Canvas.from_dict(json.loads((folder / CANVAS_FILE).read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _bodies_on_disk(canvas_id: str) -> set[str]:
+    """The boxes that have a text file, from one listing rather than a stat per box."""
+    base = _dir(canvas_id)
+    try:
+        found = {entry.stem for entry in (base / BOX_DIR).iterdir() if entry.suffix == ".md"}
+    except OSError:
+        found = set()
+    found.discard(ROOT_BOX_ID)  # the root's text lives beside canvas.json, not in boxes/
+    if (base / ROOT_DOC_FILE).is_file():
+        found.add(ROOT_BOX_ID)
+    return found
 
 
 def save(canvas: Canvas) -> None:
@@ -524,16 +568,16 @@ def list_canvases() -> list[CanvasSummary]:
     for entry in CANVAS_ROOT.iterdir():
         if not entry.is_dir():
             continue
-        try:
-            data = json.loads((entry / CANVAS_FILE).read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        # The same reading as a load, so a canvas listed here is one that will open.
+        canvas = _read_canvas(entry)
+        if canvas is None:
             continue
         found.append(
             CanvasSummary(
-                id=data["id"],
-                title=data["title"],
-                updated_at=data["updatedAt"],
-                boxes=len(data["boxes"]),
+                id=canvas.id,
+                title=canvas.title,
+                updated_at=canvas.updated_at,
+                boxes=len(canvas.boxes),
             )
         )
     found.sort(key=lambda c: (c.updated_at, c.id), reverse=True)
@@ -542,7 +586,8 @@ def list_canvases() -> list[CanvasSummary]:
 
 def read_body(canvas_id: str, box_id: str) -> str:
     try:
-        return _body_path(canvas_id, box_id).read_text(encoding="utf-8")
+        # Replaced, not refused: one bad byte must not cost the reader the whole canvas.
+        return _body_path(canvas_id, box_id).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""
 
@@ -649,6 +694,8 @@ def read_instructions() -> str:
         return (CANVAS_ROOT / INSTRUCTIONS_FILE).read_text(encoding="utf-8")
     except FileNotFoundError:
         return ""
+    except (OSError, ValueError) as exc:
+        raise InstructionsUnreadable(config.INSTRUCTIONS_UNREADABLE_MESSAGE) from exc
 
 
 def write_instructions(text: str) -> None:
@@ -669,6 +716,8 @@ def read_presets() -> list[dict]:
         raw = (CANVAS_ROOT / PRESETS_FILE).read_text(encoding="utf-8")
     except FileNotFoundError:
         return [dict(preset) for preset in DEFAULT_ASK_PRESETS]
+    except (OSError, ValueError) as exc:
+        raise PresetsInvalid(PRESETS_UNREADABLE_MESSAGE) from exc
     try:
         stored = json.loads(raw)["presets"]
     except (json.JSONDecodeError, TypeError, KeyError) as exc:
@@ -732,23 +781,30 @@ _TMP_SEQ = count()
 
 
 def _atomic_write(path, content: str | bytes) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     # Unique per write: two writers sharing one temp name clobber each other.
     tmp = path.with_name(f".{path.name}.{os.getpid()}.{next(_TMP_SEQ)}.tmp")
     try:
+        path.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(content, bytes):
             tmp.write_bytes(content)
         else:
             tmp.write_text(content, encoding="utf-8")
         os.replace(tmp, path)
-    except OSError:
+    except OSError as exc:
         tmp.unlink(missing_ok=True)
-        raise
+        raise SaveFailed(config.SAVE_FAILED_MESSAGE) from exc
 
 
 def _write_json(path, data: dict) -> None:
     # Serialise before touching the file, so a failure here cannot truncate the old one.
     _atomic_write(path, json.dumps(data, indent=2, ensure_ascii=False) + "\n")
+
+
+def _stamp(value) -> str:
+    # Checked here because the canvas list sorts on it, and one bad date broke the sort.
+    if not isinstance(value, str):
+        raise TypeError(f"not a timestamp: {value!r}")
+    return value
 
 
 def _clamp_width(w: float) -> float:
