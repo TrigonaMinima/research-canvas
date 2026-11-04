@@ -1,17 +1,17 @@
 # Tests
 
-1369 tests. 641 run on every headless `make test`, 721 more need a browser and run on
+1378 tests. 650 run on every headless `make test`, 721 more need a browser and run on
 `make test-e2e`; the 7 marked `live` spend real Claude usage and run only on
 `make test-sandbox` and `make test-research-live`.
 
 ```
-make test                functional + regression, unit + api   641  no browser, no usage
-make test-unit           tests/{functional,regression}/unit    341
+make test                functional + regression, unit + api   650  no browser, no usage
+make test-unit           tests/{functional,regression}/unit    350
 make test-api            tests/{functional,regression}/api     300  (7 live deselected)
 make test-e2e            tests/{functional,regression}/e2e     721
 make test-stress         tests/stress                            0  suite lands with #63
 make test-chaos          tests/chaos                             0  suite lands with #64
-make test-all            all of tests/                        1362  (7 live deselected)
+make test-all            all of tests/                        1371  (7 live deselected)
 make coverage            make test, with line coverage of research_canvas
 make test-sandbox        tests/functional/api -m live -k sandbox    5  proves US-7 against the real CLI
 make test-research-live  tests/functional/api -m live -k research   2  one real research run
@@ -106,6 +106,12 @@ Each module in isolation, no HTTP, no browser.
   framework default, bound to `127.0.0.1` only. `--reload` restarts on code changes and
   watches the package alone, never the repo root; it is off by default, and the port file
   is still removed when the server stops.
+- `test_ci.py` (9) — `.github/workflows/ci.yml` runs on a push to `main` and on every pull
+  request; the build job syncs the venv, then runs `make lint`, `make test-unit` and
+  `make test-api` in that order; the e2e job installs Playwright Chromium and runs
+  `make test-e2e`; every job runs with `RESEARCH_CANVAS_CLAUDE` set to the fake binary and
+  no job runs a live target, so CI never spends usage; the Discord notify job runs after
+  both jobs whatever their result and inherits the `DISCORD_WEBHOOK` secret.
 - `test_merge.py` (25) — the edit list a merge run returns, and what is done with it. One
   JSON object per line, so a change renders the moment its line parses: a fenced block, a
   partial trailing line held back until it completes, and a line that will not parse skipped

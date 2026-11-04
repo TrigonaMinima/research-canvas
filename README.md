@@ -378,8 +378,9 @@ make help        # list every target
 
 Style:
 
-- Formatting and linting are ruff only, at 100 columns. There is no type checker, no
-  pre-commit hook, and no CI, so your local run is the gate.
+- Formatting and linting are ruff only, at 100 columns. There is no type checker and no
+  pre-commit hook. CI (`.github/workflows/ci.yml`) runs `make lint`, the headless tests and
+  the e2e suite on every push to `main` and every pull request, with the fake `claude`.
 - Every test file and its fixtures live under `tests/`, never beside the source.
 - Project-wide constants go in `src/research_canvas/config.py`. Define once, import
   everywhere.

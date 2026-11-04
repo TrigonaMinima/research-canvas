@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # The stand-in CLI, so no job can spend real Claude usage, even by accident.
+  RESEARCH_CANVAS_CLAUDE: ${{ github.workspace }}/tests/fixtures/fake_claude.py
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: make lint
+      - run: make test-unit
+      - run: make test-api
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync
+      - run: uv run playwright install --with-deps chromium
+      - run: make test-e2e
+
+  notify:
+    needs: [build, e2e]
+    if: always()
+    uses: TrigonaMinima/discord-notify/.github/workflows/notify.yml@v2
+    with:
+      # One alert for both jobs: red if either failed, otherwise the worst other result.
+      status: ${{ contains(needs.*.result, 'failure') && 'failure' || contains(needs.*.result, 'cancelled') && 'cancelled' || 'success' }}
+    secrets: inherit
