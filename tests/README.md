@@ -567,6 +567,16 @@ because the reader reads the sentence, not the status code. In the browser,
 `test_failures.py` (6) covers a usage-limit stop, a crashed run, the retry button, and the
 rule that a failed answer keeps its question and its anchor.
 
+`tests/functional/api/test_validation_edges.py` (15, #52) covers the small edges. Two are
+decisions: a `PATCH` naming a box that is gone is ignored with a 200, creates nothing, and
+still applies the camera move riding with it, because a layout patch can race a delete; a
+`DELETE` of a box that is gone answers 200 and leaves the canvas alone, because a delete must
+be safe to repeat. A `theme` that is neither light nor dark is ignored with a 200. A question
+asked from a box that is gone gives 404 "No such box.". Deleting a box takes the answers
+asked below it, their files, and their anchors. Once all 999 folder names for one title are
+taken, a paste is refused at the storage layer and over the API, and a research start is
+refused with the same `TOO_MANY_TITLES_MESSAGE` rather than a 500.
+
 ### 9 — Contract / schema (`tests/functional/api/test_contract.py`, 24)
 
 Every field name the frontend reads, asserted against what the real API returns: the canvas

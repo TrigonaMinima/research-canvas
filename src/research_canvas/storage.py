@@ -836,7 +836,7 @@ def _reserve_id(title: str) -> str:
         except FileExistsError:
             continue
         return candidate.name
-    raise ImportRefused("Too many canvases with this title.")
+    raise ImportRefused(config.TOO_MANY_TITLES_MESSAGE)
 
 
 _SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")

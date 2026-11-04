@@ -308,6 +308,9 @@ RESEARCH_UNREADABLE_MESSAGE = (
 INSTRUCTIONS_UNREADABLE_MESSAGE = (
     f"{INSTRUCTIONS_FILE} could not be read — fix the file, or delete it to run without one"
 )
+TOO_MANY_TITLES_MESSAGE = (
+    "Too many canvases already share this title — start this one with a different heading or topic"
+)
 SAVE_FAILED_MESSAGE = "The change could not be saved to disk — free some space and try again"
 BODY_MISSING_REASON = "This box's text is missing from disk, so there is nothing to show."
 ALREADY_STREAMING_MESSAGE = "That run is already streaming in another window"

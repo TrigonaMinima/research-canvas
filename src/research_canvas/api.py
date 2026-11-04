@@ -332,7 +332,10 @@ def start_research(body: ResearchBody) -> dict:
         raise HTTPException(status_code=422, detail=BLANK_RESEARCH_PROMPT_MESSAGE)
     if len(body.prompt) > MAX_RESEARCH_PROMPT_CHARS:
         raise HTTPException(status_code=422, detail=RESEARCH_PROMPT_TOO_LONG_MESSAGE)
-    return _view(storage.create_research_canvas(topic, body.prompt.strip()))
+    try:
+        return _view(storage.create_research_canvas(topic, body.prompt.strip()))
+    except storage.ImportRefused as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 def _topic(topic: str) -> str:
