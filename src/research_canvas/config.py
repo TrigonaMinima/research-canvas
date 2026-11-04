@@ -111,6 +111,9 @@ MAX_CONCURRENT_RUNS = 3
 # The CLI writes one JSON object per line, and a whole report or a fetched page is one
 # line. asyncio's default of 64 KB would end a long research run at its last step.
 STREAM_LINE_LIMIT = 32 * 1024 * 1024
+# A run that says nothing for this long is hung, and is killed so it frees its slot. Idle,
+# not total: a research run can take far longer, but it streams the whole time.
+RUN_IDLE_TIMEOUT = 5 * 60.0
 
 # --- research from a topic ----------------------------------------------------
 # Two runs, same sandbox. The brief is drafted with no tools on the answer model. The

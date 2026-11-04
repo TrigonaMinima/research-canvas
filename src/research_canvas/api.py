@@ -637,6 +637,9 @@ async def _drive(run: _Run) -> AsyncIterator[str]:
                     final = event.text
                     break
         except asyncio.CancelledError:
+            if run.research:
+                # What the run did before the reader left is still what it did.
+                _record_research(run, activity, seen, [], [], model)
             _finish(
                 canvas_id,
                 box_id,
@@ -697,15 +700,7 @@ def _finish_research(
         report = (
             report.rstrip() + "\n" + research.sources_section(cited=cited, unverified=unverified)
         )
-    found = storage.update_research(
-        run.canvas_id,
-        activity=activity,
-        seen=seen,
-        cited=cited,
-        unverified=unverified,
-        finishedAt=storage.finished_now(),
-        model=model,
-    )
+    found = _record_research(run, activity, seen, cited, unverified, model)
     html = _finish(run.canvas_id, run.box_id, report, status, reason, title=title, model=model)
     return {
         "status": status,
@@ -715,6 +710,25 @@ def _finish_research(
         "research": found,
         "model": model,
     }
+
+
+def _record_research(
+    run: _Run,
+    activity: list[dict],
+    seen: list[str],
+    cited: list[str],
+    unverified: list[str],
+    model: str,
+) -> dict:
+    return storage.update_research(
+        run.canvas_id,
+        activity=activity,
+        seen=list(dict.fromkeys(seen)),
+        cited=cited,
+        unverified=unverified,
+        finishedAt=storage.finished_now(),
+        model=model,
+    )
 
 
 def _finish(
@@ -727,10 +741,11 @@ def _finish(
     model: str,
     title: str | None = None,
 ) -> str:
-    storage.write_body(canvas_id, box_id, text)
     try:
         with storage.edit(canvas_id) as canvas:
             box = canvas.box(box_id)
+            # Under the lock and after the lookup, so a box deleted mid-run leaves no body.
+            storage.write_body(canvas_id, box_id, text)
             box.status = status
             box.reason = reason
             box.model = model

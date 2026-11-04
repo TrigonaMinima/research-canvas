@@ -88,6 +88,26 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 - `test_merge_stream_reconnect.py` (1) — a merge stream that ends without `done` is opened
   once; the browser is never left to reconnect it into a second run.
 
+## Stress
+
+- `api/test_run_queue.py` (4) — one stream past `MAX_CONCURRENT_RUNS`, with every run held:
+  the extra box is marked `queued` on disk, its run does not start while the slots are full,
+  its stream opens with a `queued` status, and every box ends `done` once the runs drain.
+
+## Chaos
+
+- `unit/test_runner_failures.py` (5) — the runner over `tests/fixtures/stub_claude.py`, a CLI
+  that misbehaves on purpose: a run that exits with no `result` fails, closing the generator
+  kills the subprocess, a run quiet past `RUN_IDLE_TIMEOUT` fails with the timed-out reason
+  and is killed, and a missing binary raises.
+- `api/test_run_failures.py` (15) — a reader who hangs up mid-stream leaves the words so far,
+  the model, and `interrupted` on the box; a research run cut off records its steps, the
+  pages it saw, and when it ended in `research.json`; an answer cut off while its pictures
+  are fetched keeps its text. With no `claude` installed an answer fails with a reason, and
+  so do a brief and a merge. A box deleted mid-run leaves no body file and its stream still
+  ends, a box gone before its run leaves no body file, and a box deleted mid-merge leaves no
+  proposal.
+
 ## The nine required layers
 
 | # | Layer | Where | Tests |

@@ -16,6 +16,7 @@ from .config import (
     ANSWER_MODEL,
     CLAUDE_BIN,
     NO_TOOLS,
+    RUN_IDLE_TIMEOUT,
     SANDBOX_FLAGS,
     STREAM_FLAGS,
     STREAM_LINE_LIMIT,
@@ -27,6 +28,9 @@ USAGE_LIMIT_REASON = (
     "Usage limit reached on your Claude plan. The question and its anchor are kept."
 )
 CRASHED_REASON = "The answer run stopped before it finished. The question and its anchor are kept."
+TIMED_OUT_REASON = (
+    "The answer run stopped responding and was ended. The question and its anchor are kept."
+)
 
 
 # The CLI's tool names, and what the app calls each in its activity log.
@@ -80,10 +84,17 @@ async def run(prompt: str, *, web_search: bool, model: str = ANSWER_MODEL) -> As
         # A run must not inherit anything that would re-introduce local context.
         env={**os.environ, "CLAUDE_CODE_ENTRYPOINT": "research-canvas"},
     )
-    finished = False
+    finished, timed_out = False, False
     try:
         assert process.stdout is not None
-        async for raw in process.stdout:
+        while True:
+            try:
+                raw = await asyncio.wait_for(process.stdout.readline(), RUN_IDLE_TIMEOUT)
+            except TimeoutError:
+                timed_out = True
+                break
+            if not raw:
+                break
             for event in _parse_line(raw.decode("utf-8", "replace")):
                 if event.kind in ("done", "failed"):
                     finished = True
@@ -94,7 +105,7 @@ async def run(prompt: str, *, web_search: bool, model: str = ANSWER_MODEL) -> As
             await process.wait()
 
     if not finished:
-        yield Event(kind="failed", reason=CRASHED_REASON)
+        yield Event(kind="failed", reason=TIMED_OUT_REASON if timed_out else CRASHED_REASON)
 
 
 def _parse_line(line: str) -> list[Event]:
