@@ -910,6 +910,13 @@ Added when every box action became reachable from the keyboard. The counts above
 - `tests/functional/e2e/test_standards.py`: the keyboard check walks the whole tab cycle, into a box and through the chrome bar, instead of one Tab.
 - `tests/regression/e2e/test_zoom_step_keeps_focus.py` (2): Enter on Zoom in until it disables leaves the focus on Zoom out, and the reverse.
 
+## Picture view and editor upload edges (#61)
+
+Added with the coverage pass on picture input. The counts above were not re-totalled for it.
+
+- `tests/functional/e2e/test_picture_input.py` (13): a wheel that reports lines zooms, and further than the same delta in pixels. `_` zooms out, and back at fit Zoom out is disabled again. With Ctrl, Cmd or Alt held, `+` is left unclaimed and the picture keeps its size, while a plain `+` is still claimed. A `pointercancel` mid-pan ends the pan, and later moves with the button still down do not move the picture.
+- `tests/functional/e2e/test_editor_uploads.py` (15): a dropped picture becomes `![name](assets/…)` and the rest of the source stays. Brackets leave the alt text, and a file with no name, or only brackets, is alt "image". Two pictures pasted at once get two placeholders on two lines, numbered apart even with one name, and both swap in when they land. An upload the server refuses, 413 for one byte past `MAX_IMAGE_BYTES` and 415 for bytes that are not a picture, takes its placeholder and its line break away, leaves the source as it was, and says why in the toast.
+
 ## Fixtures
 
 | File | What it is |
