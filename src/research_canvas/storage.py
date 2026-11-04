@@ -472,6 +472,21 @@ def live(canvas_id: str, box_id: str):
             _LIVE.discard(key)
 
 
+def claim(canvas_id: str, box_id: str) -> bool:
+    """Mark a run live unless it already is, in one step, so two requests cannot both win."""
+    key = (canvas_id, box_id)
+    with _LIVE_GUARD:
+        if key in _LIVE:
+            return False
+        _LIVE.add(key)
+        return True
+
+
+def release(canvas_id: str, box_id: str) -> None:
+    with _LIVE_GUARD:
+        _LIVE.discard((canvas_id, box_id))
+
+
 def is_live(canvas_id: str, box_id: str) -> bool:
     with _LIVE_GUARD:
         return (canvas_id, box_id) in _LIVE

@@ -43,6 +43,7 @@ from .config import (
     MAX_SCALE,
     MAX_TITLE_CHARS,
     MAX_TOPIC_CHARS,
+    MERGE_FINISHED_MESSAGE,
     MERGE_IN_PROGRESS_MESSAGE,
     MERGE_PARENT_RUNNING_MESSAGE,
     MERGE_ROOT_MESSAGE,
@@ -61,8 +62,10 @@ from .config import (
     RESEARCH_PROMPT_TOO_LONG_MESSAGE,
     RESEARCH_USAGE_LIMIT_REASON,
     RETRY_PASTED_ROOT_MESSAGE,
+    RETRY_WHILE_RUNNING_MESSAGE,
     REVIEW_MARGIN,
     REVIEW_WIDTH,
+    RUN_FINISHED_MESSAGE,
     STILL_RUNNING_MESSAGE,
     TOC_MAX_LEVEL,
     TOPIC_TOO_LONG_MESSAGE,
@@ -440,6 +443,9 @@ def _add_question(canvas: storage.Canvas, body: AskBody) -> dict:
 def retry(canvas_id: str, box_id: str) -> dict:
     with _editing(canvas_id) as canvas:
         box = _box(canvas, box_id)
+        # Resetting under a live run would leave that run writing into the fresh box.
+        if storage.is_live(canvas.id, box.id):
+            raise HTTPException(status_code=409, detail=RETRY_WHILE_RUNNING_MESSAGE)
         if box.kind == "root":
             # A pasted root is the reader's document, not the output of a run. Clearing
             # it would destroy the one thing on a canvas that cannot be regenerated.
@@ -509,25 +515,63 @@ def _remove_box(canvas: storage.Canvas, box_id: str) -> None:
 _STREAM_HEADERS = {"Cache-Control": "no-store", "X-Accel-Buffering": "no"}
 
 
+class _RunStream(StreamingResponse):
+    """A run's stream. It gives the run's claim back when the response ends, started or not."""
+
+    def __init__(self, body: AsyncIterator[str], canvas_id: str, box_id: str) -> None:
+        super().__init__(body, media_type="text/event-stream", headers=_STREAM_HEADERS)
+        self._claim = (canvas_id, box_id)
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            storage.release(*self._claim)
+
+
+@contextmanager
+def _claiming(canvas_id: str, box_id: str) -> Iterator[None]:
+    """Claim the run before anything else, and give it back if no stream comes of it.
+
+    Each stream spawns a paid run. Marking it live only once the generator starts left
+    a gap after this check in which a second request could pass it too.
+    """
+    if not storage.claim(canvas_id, box_id):
+        raise HTTPException(status_code=409, detail=ALREADY_STREAMING_MESSAGE)
+    try:
+        yield
+    except BaseException:
+        storage.release(canvas_id, box_id)
+        raise
+
+
+def _awaits_run(canvas: storage.Canvas, box: storage.Box) -> bool:
+    """Whether a box is still owed its run; a second run would overwrite the first.
+
+    Ask and retry leave it pending. Any save before the stream opens loads it as
+    interrupted, since a load cannot tell it from an orphan, so an interrupted box
+    with nothing saved is still owed one.
+    """
+    if box.status == "pending":
+        return True
+    return box.status == "interrupted" and not storage.read_body(canvas.id, box.id)
+
+
 @app.get("/api/canvases/{canvas_id}/boxes/{box_id}/stream")
 async def stream(canvas_id: str, box_id: str) -> StreamingResponse:
-    canvas = _load(canvas_id)
-    box = _box(canvas, box_id)
-    # Each stream spawns a run. A second one for the same box would be a second run
-    # writing the same file, which is what a reload in the middle of one used to do.
-    if storage.is_live(canvas.id, box.id):
-        raise HTTPException(status_code=409, detail=ALREADY_STREAMING_MESSAGE)
+    with _claiming(canvas_id, box_id):
+        canvas = _load(canvas_id)
+        box = _box(canvas, box_id)
+        if not _awaits_run(canvas, box):
+            raise HTTPException(status_code=409, detail=RUN_FINISHED_MESSAGE)
 
-    found = storage.read_research(canvas.id) if box.kind == "root" else None
-    if found is not None:
-        prompt = research.build_research_prompt(found["topic"], found["prompt"])
-        run = _Run(canvas.id, box.id, prompt, research=True)
-    else:
-        run = _Run(canvas.id, box.id, context.build_prompt(canvas, box))
-
-    return StreamingResponse(
-        _run_and_save(run), media_type="text/event-stream", headers=_STREAM_HEADERS
-    )
+        found = storage.read_research(canvas.id) if box.kind == "root" else None
+        if found is not None:
+            prompt = research.build_research_prompt(found["topic"], found["prompt"])
+            run = _Run(canvas.id, box.id, prompt, research=True)
+        else:
+            run = _Run(canvas.id, box.id, context.build_prompt(canvas, box))
+        return _RunStream(_drive(run), canvas_id, box_id)
 
 
 @dataclass
@@ -544,14 +588,8 @@ class _Run:
         return RESEARCH_MODEL if self.research else ANSWER_MODEL
 
 
-async def _run_and_save(run: _Run) -> AsyncIterator[str]:
-    """Stream one answer, saving as it goes so a force-quit never loses the question."""
-    with storage.live(run.canvas_id, run.box_id):
-        async for chunk in _drive(run):
-            yield chunk
-
-
 async def _drive(run: _Run) -> AsyncIterator[str]:
+    """Stream one answer, saving as it goes so a force-quit never loses the question."""
     canvas_id, box_id = run.canvas_id, run.box_id
     queued = _slots.locked()
     if queued:
@@ -813,23 +851,20 @@ def reject_merge(canvas_id: str, box_id: str) -> dict:
 
 @app.get("/api/canvases/{canvas_id}/boxes/{box_id}/merge/stream")
 async def merge_stream(canvas_id: str, box_id: str) -> StreamingResponse:
-    canvas = _load(canvas_id)
-    _box(canvas, box_id)
-    proposal = _proposal(canvas.id, box_id)
-
-    return StreamingResponse(
-        _merge_and_save(canvas.id, box_id, proposal.prompt, _parent_body(canvas, box_id)),
-        media_type="text/event-stream",
-        headers=_STREAM_HEADERS,
-    )
-
-
-async def _merge_and_save(
-    canvas_id: str, box_id: str, prompt: str, before: str
-) -> AsyncIterator[str]:
-    with storage.live(canvas_id, box_id):
-        async for chunk in _drive_merge(canvas_id, box_id, prompt, before):
-            yield chunk
+    with _claiming(canvas_id, box_id):
+        canvas = _load(canvas_id)
+        _box(canvas, box_id)
+        proposal = _proposal(canvas.id, box_id)
+        # A merge that has run is the reader's to review. Running it again would write
+        # over the proposal, and over any change the reader made to it. Interrupted with
+        # no edits is a merge loaded before its stream opened, as in `_awaits_run`.
+        owed = proposal.status == "pending" or (
+            proposal.status == "interrupted" and not proposal.edits
+        )
+        if not owed:
+            raise HTTPException(status_code=409, detail=MERGE_FINISHED_MESSAGE)
+        run = _drive_merge(canvas.id, box_id, proposal.prompt, _parent_body(canvas, box_id))
+        return _RunStream(run, canvas_id, box_id)
 
 
 async def _drive_merge(canvas_id: str, box_id: str, prompt: str, before: str) -> AsyncIterator[str]:

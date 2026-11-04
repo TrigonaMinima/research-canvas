@@ -63,6 +63,8 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 | `e2e/test_edit_mode_keeps_place.py` | `2679763` keep the reader's place when edit mode opens and closes | 8 |
 | `e2e/test_crumb_ctrl_click.py` | `1a76b08` open the canvas list in a new tab on a modified crumb click | 3 |
 | `e2e/test_table_cell_pictures.py` | `ebccccc` (#23) keep pictures in table cells to a sensible height | 5 |
+| `api/test_stream_run_guards.py` | #48 never start a second run on a box that has one | 20 |
+| `e2e/test_merge_stream_reconnect.py` | #48 close a dropped merge stream rather than reconnect | 1 |
 
 - `test_highlight_word_snap.py` (10) — a highlight covers whole words, whatever the mouse
   landed on. Six read the popover quote: a start inside a word, an end inside a word, both at
@@ -74,6 +76,17 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
   moved when the document is edited, every passage moved in one pass, the answers re-seated
   where their passages are now, the same correction inside an answer body and inside a folded
   box, and the corrected number still on disk after a reload.
+- `test_stream_run_guards.py` (20) — a stream is a paid run, so it is refused for a box
+  that has had one: a done answer (refused, not run, its saved text kept, the reason said),
+  a failed one, an interrupted one with text saved, a live one, and a finished research
+  root. A box a canvas save marked interrupted before its stream opened is still run, and a
+  retried one runs again. Two cover the gap before a stream starts: a second call to the
+  handler is refused, and a response dropped before it starts frees the box. Three refuse
+  a retry under a live run and leave its body alone. Five give a merge the same guards:
+  live, finished, not run again, the reason said, and the second call before the first
+  starts.
+- `test_merge_stream_reconnect.py` (1) — a merge stream that ends without `done` is opened
+  once; the browser is never left to reconnect it into a second run.
 
 ## The nine required layers
 

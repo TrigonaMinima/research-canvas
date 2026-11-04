@@ -299,6 +299,9 @@ BRIEF_USAGE_LIMIT_REASON = (
 )
 RETRY_PASTED_ROOT_MESSAGE = "A pasted document has no run to retry"
 ALREADY_STREAMING_MESSAGE = "That run is already streaming in another window"
+RUN_FINISHED_MESSAGE = "That run has already ended — retry it to run it again"
+MERGE_FINISHED_MESSAGE = "That merge has already run — review it, or reject it and merge again"
+RETRY_WHILE_RUNNING_MESSAGE = "That box is still running — retry once it is done"
 # Said out loud rather than silently restoring the defaults: chips someone wrote are
 # theirs, and a hand-edited file that will not parse is worth hearing about.
 PRESETS_UNREADABLE_MESSAGE = (

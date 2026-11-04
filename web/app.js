@@ -1486,7 +1486,16 @@ function listenMerge(child) {
   });
 
   source.onerror = () => {
-    if (source.readyState === EventSource.CLOSED) stopMerge(child);
+    // Left alone, the browser reconnects, and a reconnect is a second merge run. Close,
+    // and let the disk say how the run ended.
+    stopMerge(child);
+    const canvasId = state.canvas.id;
+    api.readMerge(canvasId, child).then((payload) => {
+      const review = reviewOf(child);
+      if (!review || state.canvas?.id !== canvasId) return;
+      review.payload = payload;
+      paint(review);
+    }).catch(() => {});
   };
 }
 
