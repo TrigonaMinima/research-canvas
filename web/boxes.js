@@ -144,21 +144,42 @@ export function ensure(layer, box) {
 }
 
 // Text only: a query and an address both come from outside, and neither is ours to
-// trust with markup. Rebuilt only when a step is added, since this runs per text chunk.
+// trust with markup. An address becomes a link only when it is plain http(s), so no
+// script can ride in on one. Rebuilt only when a step is added, since this runs per
+// text chunk.
 function drawActivity(list, steps, waiting) {
   list.hidden = !waiting || steps.length === 0;
   if (list.hidden || Number(list.dataset.count) === steps.length) return;
   list.dataset.count = steps.length;
   const earlier = steps.length - ACTIVITY_SHOWN;
-  const lines = steps.slice(-ACTIVITY_SHOWN).map((step) =>
-    (step.kind === 'search' ? `Search: ${step.query}` : `Read: ${step.url}`));
-  if (earlier > 0) lines.unshift(plural(earlier, 'earlier step'));
-  list.replaceChildren(...lines.map((line, i) => {
+  const items = steps.slice(-ACTIVITY_SHOWN).map((step) => {
     const li = document.createElement('li');
-    li.textContent = line;
-    if (earlier > 0 && i === 0) li.dataset.more = '1';
+    if (step.kind === 'search') li.textContent = `Search: ${step.query}`;
+    else li.append('Read: ', webLink(step.url));
     return li;
-  }));
+  });
+  if (earlier > 0) {
+    const li = document.createElement('li');
+    li.textContent = plural(earlier, 'earlier step');
+    li.dataset.more = '1';
+    items.unshift(li);
+  }
+  list.replaceChildren(...items);
+}
+
+// Opens beside the canvas, never in place of it, and the page gets no handle back.
+function webLink(url) {
+  if (!isWeb(url)) return url;
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = url;
+  return a;
+}
+
+function isWeb(url) {
+  try { return ['http:', 'https:'].includes(new URL(url).protocol); } catch { return false; }
 }
 
 function flagText(count) {

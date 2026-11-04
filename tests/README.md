@@ -654,11 +654,17 @@ the app keeps that id, or the configured alias when init names none.
   field's name; a researched root says "Researched by"; and an older researched root with
   no box model falls back to the model in `research.json`.
 
+## Links in the activity log
+
+Added when each page a research run reads became a link.
+
+- `tests/e2e/test_research_topic.py` (+8): a page read links to its address, opens in a new tab with `noopener`, opens a new tab on a plain click and on a Ctrl/Cmd click, a Ctrl/Cmd click neither selects the box nor moves the canvas tab away, and a search stays plain text. The new tab is answered by a route, so the suite stays offline.
+
 ## Fixtures
 
 | File | What it is |
 |------|-----------|
-| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`, `[[fake:long]]` for an answer tall enough to overlap the box below it, and `[[fake:images]]` for an answer holding one picture at `FAKE_CLAUDE_IMAGE_URL`. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
+| `fixtures/fake_claude.py` | A stand-in `claude` binary speaking `stream-json`. Failure modes are chosen per run by a marker in the prompt: `[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:linger]]` for a run slow enough to click its activity log, `[[fake:slowerror]]`, `[[fake:long]]` for an answer tall enough to overlap the box below it, and `[[fake:images]]` for an answer holding one picture at `FAKE_CLAUDE_IMAGE_URL`. A merge run is told apart by the heading the merge prompt always carries, and answered with the edit list from `fixtures/merging.py`; `[[fake:onechunk]]` answers it with the pair that lands on neighbouring lines, and `[[fake:badjson]]` with prose instead, for the path where nothing parses. |
 | `fixtures/images/__init__.py` | Picture bytes built in code (a valid PNG, plus GIF, JPEG and WebP headers, an SVG and an HTML page), so no binary is committed. |
 | `fixtures/stream_research.jsonl` | A real web run, captured from Claude Code 2.1.289 and cleaned of ids, usage and local paths: one search, one fetch, an answer. The parser tests read it, so the event shapes are the CLI's and not a guess. |
 | `fixtures/stream_research_denied.jsonl` | The same run before `--allowedTools` was added: the search is refused, and the run still ends in success. Kept so that case stays parsed. |

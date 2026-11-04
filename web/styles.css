@@ -132,6 +132,8 @@ a:hover{color:var(--ink);border-bottom-color:var(--ink)}
 .box__activity{list-style:none;margin:10px 0 4px;padding:0 0 0 12px;border-left:2px solid var(--line);font:400 12.5px/1.7 var(--mono);color:var(--ink2)}
 .box__activity li{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .box__activity li[data-more]{font-family:var(--sans)}
+.box__activity a{color:inherit;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.box__activity a:hover,.box__activity a:focus-visible{color:var(--ink);text-decoration-color:currentColor}
 .box__flag{margin:0 0 14px;padding:9px 12px;border:1px solid var(--line);border-left:2px solid var(--warn);border-radius:3px;font:400 13.5px/1.5 var(--sans);color:var(--ink)}
 .box__stopped{border-top:1px solid var(--line);margin-top:2px;padding-top:14px}
 .box__reason{margin:0 0 12px;font:400 15px/1.55 var(--sans);color:var(--warn)}

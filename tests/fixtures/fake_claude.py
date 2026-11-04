@@ -11,7 +11,7 @@ reworded.
 
 Set RESEARCH_CANVAS_CLAUDE to this file to use it.
 Failure paths are chosen per run, so one server can serve every test: put
-`[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:slowerror]]`,
+`[[fake:usage_limit]]`, `[[fake:error]]`, `[[fake:crash]]`, `[[fake:slow]]`, `[[fake:linger]]`, `[[fake:slowerror]]`,
 `[[fake:long]]`, `[[fake:badjson]]`, `[[fake:onechunk]]`, or `[[fake:images]]` (answers with a
 picture from FAKE_CLAUDE_IMAGE_URL) in the question or the merge guidance.
 FAKE_CLAUDE_MODE and FAKE_CLAUDE_DELAY set the same things for every run.
@@ -153,8 +153,13 @@ def main() -> int:
     marker = re.search(r"\[\[fake:(\w+)\]\]", prompt)
     if marker:
         mode = marker.group(1)
+    # Held once every step is out, so a test can click the activity log mid-run
+    # without waiting through a pause per step.
+    hold = 3.0 if mode == "linger" else 0
     if mode == "slow":
         mode, delay = "ok", max(delay, 0.6)
+    elif mode == "linger":
+        mode = "ok"
     elif mode == "slowerror":
         mode, delay = "error", max(delay, 0.6)
 
@@ -181,6 +186,7 @@ def main() -> int:
             emit(step)
             if delay:
                 time.sleep(delay)
+        time.sleep(hold)
         final = report(prompt)
         chunks = [final]
     elif EXPAND_SENTINEL in prompt:

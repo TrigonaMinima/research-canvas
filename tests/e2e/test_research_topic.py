@@ -394,6 +394,67 @@ def test_the_run_shows_each_page_as_it_reads_it(app):
     expect(root.locator("[data-activity]")).to_contain_text(FETCHED, timeout=20000)
 
 
+def reading(page):
+    """A run held on its page read, so the log stays up long enough to click."""
+    # The new tab would reach the real web; answer it here so the suite stays offline.
+    page.context.route(FETCHED, lambda route: route.fulfill(body="stub page"))
+    root = research(page, "A lingering one. [[fake:linger]]")
+    link = root.locator("[data-activity] a")
+    expect(link).to_have_count(1, timeout=20000)
+    return root, link
+
+
+def test_should_link_each_page_read_to_its_address(app):
+    _, link = reading(app)
+    expect(link).to_have_attribute("href", FETCHED)
+
+
+def test_should_mark_a_page_read_to_open_in_a_new_tab(app):
+    _, link = reading(app)
+    expect(link).to_have_attribute("target", "_blank")
+
+
+def test_should_not_hand_the_canvas_to_the_page_it_opens(app):
+    _, link = reading(app)
+    expect(link).to_have_attribute("rel", re.compile(r"\bnoopener\b"))
+
+
+def test_should_open_a_page_read_in_a_new_tab_on_click(app):
+    _, link = reading(app)
+    with app.context.expect_page() as opened:
+        link.click()
+    expect(opened.value).to_have_url(FETCHED)
+
+
+def test_should_open_a_page_read_on_ctrl_click(app):
+    _, link = reading(app)
+    # A background tab never settles for expect() to read, so the request it sends is
+    # what shows it went to the right address.
+    with app.context.expect_event("request", lambda r: r.url == FETCHED) as sent:
+        link.click(modifiers=["ControlOrMeta"])
+    assert sent.value.is_navigation_request()
+
+
+def test_should_not_select_the_box_on_ctrl_click_of_a_page_read(app):
+    root, link = reading(app)
+    with app.context.expect_page():
+        link.click(modifiers=["ControlOrMeta"])
+    expect(root).not_to_have_attribute("data-selected", "1")
+
+
+def test_should_keep_the_canvas_open_on_ctrl_click_of_a_page_read(app):
+    _, link = reading(app)
+    with app.context.expect_page():
+        link.click(modifiers=["ControlOrMeta"])
+    expect(app).to_have_url(re.compile(r"\?c="))
+
+
+def test_should_keep_a_search_as_plain_text(app):
+    root, _ = reading(app)
+    search = root.locator("[data-activity] li", has_text=QUERY)
+    expect(search.locator("a")).to_have_count(0)
+
+
 def test_the_run_says_it_is_researching(app):
     root = research(app, "A slow one. [[fake:slow]]")
     expect(root.locator("[data-wait-label]")).to_have_text("Researching the web…")
