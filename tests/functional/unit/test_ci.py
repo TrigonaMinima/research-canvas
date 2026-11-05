@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import json
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
 
-WORKFLOW = Path(__file__).resolve().parents[3] / ".github" / "workflows" / "ci.yml"
+ROOT = Path(__file__).resolve().parents[3]
+WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
+PAYLOAD = ROOT / ".github" / "scripts" / "discord-payload.sh"
 
 
 @pytest.fixture(scope="module")
@@ -17,6 +22,17 @@ def ci() -> dict:
 
 def runs(job: dict) -> str:
     return "\n".join(step.get("run", "") for step in job["steps"])
+
+
+def embed(**env: str) -> dict:
+    out = subprocess.run(
+        [str(PAYLOAD)],
+        env={"PATH": os.environ["PATH"], **env},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return json.loads(out.stdout)["embeds"][0]
 
 
 def test_should_run_on_push_to_main_and_on_pull_requests(ci):
@@ -58,8 +74,15 @@ def test_should_alert_discord_after_both_jobs_whatever_the_result(ci):
     assert (notify["needs"], notify["if"]) == (["build", "e2e"], "always()")
 
 
-def test_should_pass_the_webhook_secret_to_the_notify_workflow(ci):
-    notify = ci["jobs"]["notify"]
-    assert notify["uses"].startswith("TrigonaMinima/discord-notify/") and notify["secrets"] == (
-        "inherit"
-    )
+def test_should_pass_the_webhook_secret_to_the_notify_step(ci):
+    envs = [step.get("env", {}) for step in ci["jobs"]["notify"]["steps"]]
+    assert any(env.get("WEBHOOK") == "${{ secrets.DISCORD_WEBHOOK }}" for env in envs)
+
+
+def test_should_build_a_red_embed_for_a_failed_build():
+    assert embed(STATUS="failure")["color"] == 15158332
+
+
+def test_should_link_the_short_commit_in_the_embed():
+    fields = embed(STATUS="success", COMMIT="0123456789abcdef", COMMIT_URL="https://x/c")["fields"]
+    assert {f["name"]: f["value"] for f in fields}["Commit"] == "[0123456](https://x/c)"

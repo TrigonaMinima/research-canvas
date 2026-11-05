@@ -73,6 +73,7 @@ a spec loses its reference. Unit and api specs run in headless `make test`, e2e 
 |------|--------|-------|
 | `unit/test_source_line_marks.py` | `2679763` keep the reader's place when edit mode opens and closes | 7 |
 | `unit/test_table_cell_picture_markup.py` | `ebccccc` (#23) keep pictures in table cells to a sensible height | 3 |
+| `unit/test_ci_notify.py` | #46 run the Discord alert inline, since a public repo cannot call the private notify repo | 1 |
 | `api/test_anchor_offset_correction.py` | `662ef1d` follow a passage's offset through an edit | 4 |
 | `e2e/test_highlight_word_snap.py` | `daeb753` snap a highlight out to whole words | 10 |
 | `e2e/test_edge_from_highlight_end.py` | `133e024` leave an edge from the end of the highlight | 2 |
@@ -265,12 +266,13 @@ Each module in isolation, no HTTP, no browser.
   framework default, bound to `127.0.0.1` only. `--reload` restarts on code changes and
   watches the package alone, never the repo root; it is off by default, and the port file
   is still removed when the server stops.
-- `test_ci.py` (9) — `.github/workflows/ci.yml` runs on a push to `main` and on every pull
+- `test_ci.py` (11) — `.github/workflows/ci.yml` runs on a push to `main` and on every pull
   request; the build job syncs the venv, then runs `make lint`, `make test-unit` and
   `make test-api` in that order; the e2e job installs Playwright Chromium and runs
   `make test-e2e`; every job runs with `RESEARCH_CANVAS_CLAUDE` set to the fake binary and
   no job runs a live target, so CI never spends usage; the Discord notify job runs after
-  both jobs whatever their result and inherits the `DISCORD_WEBHOOK` secret.
+  both jobs whatever their result and hands its step the `DISCORD_WEBHOOK` secret; the
+  copied payload script builds a red embed for a failure and links the short commit.
 - `test_merge.py` (25) — the edit list a merge run returns, and what is done with it. One
   JSON object per line, so a change renders the moment its line parses: a fenced block, a
   partial trailing line held back until it completes, and a line that will not parse skipped

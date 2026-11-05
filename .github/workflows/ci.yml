@@ -33,11 +33,35 @@ jobs:
       - run: uv run playwright install --with-deps chromium
       - run: make test-e2e
 
+  # Inlined: a public repo cannot call a workflow or action from the private discord-notify repo.
   notify:
     needs: [build, e2e]
     if: always()
-    uses: TrigonaMinima/discord-notify/.github/workflows/notify.yml@v2
-    with:
-      # One alert for both jobs: red if either failed, otherwise the worst other result.
-      status: ${{ contains(needs.*.result, 'failure') && 'failure' || contains(needs.*.result, 'cancelled') && 'cancelled' || 'success' }}
-    secrets: inherit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Post the build alert to Discord
+        env:
+          WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          # One alert for both jobs: red if either failed, otherwise the worst other result.
+          STATUS: ${{ contains(needs.*.result, 'failure') && 'failure' || contains(needs.*.result, 'cancelled') && 'cancelled' || 'success' }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          WORKFLOW: ${{ github.workflow }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.event.pull_request.head.sha || github.sha }}
+          BRANCH: ${{ github.head_ref || github.ref_name }}
+          AUTHOR: ${{ github.event.head_commit.author.name || github.actor }}
+          TRIGGER: ${{ github.event_name }}
+          ATTEMPT: ${{ github.run_attempt }}
+          FOOTER: ${{ github.repository }}
+          MESSAGE: ${{ github.event.head_commit.message || github.event.pull_request.title }}
+        # The commit message reaches the script only through env, so it cannot inject shell.
+        run: |
+          set -euo pipefail
+          if [ -z "$WEBHOOK" ]; then echo "::error::Set the DISCORD_WEBHOOK secret in this repo." >&2; exit 1; fi
+          export TITLE="$REPO_NAME · $WORKFLOW: $STATUS"
+          export DESCRIPTION="${MESSAGE%%$'\n'*}"
+          .github/scripts/discord-payload.sh | curl -sS --fail-with-body -H 'Content-Type: application/json' -d @- "$WEBHOOK"
